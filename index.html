@@ -627,6 +627,10 @@
   <div class="field"><label>Background image</label><div style="display:flex;gap:8px"><input type="file" id="bgFile" accept="image/*" style="display:none"><button class="minor" id="bgPick">Upload</button><button class="minor" id="bgReset">Reset</button></div></div>
   <div class="field" style="border:none"><label>Data backup</label><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="minor" id="exportJson">Export JSON</button><input type="file" id="importFile" accept="application/json,.json" style="display:none"><button class="minor" id="importJson">Import JSON</button></div></div>
   <p style="font-size:11px;color:var(--faint);margin:-2px 0 4px;line-height:1.5">Export a full backup any time — same file restores your data here or seeds a future iOS app. <span id="cloudState">Cloud sync: off (local only).</span></p>
+  <div class="field"><label>Sync — Firebase DB URL</label><input id="setCloudUrl" placeholder="https://…firebaseio.com" style="width:190px"></div>
+  <div class="field"><label>Sync — secret key</label><input id="setCloudKey" placeholder="long-private-string" style="width:190px"></div>
+  <div class="field" style="border:none"><label>Connect</label><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="minor" id="cloudConnect">Connect / update</button><button class="minor" id="cloudDisconnect">Turn off</button><button class="minor" id="cloudCopyLink">Copy Notion link</button></div></div>
+  <p style="font-size:11px;color:var(--faint);margin:-2px 0 6px;line-height:1.5">One-time Firebase Realtime DB setup links every device + the Notion embed to one dataset. The secret key is stored on this device (not in the public code). For Notion, use <b>Copy Notion link</b> and paste that URL as the embed — the iframe can't keep local storage, so the key rides in the link.</p>
   <button class="save" id="saveSettings">Save</button>
   <button class="danger" id="resetAll">Reset all data</button>
   <p style="text-align:center;font-size:10px;color:var(--faint);margin:10px 0 0;opacity:.7">Focus Den v2.1.0</p>
@@ -717,6 +721,17 @@ const CLOUD={
 const cloudOn=()=>CLOUD.url.startsWith('http')&&CLOUD.key.length>3;
 const cloudRef=()=>`${CLOUD.url.replace(/\/+$/,'')}/focusden/${encodeURIComponent(CLOUD.key)}.json`;
 const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.random().toString(36).slice(2,8);localStorage.setItem('fd_device',d);}return d;}catch(e){return 'dev'+Math.random().toString(36).slice(2,6);}})();
+/* resolve sync config: URL params (?fdurl=&fdkey= — reliable inside the Notion iframe) override saved → baked defaults */
+(function loadCloudCfg(){
+  try{ const p=new URLSearchParams(location.search); const u=p.get('fdurl'), k=p.get('fdkey');
+    if(u&&k){ CLOUD.url=u; CLOUD.key=k; try{store.set('fd_cloud',JSON.stringify({url:u,key:k}));}catch(e){}
+      try{ p.delete('fdurl'); p.delete('fdkey'); const q=p.toString(); history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash); }catch(e){} // strip key from the web-app address bar
+      return; }
+  }catch(e){}
+  try{ const c=JSON.parse(store.get('fd_cloud')||'null'); if(c&&c.url&&c.key){ CLOUD.url=c.url; CLOUD.key=c.key; } }catch(e){}
+})();
+function applyCloudCfg(url,key){ CLOUD.url=(url||'').trim(); CLOUD.key=(key||'').trim();
+  try{ if(cloudOn()) store.set('fd_cloud',JSON.stringify({url:CLOUD.url,key:CLOUD.key})); else { try{localStorage.removeItem('fd_cloud');}catch(_){} delete mem['fd_cloud']; } }catch(e){} }
 function snapshot(){return {settings,subjects,sessions,dayoff,tasks,distractions,_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local
 async function cloudLoad(){ if(!cloudOn())return null; try{const r=await fetch(cloudRef(),{cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;} }
 let _cloudT=null, _lastLocalWrite=0, _lastSeenRemote=0;
@@ -1810,16 +1825,36 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
 /* ---------- settings ---------- */
 $('autoToggle').classList.toggle('on',settings.autostart);
 $('autoToggle').onclick=()=>{settings.autostart=!settings.autostart;$('autoToggle').classList.toggle('on',settings.autostart);save();};
+function refreshCloudState(){ if($('cloudState'))$('cloudState').textContent=cloudOn()?'Cloud sync: ON — shared across devices & Notion.':'Cloud sync: OFF — local to this browser only.'; }
 $('settingsBtn').onclick=()=>{$('setFocus').value=settings.focus;$('setSessions').value=settings.sessions;$('setShort').value=settings.short;$('setLong').value=settings.long;
   $('setRounds').value=settings.rounds;$('setGoal').value=settings.goal;$('setExam').value=settings.examDate||'';$('setUrgent').value=(settings.urgentDays==null?3:settings.urgentDays);
-  if($('cloudState'))$('cloudState').textContent=cloudOn()?'Cloud sync: ON (shared across devices & Notion).':'Cloud sync: OFF — local to this browser only. Add your Firebase config in the source to share data.';
+  $('setCloudUrl').value=CLOUD.url||''; $('setCloudKey').value=CLOUD.key||''; refreshCloudState();
   $('ovSettings').classList.add('show');};
+/* connect / update sync: adopt cloud data if it already exists, otherwise seed it from this device */
+$('cloudConnect').onclick=()=>{ applyCloudCfg($('setCloudUrl').value,$('setCloudKey').value);
+  if(!cloudOn()){ refreshCloudState(); askConfirm('That URL/key doesn\'t look complete. Sync stays off.',()=>{}); return; }
+  setSync('loading');
+  cloudLoad().then(remote=>{
+    if(remote && remote._updatedAt && (Array.isArray(remote.tasks)||Array.isArray(remote.subjects))){
+      askConfirm('Cloud already has data. Load it onto THIS device? (Cancel = upload this device\'s data to the cloud, overwriting it.)',
+        ()=>{ _lastSeenRemote=remote._updatedAt; applyRemote(remote); refreshCloudState(); },
+        ()=>{ cloudSave(); refreshCloudState(); });
+    } else { cloudSave(); refreshCloudState(); } // empty cloud → seed from local
+  });
+};
+$('cloudDisconnect').onclick=()=>{ applyCloudCfg('',''); $('setCloudUrl').value=''; $('setCloudKey').value=''; setSync('ok'); refreshCloudState(); };
+$('cloudCopyLink').onclick=()=>{ const u=$('setCloudUrl').value.trim(), k=$('setCloudKey').value.trim();
+  if(!u||!k){ askConfirm('Enter the DB URL and key first.',()=>{}); return; }
+  const link=location.origin+location.pathname+'?fdurl='+encodeURIComponent(u)+'&fdkey='+encodeURIComponent(k);
+  const done=()=>askConfirm('Notion sync link copied. Paste it into Notion as an Embed (the /embed block).',()=>{});
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(done,()=>{prompt('Copy this Notion embed link:',link);}); }
+  else { prompt('Copy this Notion embed link:',link); } };
 $('saveSettings').onclick=()=>{const c=(v,a,b,d)=>{v=parseInt(v);return isNaN(v)?d:Math.min(b,Math.max(a,v));};
   settings.focus=c($('setFocus').value,1,120,50);settings.sessions=c($('setSessions').value,1,12,4);settings.short=c($('setShort').value,1,60,10);settings.long=c($('setLong').value,1,60,30);
   settings.rounds=c($('setRounds').value,0,8,4);settings.goal=c($('setGoal').value,30,900,240);settings.examDate=$('setExam').value||'';settings.urgentDays=c($('setUrgent').value,0,30,3);
   save();$('ovSettings').classList.remove('show');if(!active&&workedMs===0)setMode(mode);refreshStats();refreshDplus();};
 $('resetAll').onclick=()=>askConfirm('Erase ALL data — subjects, sessions, to-dos, day-offs? Cannot be undone.',()=>{
-  localStorage.clear?.();['fd_settings','fd_subjects','fd_sessions','fd_dayoff','fd_tasks','fd_distract','fd_running','fd_bg','fd_device'].forEach(k=>{try{localStorage.removeItem(k);}catch(e){}delete mem[k];});location.reload();});
+  localStorage.clear?.();['fd_settings','fd_subjects','fd_sessions','fd_dayoff','fd_tasks','fd_distract','fd_running','fd_bg','fd_device','fd_cloud'].forEach(k=>{try{localStorage.removeItem(k);}catch(e){}delete mem[k];});location.reload();});
 [ 'ovSettings','ovLog','ovConfirm','ovTodo','ovPause','ovDistract' ].forEach(id=>$(id).onclick=e=>{if(e.target===$(id))$(id).classList.remove('show');});
 
 /* ---------- theme (light / dark) ---------- */
@@ -1852,10 +1887,10 @@ $('importFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(!f)r
   rd.readAsText(f); e.target.value=''; };
 
 /* ---------- sandbox-safe confirm (window.confirm is blocked inside Notion/preview iframes) ---------- */
-let _confirmCb=null;
-function askConfirm(msg,cb){ $('confirmMsg').textContent=msg; _confirmCb=cb; $('ovConfirm').classList.add('show'); }
-$('confirmYes').onclick=()=>{ $('ovConfirm').classList.remove('show'); const c=_confirmCb; _confirmCb=null; if(c)c(); };
-$('confirmNo').onclick=()=>{ $('ovConfirm').classList.remove('show'); _confirmCb=null; };
+let _confirmCb=null, _confirmNo=null;
+function askConfirm(msg,cb,noCb){ $('confirmMsg').textContent=msg; _confirmCb=cb; _confirmNo=noCb||null; $('ovConfirm').classList.add('show'); }
+$('confirmYes').onclick=()=>{ $('ovConfirm').classList.remove('show'); const c=_confirmCb; _confirmCb=null; _confirmNo=null; if(c)c(); };
+$('confirmNo').onclick=()=>{ $('ovConfirm').classList.remove('show'); const n=_confirmNo; _confirmCb=null; _confirmNo=null; if(n)n(); };
 
 /* ---------- flexible background image ---------- */
 function applyBg(url){const img=$('bgImg'),sc=$('bgScrim');
