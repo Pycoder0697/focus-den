@@ -25,9 +25,16 @@ One file only: `index.html`
 - `subjects` — subject list (colour, name, id — no todos)
 - `sessions` — stopwatch/pomodoro session log
 - `settings` — user preferences (examDate, urgentDays, theme, focus/short/long mins, etc.)
-- `taskView` — current Tasks tab view: today/tomorrow/inbox/board/matrix/timeline
+- `taskView` — current Tasks tab view: day/week/month/quarter/year/life/horizon/inbox/boards/board/calendar/dashboard/matrix/timeline (no more "tomorrow"; "board" = the date-kanban "Agenda", "boards" = user kanban boards, "calendar" = TimeStripe-style month grid)
+- `settings.taskLayout` — 'columns' (TimeStripe-style scrollable period columns, default) or 'list'; toggled per time/horizon view. `colOffset` holds the per-view carousel page offset.
+- **Full-width takeover**: `isWideView()` decides which views span the whole app (`.wrap.tasks-wide` hides the timer column). Wide = calendar + agenda/dashboard/matrix/timeline always, and day/week/month/quarter/year/horizon/boards in *columns* layout. Inbox & life stay in-panel. `applyTaskWidth()` toggles the class (called in `renderTasks` and on tab switch).
+- **Context menus** (`openCtxMenu`): TimeStripe-style ⋯ menu with viewport-clamped flyout submenus (two layers: `#ctxMenu` root + `#ctxSub` flyout, so they never clip in the Notion iframe). `buildTaskMenu(t,re)` / `buildSubjectMenu(s)` define the items; top color-dot row sets task priority / subject colour. `calCursor` = month shown in calendar.
+- `boards` — user-created kanban boards: `[{id,name,lists:[{id,name}],layout:'columns'|'list',created}]`. A task carries `boardId`/`listId` (dual placement — keeps its schedule too). `currentBoardId` = active board.
 - `taskFilter` / `subjTaskFilter` — active filter: all/active/done
-- `expandedTask` (Set) — which task cards are expanded
+- **Task cards are flat** (no expanding panel): card shows priority dot · check · name · ▶ · ⋯. All editing lives in the ⋯ menu (`buildTaskMenu`) — clicking the name or ⋯ opens it. Rename is inline (`renameTask`); time-of-day, checklist, repeat, subject, board, schedule etc. are menu items/submenus.
+- **Play buttons are mode-aware**: a task ▶ runs `startTaskTimer` (→ `startTaskStopwatch`/`startTaskPomodoro`); a subject ▶ runs `startSubjectTimer` (→ `quickStopwatch`/`startSubjectPomodoro`), each following the current timer `mode`. Menus offer both modes explicitly.
+- **TimeStripe free-add**: clicking empty space in a column body (`.ccol-body`) focuses that column's Add input (global pointerdown listener).
+- **Task sound** has two voices via `_taskVia`: a bright snap on ＋/Add button-click, a deeper tock on Enter.
 - `CLOUD` — Firebase config object
 
 ## Key functions
@@ -41,6 +48,9 @@ One file only: `index.html`
 - `isTaskDone(t)` — respects repeat logic (daily/weekdays/weekly)
 - `toggleTask(t)` — toggles done/doneOn respecting repeat
 - `quadrant(t)` — returns 0-3 for Eisenhower matrix
+- `duplicateTask(t)` — clones a task (fresh id, reset done/checklist), inserts right after the original
+- `taskSound()` — mechanical "tock" via WebAudio on task creation (called inside `newTask()`; respects `settings.taskSound`, default on)
+- `calendarHTML()` / `wireCalendar()` — month-grid calendar view: simple chips with hover-+ add, ⋯ for full menu, drag a chip to another day to reschedule
 - `applyTheme()` — applies saved theme to html element
 - `pollCloud()` — pulls remote changes (runs every 15s and on tab refocus)
 - `snapshot()` — returns full state object with _updatedAt timestamp
@@ -58,16 +68,25 @@ One file only: `index.html`
   "checklist": [{"id":"c...","text":"string","done":false}],
   "done": false,
   "doneOn": "",
-  "repeat": "none|daily|weekdays|weekly",
+  "repeat": "none|daily|weekdays|weekly|monthly|quarterly|yearly",
   "start": "HH:MM",
   "dur": 0,
+  "horizon": "''|day|week|month|quarter|year|life",
+  "hkey": "period key for week/month/quarter/year",
+  "parentId": "goal-tree link",
+  "boardId": "", "listId": "",
   "created": 1234567890
 }
 ```
+Repeat can't be finer than the task's horizon (`repeatOptsFor`/`clampRepeat`); time-of-day (`start`/`dur`) only applies to day-level tasks. Scheduling is set via the TimeStripe-style date picker (`openDatePicker`), not raw inputs.
 
 ## Views in the Tasks tab
-- **today / tomorrow / inbox** — flat filtered lists
-- **board** — kanban with columns: Overdue, Today, Next 7 days, Inbox
+- **day / week / month / quarter / year** — TimeStripe-style scrollable period columns by default (`renderCarousel`); each has a Columns⇄List toggle (`settings.taskLayout`) and a ‹Today› pager. List mode falls back to `renderPeriodView` (day list mode = today's tasks).
+- **life / inbox** — flat lists (always in-panel, never full-width)
+- **calendar** — TimeStripe-style month grid (`calendarHTML`/`wireCalendar`): Life/Year/Month horizon cards on top, day cells below with chips; hover-+ to add, ⋯ menu per chip, drag chips between days. Always full-width.
+- **horizon** — broad→narrow horizons; stacked sections (`horizonHTML`) or columns (`horizonColsHTML`) via the layout toggle
+- **boards** — user kanban boards (`boardsHTML`/`wireBoards`): board tabs, per-board lists, list/column layout, drag tasks between lists
+- **board** — the date-kanban "Agenda": Overdue, Today, Next 7 days, Inbox
 - **matrix** — Eisenhower grid (Important×Urgent). Important = priority ≥ 2. Urgent = due today/overdue or within `settings.urgentDays` days.
 - **timeline** — Gantt chart. Drag bar to reschedule, drag right edge to extend span. Split into To-do / Done sections.
 
