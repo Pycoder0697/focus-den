@@ -1169,8 +1169,8 @@ const store={get(k){try{const v=localStorage.getItem(k);return v===null?(k in me
    overwrite your study data, so keep CLOUD.key long and private.)
    ======================================================================== */
 const CLOUD={
-  url:'',   // e.g. 'https://focusden-1a2b3-default-rtdb.firebaseio.com'
-  key:''    // e.g. 'justin-9f3a7c2e5b81d4'
+  url:'https://focus-den-default-rtdb.asia-southeast1.firebasedatabase.app/',   // baked-in: every device auto-syncs, no setup
+  key:'Jacr06973#'                                                              // single private user — see notes; rotate here if ever misused
 };
 const cloudOn=()=>CLOUD.url.startsWith('http')&&CLOUD.key.length>3;
 const cloudRef=()=>`${CLOUD.url.replace(/\/+$/,'')}/focusden/${encodeURIComponent(CLOUD.key)}.json`;
@@ -1182,7 +1182,9 @@ const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.ran
       try{ p.delete('fdurl'); p.delete('fdkey'); const q=p.toString(); history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash); }catch(e){} // strip key from the web-app address bar
       return; }
   }catch(e){}
-  try{ const c=JSON.parse(store.get('fd_cloud')||'null'); if(c&&c.url&&c.key){ CLOUD.url=c.url; CLOUD.key=c.key; } }catch(e){}
+  // only fall back to a device-stored config when nothing is hard-wired above —
+  // baked-in creds win, so a stale/mistyped entry saved on a device can't break sync
+  if(!CLOUD.url){ try{ const c=JSON.parse(store.get('fd_cloud')||'null'); if(c&&c.url&&c.key){ CLOUD.url=c.url; CLOUD.key=c.key; } }catch(e){} }
 })();
 function applyCloudCfg(url,key){ CLOUD.url=(url||'').trim(); CLOUD.key=(key||'').trim();
   try{ if(cloudOn()) store.set('fd_cloud',JSON.stringify({url:CLOUD.url,key:CLOUD.key})); else { try{localStorage.removeItem('fd_cloud');}catch(_){} delete mem['fd_cloud']; } }catch(e){} }
