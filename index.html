@@ -2871,7 +2871,7 @@ function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
   if(elsewhere) items.push({ic:'⮈',label:'Move to No date',run:()=>{assignHorizon(t,'','');t.boardId='';t.listId='';t.inboxListId='';clampRepeat(t);save();refreshTaskSurfaces();}});
   items.push(
       {sep:true},
-      {ic:'↳',label:'Make it a subgoal of…',sub:()=>({items:parentItems})},
+      /* 'Make it a subgoal of…' temporarily disabled */
       {ic:'⧉',label:'Duplicate',run:()=>{duplicateTask(t);re();}},
       {ic:'⏱',label:'Start stopwatch',run:()=>startTaskStopwatch(t)},
       {ic:'▶',label:'Start pomodoro',sub:()=>({items:[
