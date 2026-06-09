@@ -1,0 +1,12 @@
+{
+  "name": "focus-den-notion-sync",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Two-way sync server between Focus Den (Firebase) and a Notion database",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "once": "node server.js --once"
+  }
+}
