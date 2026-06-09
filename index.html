@@ -474,7 +474,7 @@
   .wk-dh .wd{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.3px}
   .wk-dh .dn{font-size:16px;font-weight:600;color:var(--ink);line-height:1.1}
   .wk-dh.today .dn{background:var(--accent);color:var(--accent-ink);width:26px;height:26px;border-radius:50%;display:grid;place-items:center}
-  .wk-adrow{border-top:1px solid var(--stroke-soft);border-bottom:1px solid var(--stroke);min-height:30px;max-height:84px;overflow-y:auto}
+  .wk-adrow{border-top:1px solid var(--stroke-soft);border-bottom:1px solid var(--stroke);min-height:30px;max-height:240px;overflow-y:auto}
   .wk-adcell{border-left:1px solid var(--stroke-soft);padding:3px;display:flex;flex-direction:column;gap:3px;min-width:0}
   .wk-adcell.drop{background:var(--glass-2)}
   .wk-adchip{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--ink);background:var(--track-bg);border-left:3px solid var(--bc,var(--violet));border-radius:5px;padding:2px 5px;cursor:grab;white-space:nowrap;overflow:hidden;min-width:0}
@@ -968,7 +968,7 @@
       <div class="card subj-card">
         <div class="total-row"><span class="lbl">Total time today</span><span class="big" id="totalToday">0:00:00</span></div>
         <div class="subj-list" id="subjList"></div>
-        <div class="add-subj add-subj-bottom"><input id="newSubject" placeholder="Add subject…" maxlength="28"><button id="addSubjectBtn">+</button></div>
+        <div class="add-subj add-subj-bottom"><input id="newSubject" placeholder="Add subject…" maxlength="200"><button id="addSubjectBtn">+</button></div>
       </div>
     </div>
 
@@ -1111,7 +1111,7 @@
 <div class="overlay" id="ovDistract"><div class="modal">
   <h2>Capture distraction</h2>
   <p style="color:var(--muted);font-size:13px;margin-bottom:8px">Jot what pulled you away, then get back to it.</p>
-  <div class="field" style="border:none;padding:0"><input id="distractNote" placeholder="e.g. checked phone, hungry…" maxlength="80" style="width:100%"></div>
+  <div class="field" style="border:none;padding:0"><input id="distractNote" placeholder="e.g. checked phone, hungry…" maxlength="200" style="width:100%"></div>
   <button class="save" id="distractSave">Log it</button>
 </div></div>
 
@@ -1148,7 +1148,7 @@
 <!-- TASK MODAL -->
 <div class="overlay" id="ovTodo"><div class="modal">
   <h2 id="todoTitle">Task</h2>
-  <div class="field"><label>Task</label><input id="tdName" maxlength="80"></div>
+  <div class="field"><label>Task</label><input id="tdName" maxlength="200"></div>
   <div class="field"><label>When</label><button type="button" class="tk-when" id="tdWhen" style="flex:0 1 auto;max-width:210px">No date</button></div>
   <div class="field"><label>Subject</label><select id="tdSubject"></select></div>
   <div class="field"><label>Parent goal</label><select id="tdParent"></select></div>
@@ -1784,7 +1784,7 @@ function renderSubjects(){
       wireTasks(holder, refreshTaskSurfaces); wireTaskDrag(holder);
       td.appendChild(holder);
       const add=document.createElement('div'); add.className='add-todo';
-      add.innerHTML=`<input placeholder="Add task…" maxlength="80"><button title="Quick add">Add</button><button class="adv" title="Add with date, time, repeat">⚙</button>`;
+      add.innerHTML=`<input placeholder="Add task…" maxlength="200"><button title="Quick add">Add</button><button class="adv" title="Add with date, time, repeat">⚙</button>`;
       const inp=add.querySelector('input');
       const doAdd=()=>{const v=inp.value.trim();if(!v)return;const t=newTask(v,'');t.subjectId=s.id;tasks.push(t);save();renderSubjects();};
       add.querySelector('button:not(.adv)').onclick=doAdd; inp.addEventListener('keydown',e=>{if(e.key==='Enter')doAdd();});
@@ -2191,7 +2191,7 @@ function installHoverAdd(body, addTask, reopenKey){
   const startInline=(y)=>{ ghost.style.display='none'; if(hz.querySelector('.ccol-ghrow'))return;
     addOpenSound();
     const row=document.createElement('div'); row.className='ccol-ghrow'; row.style.top=(y||0)+'px';
-    const inp=document.createElement('input'); inp.className='ccol-ghinp'; inp.placeholder='New task…'; inp.maxLength=120;
+    const inp=document.createElement('input'); inp.className='ccol-ghinp'; inp.placeholder='New task…'; inp.maxLength=200;
     const ent=document.createElement('button'); ent.type='button'; ent.className='ccol-ghent'; ent.textContent='Enter'; ent.tabIndex=-1;
     row.appendChild(inp); row.appendChild(ent); hz.appendChild(row); inp.focus();
     let done=false;
@@ -2481,7 +2481,7 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
   const open=expandedGoals.has(t.id);
   if(kids.length || open){ const gp=Math.round(progressOf(t)*100);
     const inner = (open && depth<6) ? `<div class="tk-children">${kids.slice().sort(taskSort).map(k=>taskCard(k,depth+1)).join('')}
-        <div class="tk-subadd"><input class="tk-subinp" placeholder="Add subtask…" maxlength="120"><button type="button" class="tk-subent" tabindex="-1">Enter</button></div></div>` : '';
+        <div class="tk-subadd"><input class="tk-subinp" placeholder="Add subtask…" maxlength="200"><button type="button" class="tk-subent" tabindex="-1">Enter</button></div></div>` : '';
     const lbl = kids.length ? `${kids.length} subgoal${kids.length>1?'s':''} · ${gp}%` : 'Subtasks';
     subs=`<div class="tk-subs"><button class="tk-subtoggle" data-act="subtoggle">${lbl} <span class="cv">${open?'⌃':'⌄'}</span></button>${inner}</div>`;
   }
@@ -2732,7 +2732,7 @@ function tlHoursHTML(day){
     <div class="g-note">Drag a block to change its time · drag a block up to All-day to clear it · drag the bottom edge to resize · click an empty slot to add · ⋯ to edit.</div>`;
 }
 function openHourAdd(canvas,day,mins){ if(canvas.querySelector('.tlh-newinp'))return;
-  const inp=document.createElement('input'); inp.className='tlh-newinp'; inp.placeholder='New task…'; inp.maxLength=120;
+  const inp=document.createElement('input'); inp.className='tlh-newinp'; inp.placeholder='New task…'; inp.maxLength=200;
   inp.style.top=(mins/60*TLH_H)+'px'; inp.style.left='4px'; inp.style.right='4px'; canvas.appendChild(inp); inp.focus();
   let done=false;
   const fin=add=>{ if(done)return; done=true; const v=inp.value.trim();
@@ -2752,7 +2752,7 @@ function wireTlHours(scope,day){
   // ＋ on the All-day row → add a new all-day (untimed) task for this day
   const adAdd=scope.querySelector('.tlh-ad-add');
   if(adAdd)adAdd.onclick=e=>{ e.stopPropagation(); const row=adAdd.parentElement; if(row.querySelector('.tlh-ad-newinp'))return;
-    const inp=document.createElement('input'); inp.className='tlh-ad-newinp'; inp.placeholder='All-day task…'; inp.maxLength=120; row.appendChild(inp); inp.focus();
+    const inp=document.createElement('input'); inp.className='tlh-ad-newinp'; inp.placeholder='All-day task…'; inp.maxLength=200; row.appendChild(inp); inp.focus();
     let done=false; const fin=add=>{ if(done)return; done=true; const v=inp.value.trim();
       if(add&&v){ const nt=newTask(v,day); nt.horizon='day'; nt.hkey=''; nt.start=''; nt.dur=0; tasks.push(nt); save(); renderTasks(); } else inp.remove(); };
     inp.onkeydown=ev=>{ if(ev.key==='Enter')fin(true); else if(ev.key==='Escape')fin(false); }; inp.onblur=()=>fin(true); };
@@ -2978,8 +2978,8 @@ function calMonthHTML(cur){ const today=todayKey(); const [y,mo]=cur.split('-').
   const dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<span>${d}</span>`).join('')+'<span class="cv2-wkh">Wk</span>';
   const dayCell=k=>{ const inMo=(+k.slice(5,7))===mo;
     const items=topLevel(applyFilter(tasksInHorizon('day',k),taskFilter).sort(taskSort));
-    const shown=items.slice(0,4).map(calChip).join('');
-    const more=items.length>4?`<div class="cv2-more">+${items.length-4} more</div>`:'';
+    const shown=items.slice(0,99).map(calChip).join('');
+    const more=items.length>99?`<div class="cv2-more">+${items.length-4} more</div>`:'';
     return `<div class="cv2-cell ${inMo?'':'other'} ${k===today?'today':''}" data-day="${k}">
       <div class="cv2-dn">${+k.slice(8,10)}<button class="cv2-add" data-addday="${k}" title="Add task">＋</button></div>${shown}${more}</div>`; };
   let cells='';
@@ -2987,14 +2987,14 @@ function calMonthHTML(cur){ const today=todayKey(); const [y,mo]=cur.split('-').
     for(let c=0;c<7;c++) cells+=dayCell(addDays(start,r*7+c));
     const wk=weekKeyOf(addDays(start,r*7));
     const witems=topLevel(applyFilter(tasksInHorizon('week',wk),taskFilter).sort(taskSort));
-    const wshown=witems.slice(0,4).map(calChip).join('');
-    const wmore=witems.length>4?`<div class="cv2-more">+${witems.length-4} more</div>`:'';
+    const wshown=witems.slice(0,99).map(calChip).join('');
+    const wmore=witems.length>99?`<div class="cv2-more">+${witems.length-4} more</div>`:'';
     cells+=`<div class="cv2-wcell" data-week="${wk}">
       <div class="cv2-dn cv2-wn">W${weekNum(wk)}<button class="cv2-add" data-addweek="${wk}" title="Add weekly goal">＋</button></div>${wshown}${wmore}</div>`;
   }
   return `<div class="cv2-hz">${hz}</div><div class="cv2-dow cv2-dow8">${dow}</div><div class="cv2-grid cv2-grid8" data-wide="1">${cells}</div>`; }
 function calAddInput(holder,assign){ if(holder.querySelector('.cv2-newinp'))return;
-  const inp=document.createElement('input'); inp.className='cv2-newinp'; inp.placeholder='Task…'; inp.maxLength=120; holder.appendChild(inp); inp.focus();
+  const inp=document.createElement('input'); inp.className='cv2-newinp'; inp.placeholder='Task…'; inp.maxLength=200; holder.appendChild(inp); inp.focus();
   let committed=false;
   const fin=(add)=>{ if(committed)return; committed=true; const v=inp.value.trim();
     if(add&&v){ const t=newTask(v,''); assign(t); clampRepeat(t); tasks.push(t); save(); renderTasks(); } else { inp.remove(); } };
@@ -3079,7 +3079,7 @@ function weekGridHTML(wk){ const today=todayKey(); const DOW=['Sun','Mon','Tue',
      <div class="wk-scroll" id="wkScroll"><div class="wk-canvas" style="--hourh:${TLH_H}px;height:${24*TLH_H}px">${lines}${colbg}${blocks}${nowLine}</div></div>
      <div class="g-note">Drag a block across days &amp; times · drag its bottom edge to resize · click an empty slot to add · ⋯ to edit.</div></div>`; }
 function openWeekAdd(canvas,day,di,mins){ if(canvas.querySelector('.wk-newinp'))return;
-  const inp=document.createElement('input'); inp.className='wk-newinp'; inp.placeholder='New task…'; inp.maxLength=120;
+  const inp=document.createElement('input'); inp.className='wk-newinp'; inp.placeholder='New task…'; inp.maxLength=200;
   inp.style.top=(mins/60*TLH_H)+'px'; inp.style.left=`calc(var(--gut) + ${di}*var(--colw) + 1px)`; inp.style.width='calc(var(--colw) - 2px)';
   canvas.appendChild(inp); inp.focus();
   let done=false; const fin=add=>{ if(done)return; done=true; const v=inp.value.trim();
@@ -3178,7 +3178,7 @@ function inboxHTML(){ const all=topLevel(applyFilter(tasksInHorizon(''),taskFilt
   const sections=inboxLists.map(l=>{ const items=all.filter(t=>(t.inboxListId&&inboxLists.some(x=>x.id===t.inboxListId)?t.inboxListId:def)===l.id);
     const head = multi ? `<div class="inbox-lhead"><input class="inbox-lname" data-il="rename" data-id="${l.id}" value="${esc(l.name)}" maxlength="40"><span class="inbox-lcount">${items.length}</span><button class="inbox-ldel" data-il="del" data-id="${l.id}" title="Delete list">×</button></div>` : '';
     const cards = items.length?items.map(taskCard).join(''):(multi?'<div class="empty-t small">Empty</div>':'<div class="empty-t">Nothing here yet — capture a task below.</div>');
-    return `<div class="inbox-list${multi?'':' bare'}" data-list="${l.id}">${head}${cards}<div class="qadd qadd-bottom"><input class="il-add" data-id="${l.id}" placeholder="Add a task…" maxlength="120"><button class="il-addbtn" data-id="${l.id}">+</button></div></div>`; }).join('');
+    return `<div class="inbox-list${multi?'':' bare'}" data-list="${l.id}">${head}${cards}<div class="qadd qadd-bottom"><input class="il-add" data-id="${l.id}" placeholder="Add a task…" maxlength="200"><button class="il-addbtn" data-id="${l.id}">+</button></div></div>`; }).join('');
   return sections + `<button class="inbox-newlist" data-il="new">＋ Add list</button>`; }
 function wireInbox(scope){
   scope.querySelectorAll('.inbox-list').forEach(sec=>{ const lid=sec.dataset.list;
@@ -3224,7 +3224,7 @@ function renderDayList(body){ const key=dayListKey||todayKey();
   const list=topLevel(applyFilter(tasks.filter(t=>t.due===key||(t.due&&t.dueEnd&&t.due<=key&&t.dueEnd>=key)),taskFilter).sort(taskSort));
   let out=`<div class="view-ctl">${layoutToggle()}</div>`+periodStripHTML('day',key);
   out+= list.length?list.map(taskCard).join(''):'<div class="empty-t">Nothing on this day — capture a task below.</div>';
-  out+=`<div class="qadd qadd-bottom"><input id="qaddInput" placeholder="Add a task for ${esc(prettyDate(key))}…" maxlength="120"><button id="qaddBtn">+</button></div>`;
+  out+=`<div class="qadd qadd-bottom"><input id="qaddInput" placeholder="Add a task for ${esc(prettyDate(key))}…" maxlength="200"><button id="qaddBtn">+</button></div>`;
   body.innerHTML=out; wireTasks(body); wireTaskDrag(body); wireLayoutToggle(body); wirePeriodStrip(body,'day',key);
   const qi=$('qaddInput'),qb=$('qaddBtn');
   const add=(reopen)=>{const v=qi.value.trim();if(!v)return;const t=smartTask(v, x=>{x.horizon='day'; x.hkey=''; x.due=key;}); tasks.push(t); if(reopen)_pendingAddReopen='qadd'; qi.value='';save();renderTasks();};
@@ -3274,7 +3274,7 @@ function renderPeriodView(body,hview){ const h=hview||taskView, key=curKey(h);
   const list=topLevel(applyFilter(tasksInHorizon(h,key),taskFilter).sort(taskSort));
   let out=head;
   out+= list.length?list.map(taskCard).join(''):`<div class="empty-t">Nothing planned for this ${h} yet.</div>`;
-  out+=`<div class="qadd qadd-bottom"><input id="qaddInput" placeholder="Add a ${h} goal…" maxlength="120"><button id="qaddBtn">+</button></div>`;
+  out+=`<div class="qadd qadd-bottom"><input id="qaddInput" placeholder="Add a ${h} goal…" maxlength="200"><button id="qaddBtn">+</button></div>`;
   body.innerHTML=out; wireTasks(body); wireTaskDrag(body); wireLayoutToggle(body); if(h!=='life')wirePeriodStrip(body,h,key);
   const qi=$('qaddInput'),qb=$('qaddBtn');
   const add=(reopen)=>{const v=qi.value.trim();if(!v)return;const t=newTask(v,'');assignHorizon(t,h,key);tasks.push(t);if(reopen)_pendingAddReopen='qadd';qi.value='';save();renderTasks();};
@@ -3307,7 +3307,7 @@ function horizonHTML(){
       <div class="hz-head" data-act="toggle"><span class="cv">▾</span><span class="hdot" style="background:${HZ_DOT[h]}"></span>
         <span class="ht">${esc(horizonLabel(h,key))}</span><span class="hn">${doneN}/${totN}</span></div>
       <div class="hz-body">${body}
-        <div class="add-todo"><input placeholder="Add to ${h||'inbox'}…" maxlength="100"><button>Add</button></div>
+        <div class="add-todo"><input placeholder="Add to ${h||'inbox'}…" maxlength="200"><button>Add</button></div>
       </div></div>`;
   }).join('');
 }
