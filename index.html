@@ -2423,7 +2423,8 @@ function wireMatrix(scope){
     m.addEventListener('pointerdown',e=>{mDown=[e.clientX,e.clientY];});
     m.addEventListener('click',e=>{ if(e.target.closest('[data-act="check"]'))return;
       if(mDown){const dx=Math.abs(e.clientX-mDown[0]),dy=Math.abs(e.clientY-mDown[1]); if(dx>4||dy>4)return;}
-      const id=m.dataset.id; const t=tasks.find(x=>x.id===id); setTaskView('inbox'); if(t)setTimeout(()=>{ const mb=document.querySelector(`.tk[data-id="${id}"] .tk-menu`); if(mb)openCtxMenu(mb,buildTaskMenu(t)); },60); });
+      const id=m.dataset.id; const t=tasks.find(x=>x.id===id);
+      if(t) openCtxMenu(m, buildTaskMenu(t, ()=>renderTasks())); });   // full task menu in place — no redirect to Inbox
   });
   scope.querySelectorAll('.ei-q').forEach(q=>{
     q.addEventListener('dragover',e=>{e.preventDefault();q.classList.add('drop');});
