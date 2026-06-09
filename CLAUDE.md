@@ -16,12 +16,14 @@ One file only: `index.html`
 ## Architecture decisions (do not change without discussion)
 - **Unified task model**: one global `tasks` array is the source of truth. Each task has a `subjectId`. Subjects tab and Tasks tab are both filtered views of this array — never reintroduce per-subject todo arrays.
 - **Storage**: `localStorage` with an in-memory fallback (`mem{}`) for sandboxed iframes (Notion). Cloud sync via Firebase Realtime DB — credentials live in `CLOUD.url` and `CLOUD.key` at the top of the script.
+- **Notion database sync**: specific Notion databases mirror into specific board lists (`notionSources` = `[{id,name,dbId,boardId,listId,enabled,lastSync,lastErr,count}]`). The static page can't call `api.notion.com` (no CORS, secret token can't ship publicly), so a tiny **Cloudflare Worker** (`notion-proxy-worker.js`, NOT part of index.html) holds the token and exposes `GET ?db=<id>` → `{ok,results:[{id,title,done,due,url}]}`. The Worker URL lives in `settings.notionProxy` (rides cloud sync to every device + the embed). Synced rows become **ordinary tasks** with `notionSourceId`+`notionPageId` set. On first import they land in the pinned board list (boardId/listId from the source) with no date — but from there they have FULL task functionality, identical to any hand-made task: schedule to a day, move to inbox/calendar, set priority, run a timer, etc. No view excludes them. After import the user owns placement: each sync only mirrors **name + done** from Notion and never re-touches boardId/listId/due/horizon, so moves and scheduled dates survive re-syncs. Sync upserts by `notionPageId` and prunes rows archived in Notion; a mirror task is only deleted when its whole source is removed (deleting the source in the modal removes its cards). `isNotionTask(t)` is available but no longer gates any view. Auto-syncs on load, every 5 min, and on refocus. UI: Settings → Notion (`ovNotion` modal, `renderNotionList()`).
 - **Theme**: CSS variables on `html[data-theme="dark|light"]`. Never hardcode colours — always use the CSS vars defined in `:root`.
 - **No frameworks**: no React, no Vue, no build tools. Keep it one file.
 - **IST timezone**: all date/time logic uses `Asia/Kolkata`. `todayKey()` returns YYYY-MM-DD in IST.
 
 ## Key globals
 - `tasks` — unified task array
+- `notionSources` — Notion DB → board-list mappings (see Notion database sync above). A task with `notionSourceId` set is a synced mirror (`isNotionTask(t)`); `notionSyncOne(src)` reconciles one DB, `notionSyncAll()` runs them all + persists
 - `subjects` — subject list (colour, name, id — no todos)
 - `sessions` — stopwatch/pomodoro session log
 - `settings` — user preferences (examDate, urgentDays, theme, focus/short/long mins, etc.)
