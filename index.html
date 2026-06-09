@@ -874,8 +874,8 @@
   .cv2-wcell.drop{outline:2px dashed var(--accent);outline-offset:-2px}
   .cv2-wn{color:var(--violet)}
   .cv2-grid[data-wide="1"] .cv2-wcell{min-height:104px}
-  .cv2-cell{min-height:88px;border:1px solid var(--stroke-soft);border-radius:10px;padding:5px;background:var(--track-bg);
-    display:flex;flex-direction:column;gap:3px;overflow:hidden;position:relative}
+  .cv2-cell{min-height:88px;max-height:168px;border:1px solid var(--stroke-soft);border-radius:10px;padding:5px;background:var(--track-bg);
+    display:flex;flex-direction:column;gap:3px;overflow-y:auto;position:relative}
   .cv2-cell.other{opacity:.42}
   .cv2-cell.today{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
   .cv2-cell.drop{outline:2px dashed var(--accent);outline-offset:-2px}
