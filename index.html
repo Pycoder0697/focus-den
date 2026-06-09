@@ -1170,7 +1170,7 @@ const store={get(k){try{const v=localStorage.getItem(k);return v===null?(k in me
    ======================================================================== */
 const CLOUD={
   url:'https://focus-den-default-rtdb.asia-southeast1.firebasedatabase.app/',   // baked-in: every device auto-syncs, no setup
-  key:'Jacr06973#'                                                              // single private user — see notes; rotate here if ever misused
+  key:'Jacr06973kx'                                                             // must be Firebase-path-safe: no # . $ [ ] / (the old '#' silently broke ALL sync). Rotate here if misused.
 };
 const cloudOn=()=>CLOUD.url.startsWith('http')&&CLOUD.key.length>3;
 const cloudRef=()=>`${CLOUD.url.replace(/\/+$/,'')}/focusden/${encodeURIComponent(CLOUD.key)}.json`;
@@ -3477,7 +3477,7 @@ async function boot(){
     store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
     store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
     store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
-  }
+  } else if(cloudOn()){ cloudSave(); }   // cloud is empty → seed it with this device's data (first device with data wins)
   normalizeData();
   applyTheme();
   applyTimerCollapsed();
