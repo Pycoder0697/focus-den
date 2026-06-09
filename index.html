@@ -2868,7 +2868,7 @@ function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
       {ic:'▤',label:'Add to board',sub:()=>({items:boardItems})},
       {ic:'●',label:'Subject',sub:()=>({items:subjItems})}];
   if(dayLvl) items.splice(2,0,{ic:'⏱',label:'Time',gloss:timeGloss,run:(a)=>openTimePicker(a||document.body,t,()=>{save();re();})});
-  if(elsewhere) items.push({ic:'⮈',label:'Move to No date',run:()=>{assignHorizon(t,'','');t.boardId='';t.listId='';clampRepeat(t);save();re();}});
+  if(elsewhere) items.push({ic:'⮈',label:'Move to No date',run:()=>{assignHorizon(t,'','');t.boardId='';t.listId='';t.inboxListId='';clampRepeat(t);save();refreshTaskSurfaces();}});
   items.push(
       {sep:true},
       {ic:'↳',label:'Make it a subgoal of…',sub:()=>({items:parentItems})},
