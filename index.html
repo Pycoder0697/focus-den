@@ -1277,12 +1277,13 @@ async function notionSyncOne(src){
   if(data.schema) src.schema=data.schema;   // {titleProp, doneProp:{name,type,doneValue,undoneValue}} — needed to write edits back to Notion
   const rows=Array.isArray(data.results)?data.results:[];
   const mine=tasks.filter(t=>t.notionSourceId===src.id);
-  const byPage=new Map(mine.map(t=>[t.notionPageId,t]));
+  const byPage=new Map(mine.filter(t=>t.notionPageId).map(t=>[t.notionPageId,t])); // pending creates (no pageId yet) aren't matchable
   const seen=new Set(); let changed=false;
   rows.forEach(row=>{ const pid=row.id||row.pageId; if(!pid)return; seen.add(pid);
     const name=(row.title||'').trim()||'(untitled)'; const done=!!row.done;
     let t=byPage.get(pid);
-    if(!t){ t={id:uid('t'),name,subjectId:'',due:'',dueEnd:'',priority:0,checklist:[],
+    if(!t){ if(_notionCreating>0) return;             // an unmatched row may be our own in-flight create — import it next cycle instead of duplicating
+      t={id:uid('t'),name,subjectId:'',due:'',dueEnd:'',priority:0,checklist:[],
         done,doneOn:done?todayKey():'',repeat:'none',start:'',dur:0,created:Date.now(),
         horizon:'',hkey:'',parentId:'',inboxListId:'',
         boardId:src.boardId,listId:src.listId,notionSourceId:src.id,notionPageId:pid,notionUrl:row.url||''};
@@ -1291,9 +1292,9 @@ async function notionSyncOne(src){
       const fresh=_notionInflight.has(pid) || ((_notionRecent.get(pid)||0) > Date.now()-15000);
       if(!fresh){ if(t.name!==name){ t.name=name; changed=true; } if(t.done!==done){ t.done=done; t.doneOn=done?todayKey():''; changed=true; } } // …but a just-pushed local edit isn't reverted by a read that raced it
       t.notionUrl=row.url||t.notionUrl||''; } });
-  // a row removed/archived in Notion disappears from its board list here too
+  // a row removed/archived in Notion disappears from its board list here too — but never drop a pending create (no pageId yet)
   const n0=tasks.length;
-  tasks=tasks.filter(t=>t.notionSourceId!==src.id || seen.has(t.notionPageId));
+  tasks=tasks.filter(t=>t.notionSourceId!==src.id || !t.notionPageId || seen.has(t.notionPageId));
   if(tasks.length!==n0) changed=true;
   src.lastSync=Date.now(); src.lastErr=''; src.count=seen.size;
   return {count:seen.size, changed};
@@ -1317,6 +1318,25 @@ async function notionPushTask(t){ if(!t||!t.notionSourceId||!t.notionPageId||!no
        else { src.lastErr='Push failed: '+((d&&d.error)||('HTTP '+r.status)); } }
   catch(e){ src.lastErr='Push failed (proxy unreachable)'; }
   finally{ _notionInflight.delete(pid); } }
+let _notionCreating=0;   // while >0, a pull won't import unmatched remote rows (they may be our own in-flight creates) or prune pending tasks
+/* a source whose pin is exactly this board+list (i.e. tasks landing here mirror into that Notion DB) */
+function notionSourceForList(boardId,listId){ return notionSources.find(s=>s.enabled!==false&&s.dbId&&s.boardId===boardId&&s.listId===listId)||null; }
+/* WRITE / INSERT: a task that lands in a Notion-synced list becomes a brand-new row in that database */
+async function notionMaybeCreate(t){ if(!t||t.notionSourceId||!notionOn()) return;
+  const src=notionSourceForList(t.boardId,t.listId); if(!src||!src.schema) return;
+  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done}); if(!props) return;
+  t.notionSourceId=src.id; t.notionPageId='';            // claim immediately so a racing pull won't duplicate it
+  _notionCreating++;
+  try{ const r=await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({create:src.dbId,properties:props})});
+       const d=await r.json().catch(()=>null);
+       if(r.ok&&d&&d.id){ t.notionPageId=d.id; _notionRecent.set(d.id,Date.now()); src.lastErr=''; save(); refreshTaskSurfaces&&refreshTaskSurfaces(); }
+       else { t.notionSourceId=''; src.lastErr='Create failed: '+((d&&d.error)||('HTTP '+r.status)); save(); } }
+  catch(e){ t.notionSourceId=''; src.lastErr='Create failed (proxy unreachable)'; save(); }
+  finally{ _notionCreating--; } }
+/* archive the Notion row when its synced task is deleted, so it doesn't resurrect on the next pull */
+async function notionArchivePage(t){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
+  const pid=t.notionPageId; _notionRecent.set(pid,Date.now());
+  try{ await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,archived:true})}); }catch(e){} }
 /* sync every enabled, fully-pinned source, then persist + re-render once */
 async function notionSyncAll(opts){ opts=opts||{};
   if(_notionSyncing) return; if(!notionOn()) return;
@@ -2190,7 +2210,8 @@ function enableHoverAdd(scope){
   scope.querySelectorAll('.ccol').forEach(col=>{ if(col._addTask) installHoverAdd(col.querySelector('.ccol-body'), col._addTask, col.dataset.addkey||null); }); }
 function duplicateTask(t){ const c=JSON.parse(JSON.stringify(t)); c.id=uid('t'); c.created=Date.now(); c.done=false; c.doneOn='';
   c.checklist=(t.checklist||[]).map(x=>({id:uid('c'),text:x.text,done:false}));
-  const i=tasks.indexOf(t); if(i>=0) tasks.splice(i+1,0,c); else tasks.push(c); taskSound(); save(); return c; }
+  c.notionSourceId=''; c.notionPageId='';   // a copy isn't the same Notion row — it gets its own (created below if it's in a synced list)
+  const i=tasks.indexOf(t); if(i>=0) tasks.splice(i+1,0,c); else tasks.push(c); taskSound(); save(); notionMaybeCreate(c); return c; }
 
 /* ====================================================================
    PLANNER HORIZONS  — a task is a goal at a level of time.
@@ -2830,7 +2851,7 @@ function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
     subjects.map(s=>({ic:`<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${s.color}"></span>`,label:s.name,run:()=>{t.subjectId=s.id;save();re();}})));
   // two-level: board name → hover/click reveals its lists (TimeStripe-style)
   let boardItems=boards.map(b=>({ic:(t.boardId===b.id)?'✓':'▤',label:b.name,sub:()=>({items:
-      b.lists.length ? b.lists.map(l=>({ic:(t.boardId===b.id&&t.listId===l.id)?'✓':'',label:l.name,run:()=>{t.boardId=b.id;t.listId=l.id;save();re();}}))
+      b.lists.length ? b.lists.map(l=>({ic:(t.boardId===b.id&&t.listId===l.id)?'✓':'',label:l.name,run:()=>{t.boardId=b.id;t.listId=l.id;save();re();notionMaybeCreate(t);}}))
                      : [{label:'No lists yet',run:()=>{}}] })}));
   if(t.boardId) boardItems.push({sep:true},{ic:'✕',label:'Remove from board',run:()=>{t.boardId='';t.listId='';save();re();}});
   if(!boardItems.length) boardItems=[{label:'No boards yet',run:()=>{}}];
@@ -2862,7 +2883,7 @@ function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
         {ic:'⌨',label:'Custom…',run:()=>{ const v=Math.round(+prompt('Focus length in minutes:',settings.focus||50)); if(v>0&&v<=600)startTaskPomodoro(t,v); }}
       ]})},
       {sep:true},
-      {ic:'🗑',label:'Delete',danger:true,run:()=>askConfirm('Delete this task?',()=>{tasks=tasks.filter(x=>x.id!==t.id);save();re();})});
+      {ic:'🗑',label:'Delete',danger:true,run:()=>askConfirm('Delete this task?',()=>{notionArchivePage(t);tasks=tasks.filter(x=>x.id!==t.id);save();re();})});
   return { colors:{opts:['var(--faint)',PRI_COL[1],PRI_COL[2],PRI_COL[3]],active:(t.priority||0),titles:['No priority','Low','Medium','High'],pick:(i)=>{t.priority=i;save();re();}},
     rebuild:()=>buildTaskMenu(t,re),
     items }; }
@@ -3365,13 +3386,13 @@ function wireBoards(scope){ wireTasks(scope); wireTaskDrag(scope);
   // per-list add + drag tasks between lists
   scope.querySelectorAll('.bd-list').forEach(col=>{ const lid=col.dataset.list;
     const inp=col.querySelector('.ccol-add input'), btn=col.querySelector('.ccol-add button');
-    col._addTask=(v)=>{ if(!v||!b)return; const t=smartTask(v, x=>{x.boardId=b.id;x.listId=lid;}); tasks.push(t); save(); renderTasks(); };
+    col._addTask=(v)=>{ if(!v||!b)return; const t=smartTask(v, x=>{x.boardId=b.id;x.listId=lid;}); tasks.push(t); save(); renderTasks(); notionMaybeCreate(t); };
     const add=()=>col._addTask(inp.value.trim());
     if(btn)btn.onclick=add; if(inp)inp.onkeydown=e=>{if(e.key==='Enter')add();};
     col.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();col.classList.add('drop');} });
     col.addEventListener('dragleave',()=>col.classList.remove('drop'));
     col.addEventListener('drop',e=>{ if(!taskDragId||!b)return; e.preventDefault(); col.classList.remove('drop');
-      const t=tasks.find(x=>x.id===taskDragId); if(t){ t.boardId=b.id; t.listId=lid; save(); renderTasks(); } }); });
+      const t=tasks.find(x=>x.id===taskDragId); if(t){ t.boardId=b.id; t.listId=lid; save(); renderTasks(); notionMaybeCreate(t); } }); });
   enableHoverAdd(scope); keepColsScroll(scope);
 }
 

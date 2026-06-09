@@ -11,20 +11,23 @@
  *            → { ok:true, results:[ {id,title,done,due,url}, … ],
  *                schema:{ titleProp, doneProp:{name,type,doneValue,undoneValue} } }
  *
- *     WRITE  POST /            body: { page:"<pageId>", properties:{…} }
- *            → { ok:true }      (Focus Den sends a Notion `properties` patch:
- *                                done-toggle and rename are pushed back here)
+ *     WRITE  POST /   one of:
+ *              { page:"<id>", properties:{…} }   → update a row (done/rename)
+ *              { create:"<dbId>", properties:{…} } → insert a NEW row
+ *              { page:"<id>", archived:true }     → archive a row (on delete)
+ *            → { ok:true, id }
  *
- *   So checking a card done / renaming it in Focus Den updates the Notion row,
- *   and edits made in Notion pull back into Focus Den — true two-way sync.
+ *   So in Focus Den: checking a card done / renaming updates the Notion row,
+ *   adding a card to a synced list creates a Notion row, deleting a card
+ *   archives it — and edits made in Notion pull back. Full two-way sync.
  *
  * ----------------------------------------------------------------------------
  * ONE-TIME SETUP (~5 minutes, free)
  *
  *   1. Create a Notion integration
  *      → https://www.notion.so/my-integrations → New integration
- *      → Capabilities: enable BOTH **Read content** AND **Update content**
- *        (Update content is what lets Focus Den write changes back).
+ *      → Capabilities: enable **Read content**, **Update content**, AND
+ *        **Insert content** (Update = edit/archive rows, Insert = create rows).
  *      → Copy the "Internal Integration Secret" (starts `ntn_` or `secret_`).
  *
  *   2. Share each database with the integration
@@ -97,12 +100,24 @@ export default {
       });
 
     try {
-      // ---- WRITE: push a properties patch back to a page ----
+      // ---- WRITE: create a row, update a row's properties, or archive a row ----
       if (request.method === 'POST') {
         const body = await request.json().catch(() => null);
-        if (!body || !body.page || !body.properties)
-          return json({ ok: false, error: 'POST needs { page, properties }' }, 400);
-        const r = await notion(`pages/${body.page}`, { method: 'PATCH', body: JSON.stringify({ properties: body.properties }) });
+        if (!body) return json({ ok: false, error: 'POST needs a JSON body' }, 400);
+        let r;
+        if (body.create) {
+          // INSERT: { create:"<databaseId>", properties:{…} } → new row
+          if (!body.properties) return json({ ok: false, error: 'create needs { create, properties }' }, 400);
+          r = await notion('pages', { method: 'POST', body: JSON.stringify({ parent: { database_id: body.create }, properties: body.properties }) });
+        } else if (body.page && body.archived !== undefined) {
+          // ARCHIVE / restore: { page:"<pageId>", archived:true|false }
+          r = await notion(`pages/${body.page}`, { method: 'PATCH', body: JSON.stringify({ archived: !!body.archived }) });
+        } else if (body.page && body.properties) {
+          // UPDATE: { page:"<pageId>", properties:{…} }
+          r = await notion(`pages/${body.page}`, { method: 'PATCH', body: JSON.stringify({ properties: body.properties }) });
+        } else {
+          return json({ ok: false, error: 'POST needs {page,properties} | {create,properties} | {page,archived}' }, 400);
+        }
         const data = await r.json();
         if (!r.ok) return json({ ok: false, error: data.message || `Notion HTTP ${r.status}` }, 502);
         return json({ ok: true, id: data.id });
