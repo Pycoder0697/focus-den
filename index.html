@@ -762,6 +762,22 @@
   .pref-seg{margin-bottom:0;display:flex;width:100%}
   .pref-seg button{flex:1;white-space:nowrap}
   .pref-row{display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:13px;color:var(--ink)}
+  /* task filter (TickTick-style) */
+  .task-toolbar{display:flex;justify-content:flex-end;margin:-2px 0 12px}
+  .tv-filter{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12.5px;color:var(--muted);background:var(--track-bg);border:1px solid var(--stroke-soft);padding:7px 13px;border-radius:999px;cursor:pointer}
+  .tv-filter:hover{color:var(--ink);border-color:var(--accent)}
+  .tv-filter.active{color:var(--accent-ink);background:var(--accent);border-color:transparent;font-weight:600}
+  .tv-filter-badge{display:none;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:rgba(0,0,0,.22);color:inherit;font-size:10.5px;line-height:16px;text-align:center;font-weight:700}
+  .tv-filter.active .tv-filter-badge{display:inline-block}
+  .filter-menu{min-width:248px}
+  .filter-chips{display:flex;flex-wrap:wrap;gap:7px}
+  .filter-chip{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12px;color:var(--muted);background:var(--field-bg);border:1px solid var(--stroke-soft);border-radius:999px;padding:6px 11px;cursor:pointer;transition:.15s}
+  .filter-chip:hover{border-color:var(--accent);color:var(--ink)}
+  .filter-chip.on{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+  .filter-chip .pdot{width:9px;height:9px;border-radius:50%;flex:none}
+  .filter-foot{display:flex;justify-content:flex-end;border-top:1px solid var(--stroke-soft);padding-top:12px}
+  .filter-clear{font-family:inherit;font-size:12px;color:var(--rose);background:none;border:none;cursor:pointer;padding:2px}
+  .filter-clear:hover{text-decoration:underline}
 
   /* ---- light-mode structural fills & hovers (kept in one block) ---- */
   html[data-theme="light"] .subj-item,
@@ -967,6 +983,9 @@
         <button data-v="dashboard">◎ Dashboard</button>
         <button data-v="matrix">▥ Matrix</button>
       </div>
+      <div class="task-toolbar">
+        <button id="taskFilterBtn" class="tv-filter" title="Filter tasks by subject &amp; priority"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg> Filter<span class="tv-filter-badge" id="taskFilterBadge"></span></button>
+      </div>
       <div id="taskBody"></div>
     </div>
 
@@ -1011,6 +1030,19 @@
   </section>
 
   <div class="footnote">Runs entirely in your browser · data stays on this device · live Google/Apple Calendar sync needs a server, so use <b>Export .ics</b> to push sessions to your calendar</div>
+</div>
+
+<!-- TASK FILTER POPOVER (subject + priority) -->
+<div id="taskFilterMenu" class="pref-menu filter-menu">
+  <div class="pref-group">
+    <div class="pref-h">Priority</div>
+    <div class="filter-chips" id="filterPri"></div>
+  </div>
+  <div class="pref-group">
+    <div class="pref-h">Subjects</div>
+    <div class="filter-chips" id="filterSubj"></div>
+  </div>
+  <div class="filter-foot"><button class="filter-clear" id="filterClear">Clear all</button></div>
 </div>
 
 <!-- floating restore pill — shown only when the timer sidebar is hidden -->
@@ -1886,12 +1918,21 @@ function keepColsScroll(scope){ const c=scope.querySelector('.cols'); if(!c)retu
   c.scrollLeft=colsScrollX;
   c.addEventListener('scroll',()=>{ colsScrollX=c.scrollLeft; },{passive:true}); }
 let taskFilter='all', subjTaskFilter='all';
+/* TickTick-style task filter: narrow visible tasks by subject(s) and/or priority. Empty set = no constraint. */
+let filterSubjects=new Set(), filterPriorities=new Set();
+function filtersActive(){ return filterSubjects.size>0 || filterPriorities.size>0; }
+function passesTaskFilters(t){
+  if(filterSubjects.size && !filterSubjects.has(t.subjectId||'')) return false;
+  if(filterPriorities.size && !filterPriorities.has(t.priority||0)) return false;
+  return true;
+}
 const PERIOD_VIEWS=['week','month','quarter','year'];
 let planKeys={};                                  // currently-viewed period per horizon (defaults to current)
 const collapsedHorizons=new Set();                // Horizon-view sections collapsed by user
 const collapsedGoals=new Set();                   // Dashboard goal rollups collapsed by user
 function curKey(h){ if(h==='life')return ''; if(!planKeys[h])planKeys[h]=currentPeriodKey(h); return planKeys[h]; }
-function applyFilter(list,mode){ if(mode==='active')return list.filter(t=>!isTaskDone(t)); if(mode==='done')return list.filter(t=>isTaskDone(t)); return list; }
+function applyFilter(list,mode){ let out = (mode==='active')?list.filter(t=>!isTaskDone(t)) : (mode==='done')?list.filter(t=>isTaskDone(t)) : list;
+  if(filtersActive()) out=out.filter(passesTaskFilters); return out; }
 function addDays(key,n){ const [y,m,d]=key.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+n); return dt.toISOString().slice(0,10); }
 function daysBetween(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
 function prettyDate(key){ const [y,m,d]=key.split('-').map(Number); return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]; }
@@ -3351,6 +3392,29 @@ window.addEventListener('resize',closePref);
 $('prefTheme').querySelectorAll('button').forEach(b=>b.onclick=()=>{ settings.theme=b.dataset.theme; applyTheme(); save(); });
 $('prefFilter').querySelectorAll('button').forEach(b=>b.onclick=()=>{ taskFilter=subjTaskFilter=b.dataset.f; syncPrefMenu(); refreshTaskSurfaces(); });
 $('prefSound').onclick=()=>{ settings.taskSound=(settings.taskSound===false); $('prefSound').classList.toggle('on',settings.taskSound!==false); save(); };
+
+/* ---------- task filter popover (by subject + priority, TickTick-style) ---------- */
+const PRI_NAMES=['No priority','Low','Medium','High'];
+function renderFilterMenu(){
+  const pri=$('filterPri'); pri.innerHTML=[3,2,1,0].map(p=>
+    `<button class="filter-chip ${filterPriorities.has(p)?'on':''}" data-pri="${p}"><span class="pdot" style="background:${PRI_COL[p]||'var(--faint)'}"></span>${PRI_NAMES[p]}</button>`).join('');
+  const sb=$('filterSubj'); sb.innerHTML=subjects.map(s=>
+    `<button class="filter-chip ${filterSubjects.has(s.id)?'on':''}" data-subj="${s.id}"><span class="pdot" style="background:${s.color}"></span>${esc(s.name)}</button>`).join('')
+    + `<button class="filter-chip ${filterSubjects.has('')?'on':''}" data-subj=""><span class="pdot" style="background:var(--faint)"></span>No subject</button>`;
+  pri.querySelectorAll('[data-pri]').forEach(b=>b.onclick=()=>{ const p=+b.dataset.pri; filterPriorities.has(p)?filterPriorities.delete(p):filterPriorities.add(p); afterFilterChange(); });
+  sb.querySelectorAll('[data-subj]').forEach(b=>b.onclick=()=>{ const id=b.dataset.subj; filterSubjects.has(id)?filterSubjects.delete(id):filterSubjects.add(id); afterFilterChange(); });
+}
+function afterFilterChange(){ renderFilterMenu(); updateFilterBadge(); refreshTaskSurfaces(); }
+function updateFilterBadge(){ const n=filterSubjects.size+filterPriorities.size; const btn=$('taskFilterBtn'); if(!btn)return;
+  btn.classList.toggle('active',n>0); $('taskFilterBadge').textContent=n||''; }
+function openTaskFilter(){ const m=$('taskFilterMenu'),b=$('taskFilterBtn'); renderFilterMenu();
+  m.style.visibility='hidden'; m.classList.add('open'); const r=b.getBoundingClientRect(), w=m.offsetWidth||248;
+  m.style.left=Math.max(8,Math.min(r.right-w, innerWidth-8-w))+'px'; m.style.top=(r.bottom+8)+'px'; m.style.visibility=''; }
+function closeTaskFilter(){ $('taskFilterMenu').classList.remove('open'); }
+$('taskFilterBtn').onclick=e=>{ e.stopPropagation(); $('taskFilterMenu').classList.contains('open')?closeTaskFilter():openTaskFilter(); };
+$('filterClear').onclick=()=>{ filterSubjects.clear(); filterPriorities.clear(); afterFilterChange(); };
+document.addEventListener('mousedown',e=>{ const m=$('taskFilterMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#taskFilterBtn')||m.contains(e.target))return; closeTaskFilter(); });
+window.addEventListener('resize',closeTaskFilter);
 
 /* ---------- JSON backup: export / import ---------- */
 $('exportJson').onclick=()=>{ const data=JSON.stringify({...snapshot(),_app:'focus-den',_version:FD_VERSION},null,2);
