@@ -1090,6 +1090,7 @@
   <div class="field" style="border:none"><label>Connect</label><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="minor" id="cloudConnect">Connect / update</button><button class="minor" id="cloudDisconnect">Turn off</button><button class="minor" id="cloudCopyLink">Copy Notion link</button></div></div>
   <p style="font-size:11px;color:var(--faint);margin:-2px 0 6px;line-height:1.5">One-time Firebase Realtime DB setup links every device + the Notion embed to one dataset. The secret key is stored on this device (not in the public code). For Notion, use <b>Copy Notion link</b> and paste that URL as the embed — the iframe can't keep local storage, so the key rides in the link.</p>
   <div class="field"><label>Notion — proxy URL</label><input id="setNotionProxy" placeholder="https://…workers.dev" style="width:190px" type="url" inputmode="url" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false"></div>
+  <div class="field"><label>Notion — proxy key (optional)</label><input id="setNotionKey" placeholder="leave blank if Worker is open" style="width:190px" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false"></div>
   <div class="field" style="border:none"><label>Notion databases</label><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="minor" id="notionManage">Manage databases</button></div></div>
   <p style="font-size:11px;color:var(--faint);margin:-2px 0 6px;line-height:1.5">Pull rows from specific Notion databases into specific board lists — they live only in that list, never in your inbox/planner. Needs a one-time Cloudflare Worker (holds your Notion token securely); the Worker URL goes above. See <b>notion-proxy-worker.js</b> in the repo for the 5-min setup.</p>
   <button class="save" id="saveSettings">Save</button>
@@ -1256,22 +1257,28 @@ async function pollCloud(){ if(!cloudOn())return; if(_cloudT)return; // don't pu
 const notionProxy=()=>((settings.notionProxy||'').trim().replace(/\/+$/,''));
 const notionOn=()=>/^https?:\/\//.test(notionProxy());
 const isNotionTask=t=>!!t.notionSourceId;
+/* request headers for the proxy — attaches the optional shared key (settings.notionKey) so a locked-down Worker accepts the call */
+function notionHeaders(json){ const h={}; if(json) h['Content-Type']='application/json';
+  const k=(settings.notionKey||'').trim(); if(k) h['x-sync-key']=k; return h; }
 let _notionSyncing=false, _notionTimer=null;
+const _notionInflight=new Set();      // pageIds with a write in flight
+const _notionRecent=new Map();        // pageId → ts of last local push (a racing pull won't clobber it within the window)
 /* pull one source's rows from the proxy and reconcile them into its board list (no save() here — caller batches) */
 async function notionSyncOne(src){
   if(!notionOn()) return {error:'No proxy URL set'};
   if(!src.dbId) return {error:'No database ID'};
   if(!src.boardId||!src.listId) return {error:'Not pinned to a list'};
   let data;
-  try{ const r=await fetch(notionProxy()+'?db='+encodeURIComponent(src.dbId),{cache:'no-store'});
+  try{ const r=await fetch(notionProxy()+'?db='+encodeURIComponent(src.dbId),{cache:'no-store',headers:notionHeaders()});
        data=await r.json().catch(()=>null);
        if(!r.ok) return {error:(data&&data.error)||('HTTP '+r.status)}; }
   catch(e){ return {error:'Network / proxy unreachable'}; }
   if(!data||data.ok===false) return {error:(data&&data.error)||'Bad response'};
+  if(data.schema) src.schema=data.schema;   // {titleProp, doneProp:{name,type,doneValue,undoneValue}} — needed to write edits back to Notion
   const rows=Array.isArray(data.results)?data.results:[];
   const mine=tasks.filter(t=>t.notionSourceId===src.id);
   const byPage=new Map(mine.map(t=>[t.notionPageId,t]));
-  const seen=new Set();
+  const seen=new Set(); let changed=false;
   rows.forEach(row=>{ const pid=row.id||row.pageId; if(!pid)return; seen.add(pid);
     const name=(row.title||'').trim()||'(untitled)'; const done=!!row.done;
     let t=byPage.get(pid);
@@ -1279,27 +1286,55 @@ async function notionSyncOne(src){
         done,doneOn:done?todayKey():'',repeat:'none',start:'',dur:0,created:Date.now(),
         horizon:'',hkey:'',parentId:'',inboxListId:'',
         boardId:src.boardId,listId:src.listId,notionSourceId:src.id,notionPageId:pid,notionUrl:row.url||''};
-      tasks.push(t); }                                  // NEW rows land in the pinned board list…
-    else { t.name=name; if(t.done!==done){ t.done=done; t.doneOn=done?todayKey():''; }
-      t.notionUrl=row.url||t.notionUrl||''; } });       // …but after that, placement/date is yours — sync only mirrors name + done
+      tasks.push(t); changed=true; }                    // NEW rows land in the pinned board list…
+    else {                                              // …after that, placement/date is yours — sync mirrors name + done both ways…
+      const fresh=_notionInflight.has(pid) || ((_notionRecent.get(pid)||0) > Date.now()-15000);
+      if(!fresh){ if(t.name!==name){ t.name=name; changed=true; } if(t.done!==done){ t.done=done; t.doneOn=done?todayKey():''; changed=true; } } // …but a just-pushed local edit isn't reverted by a read that raced it
+      t.notionUrl=row.url||t.notionUrl||''; } });
   // a row removed/archived in Notion disappears from its board list here too
+  const n0=tasks.length;
   tasks=tasks.filter(t=>t.notionSourceId!==src.id || seen.has(t.notionPageId));
+  if(tasks.length!==n0) changed=true;
   src.lastSync=Date.now(); src.lastErr=''; src.count=seen.size;
-  return {count:seen.size};
+  return {count:seen.size, changed};
 }
+/* build a Notion `properties` patch from a source's detected schema (checkbox / status / select all handled) */
+function buildNotionProps(schema,vals){ if(!schema) return null; const p={};
+  if(vals.title!=null && schema.titleProp) p[schema.titleProp]={title:[{text:{content:vals.title}}]};
+  if(vals.done!=null && schema.doneProp){ const dp=schema.doneProp, v=vals.done?dp.doneValue:dp.undoneValue;
+    if(dp.type==='checkbox') p[dp.name]={checkbox:!!vals.done};
+    else if(dp.type==='status'&&v) p[dp.name]={status:{name:v}};
+    else if(dp.type==='select'&&v) p[dp.name]={select:{name:v}}; }
+  return Object.keys(p).length?p:null; }
+/* TWO-WAY: push a synced task's name + done back to Notion. Fire-and-forget; guarded so a racing pull won't revert it */
+async function notionPushTask(t){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
+  const src=notionSources.find(s=>s.id===t.notionSourceId); if(!src||!src.schema) return;
+  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done}); if(!props) return;
+  const pid=t.notionPageId; _notionInflight.add(pid); _notionRecent.set(pid,Date.now());
+  try{ const r=await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,properties:props})});
+       const d=await r.json().catch(()=>null);
+       if(r.ok && d && d.ok!==false){ _notionRecent.set(pid,Date.now()); src.lastErr=''; }
+       else { src.lastErr='Push failed: '+((d&&d.error)||('HTTP '+r.status)); } }
+  catch(e){ src.lastErr='Push failed (proxy unreachable)'; }
+  finally{ _notionInflight.delete(pid); } }
 /* sync every enabled, fully-pinned source, then persist + re-render once */
 async function notionSyncAll(opts){ opts=opts||{};
   if(_notionSyncing) return; if(!notionOn()) return;
+  // auto-polls must never yank focus or re-render under the user's cursor while they type
+  if(!opts.report){ const ae=document.activeElement; if(ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return; }
   const live=notionSources.filter(s=>s.enabled!==false && s.dbId && s.boardId && s.listId);
   if(!live.length){ if(opts.report) setNotionStatus('Add a database and pin it to a list first.'); return; }
   _notionSyncing=true; if(opts.report) setNotionStatus('Syncing…');
-  let ok=0,fail=0;
-  for(const s of live){ const r=await notionSyncOne(s); if(r.error){ s.lastErr=r.error; fail++; } else ok++; }
+  let ok=0,fail=0,changed=false;
+  for(const s of live){ const r=await notionSyncOne(s); if(r.error){ s.lastErr=r.error; fail++; } else { ok++; if(r.changed) changed=true; } }
   _notionSyncing=false;
-  save(); refreshTaskSurfaces&&refreshTaskSurfaces();
+  if(changed){ save(); refreshTaskSurfaces&&refreshTaskSurfaces(); }   // only touch storage/DOM when Notion actually changed → safe to poll every ~10s
   if($('ovNotion')&&$('ovNotion').classList.contains('show')) renderNotionList();
   if(opts.report) setNotionStatus(fail?`Synced ${ok}, ${fail} failed — check IDs / sharing.`:`Synced ${ok} database${ok===1?'':'s'} · ${new Date().toLocaleTimeString()}`);
 }
+/* adaptive pull cadence: snappy (~10s) while the tab is visible, gentle (60s) when hidden — keeps Notion→app near-realtime without burning quota */
+function scheduleNotionPoll(){ clearTimeout(_notionTimer); if(!notionOn()) return;
+  _notionTimer=setTimeout(async()=>{ try{ await notionSyncAll(); } finally{ scheduleNotionPoll(); } }, document.hidden?60000:10000); }
 function setNotionStatus(msg){ const el=$('notionStatus'); if(el)el.textContent=msg||''; }
 
 /* ---------- IST time helpers ---------- */
@@ -1685,6 +1720,7 @@ function toggleTask(t){
   if(!t.repeat||t.repeat==='none') t.done=!t.done;
   else t.doneOn = was ? '' : todayKey();
   (isTaskDone(t)?checkSound:uncheckSound)();
+  if(t.notionSourceId) notionPushTask(t);   // two-way: reflect the done-toggle back into Notion
 }
 function renderSubjects(){
   const map=todaySecBySubject(); let tot=0; Object.values(map).forEach(v=>tot+=v);
@@ -2857,10 +2893,10 @@ function renameSubject(s){ const el=$('subjList').querySelector(`.subj-item[data
 /* inline-rename a task's name in place; falls back to prompt() if the card isn't on screen */
 function renameTask(t,re){ re=re||(()=>renderTasks());
   const el=document.querySelector(`.tk[data-id="${t.id}"] .tk-name`);
-  if(!el){ const v=prompt('Rename task:',t.name); if(v&&v.trim()){ t.name=v.trim(); save(); re(); } return; }
+  if(!el){ const v=prompt('Rename task:',t.name); if(v&&v.trim()){ t.name=v.trim(); save(); if(t.notionSourceId)notionPushTask(t); re(); } return; }
   el.onclick=null; el.contentEditable='true'; el.focus();
   try{ const r=document.createRange(); r.selectNodeContents(el); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); }catch(e){}
-  const commit=()=>{ el.onblur=null; const v=el.textContent.trim(); if(v)t.name=v; el.contentEditable='false'; save(); re(); };
+  const commit=()=>{ el.onblur=null; const v=el.textContent.trim(); if(v)t.name=v; el.contentEditable='false'; save(); if(t.notionSourceId)notionPushTask(t); re(); };
   el.onblur=commit; el.onkeydown=e=>{ if(e.key==='Enter'){e.preventDefault();el.blur();} else if(e.key==='Escape'){el.textContent=t.name;el.blur();} }; }
 
 /* ====================================================================
@@ -3442,7 +3478,7 @@ function refreshCloudState(){ if($('cloudState'))$('cloudState').textContent=clo
 $('settingsBtn').onclick=()=>{$('setFocus').value=settings.focus;$('setSessions').value=settings.sessions;$('setShort').value=settings.short;$('setLong').value=settings.long;
   $('setRounds').value=settings.rounds;$('setGoal').value=settings.goal;$('setExam').value=settings.examDate||'';$('setUrgent').value=(settings.urgentDays==null?3:settings.urgentDays);
   $('setCloudUrl').value=CLOUD.url||''; $('setCloudKey').value=CLOUD.key||''; refreshCloudState();
-  $('setNotionProxy').value=settings.notionProxy||'';
+  $('setNotionProxy').value=settings.notionProxy||''; $('setNotionKey').value=settings.notionKey||'';
   $('ovSettings').classList.add('show');};
 /* connect / update sync: adopt cloud data if it already exists, otherwise seed it from this device */
 $('cloudConnect').onclick=()=>{ applyCloudCfg($('setCloudUrl').value,$('setCloudKey').value);
@@ -3500,7 +3536,7 @@ function renderNotionList(){ const wrap=$('notionList'); if(!wrap)return;
     row.querySelector('[data-ns="del"]').onclick=()=>askConfirm('Remove this database? Its synced cards leave the board (your hand-made tasks are untouched).',
       ()=>{ tasks=tasks.filter(t=>t.notionSourceId!==s.id); notionSources=notionSources.filter(x=>x.id!==s.id); save(); renderNotionList(); refreshTaskSurfaces&&refreshTaskSurfaces(); }); });
 }
-$('notionManage').onclick=()=>{ settings.notionProxy=$('setNotionProxy').value.trim(); save();
+$('notionManage').onclick=()=>{ settings.notionProxy=$('setNotionProxy').value.trim(); settings.notionKey=$('setNotionKey').value.trim(); save();
   renderNotionList(); setNotionStatus(notionOn()?'':'Tip: paste the Worker URL in “Notion — proxy URL” above so sync can reach Notion.');
   $('ovNotion').classList.add('show'); };
 $('notionAdd').onclick=()=>{ const b=boards[0];
@@ -3511,9 +3547,10 @@ $('notionDone').onclick=()=>$('ovNotion').classList.remove('show');
 $('saveSettings').onclick=()=>{const c=(v,a,b,d)=>{v=parseInt(v);return isNaN(v)?d:Math.min(b,Math.max(a,v));};
   settings.focus=c($('setFocus').value,1,120,50);settings.sessions=c($('setSessions').value,1,12,4);settings.short=c($('setShort').value,1,60,10);settings.long=c($('setLong').value,1,60,30);
   settings.rounds=c($('setRounds').value,0,8,4);settings.goal=c($('setGoal').value,30,900,240);settings.examDate=$('setExam').value||'';settings.urgentDays=c($('setUrgent').value,0,30,3);
-  const npPrev=settings.notionProxy||''; settings.notionProxy=$('setNotionProxy').value.trim();
+  const npPrev=settings.notionProxy||''; settings.notionProxy=$('setNotionProxy').value.trim(); settings.notionKey=$('setNotionKey').value.trim();
   save();$('ovSettings').classList.remove('show');if(!active&&workedMs===0)setMode(mode);refreshStats();refreshDplus();
-  if(settings.notionProxy&&settings.notionProxy!==npPrev) notionSyncAll(); };
+  if(settings.notionProxy&&settings.notionProxy!==npPrev) notionSyncAll();
+  scheduleNotionPoll(); };   // (re)start or stop the near-realtime pull loop to match the new proxy setting
 $('resetAll').onclick=()=>askConfirm('Erase ALL data — subjects, sessions, to-dos, day-offs? Cannot be undone.',()=>{
   localStorage.clear?.();['fd_settings','fd_subjects','fd_sessions','fd_dayoff','fd_tasks','fd_distract','fd_boards','fd_inboxlists','fd_notionsrc','fd_running','fd_bg','fd_device','fd_cloud'].forEach(k=>{try{localStorage.removeItem(k);}catch(e){}delete mem[k];});location.reload();});
 [ 'ovSettings','ovLog','ovConfirm','ovTodo','ovPause','ovDistract','ovNotion' ].forEach(id=>$(id).onclick=e=>{if(e.target===$(id))$(id).classList.remove('show');});
@@ -3647,9 +3684,10 @@ async function boot(){
   // two-way cloud convergence: pull other-device / Notion-sync edits periodically and on refocus
   setInterval(pollCloud,6000);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden)pollCloud(); });
-  // Notion DB → board list sync: once on load, then every 5 min, and on refocus
-  if(notionOn()){ notionSyncAll(); setInterval(notionSyncAll,300000);
-    document.addEventListener('visibilitychange',()=>{ if(!document.hidden)notionSyncAll(); }); }
+  // Notion DB → board list sync: near-realtime both ways (push is instant; pull polls ~10s while visible, 60s hidden, and immediately on refocus)
+  if(notionOn()) notionSyncAll();
+  scheduleNotionPoll();
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) notionSyncAll(); scheduleNotionPoll(); });
 }
 boot();
 
