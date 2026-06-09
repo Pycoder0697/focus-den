@@ -1193,7 +1193,8 @@ async function cloudLoad(){ if(!cloudOn())return null; try{const r=await fetch(c
 let _cloudT=null, _lastLocalWrite=0, _lastSeenRemote=0;
 function cloudSave(){ if(!cloudOn())return; setSync('saving'); clearTimeout(_cloudT);
   _cloudT=setTimeout(async()=>{ try{const snap=snapshot(); _lastLocalWrite=snap._updatedAt; _lastSeenRemote=snap._updatedAt;
-    const r=await fetch(cloudRef(),{method:'PUT',body:JSON.stringify(snap)}); setSync(r.ok?'ok':'err'); }catch(e){ setSync('err'); } },700); }
+    const r=await fetch(cloudRef(),{method:'PUT',body:JSON.stringify(snap)}); setSync(r.ok?'ok':'err'); }catch(e){ setSync('err'); }
+    finally{ _cloudT=null; } },700); }   // clear the flag so pollCloud resumes pulling Notion/other-device edits
 function setSync(s){ const b=document.getElementById('syncBadge'); if(!b)return; if(!cloudOn()){b.style.display='none';return;} b.style.display='';
   b.textContent=s==='saving'?'☁ saving…':s==='loading'?'☁ loading…':s==='err'?'☁ offline':'☁ synced';
   b.style.color=s==='err'?'var(--rose)':'var(--faint)'; }
