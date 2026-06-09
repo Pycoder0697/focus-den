@@ -3497,8 +3497,8 @@ async function boot(){
     $('startBtn').textContent='Start'; renderClock();
   } else { running=null; setMode('pomo'); }
   renderSubjects(); refreshStats(); renderCalendar();
-  // two-way cloud convergence: pull other-device edits periodically and on refocus
-  setInterval(pollCloud,15000);
+  // two-way cloud convergence: pull other-device / Notion-sync edits periodically and on refocus
+  setInterval(pollCloud,6000);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden)pollCloud(); });
 }
 boot();

@@ -76,9 +76,12 @@ async function notion(path, { method = 'GET', body } = {}) {
   return r.json();
 }
 
-// the DB's title property can be named anything — discover it, and make sure our props exist
+// the DB's title property can be named anything — discover it, and make sure our props exist.
+// runs only once per process (cached) so the hot sync loop stays light.
 let TITLE_PROP = 'Name';
+let schemaReady = false;
 async function ensureSchema() {
+  if (schemaReady) return;
   const db = await notion(`databases/${NOTION_DB_ID}`);
   const props = db.properties || {};
   TITLE_PROP = Object.keys(props).find(k => props[k].type === 'title') || 'Name';
@@ -96,6 +99,7 @@ async function ensureSchema() {
     log('Adding missing Notion properties:', Object.keys(missing).join(', '));
     await notion(`databases/${NOTION_DB_ID}`, { method: 'PATCH', body: { properties: missing } });
   }
+  schemaReady = true;
 }
 
 async function notionQueryAll() {
@@ -211,18 +215,24 @@ async function syncOnce() {
       } catch (e) { errors.push(`create ${task.id}: ${e.message}`); }
       continue;
     }
-    task.notionId = pg.id;                                            // heal a missing link
+    if (task.notionId !== pg.id) { task.notionId = pg.id; docDirty = true; }   // heal + persist a missing link
     const nf = pageToFields(pg);
     const notionHash = hashFields(nf);
     // rec.hash is the agreed-on fingerprint from the last sync. If Focus Den's current
-    // hash differs, FD changed; if Notion's current hash differs, Notion changed.
-    const fdChanged = rec.hash !== fdHash;
-    const notionDiffers = notionHash !== rec.hash;
-
+    // Decide who (if anyone) needs updating. rec.hash is the agreed content from the
+    // last sync (undefined on a fresh link). If the two sides already match, it's a no-op.
     let winner = null;
-    if (fdChanged && notionDiffers) winner = CONFLICT_WINNER;         // both changed
-    else if (fdChanged) winner = 'focusden';
-    else if (notionDiffers) winner = 'notion';
+    if (fdHash === notionHash) {
+      winner = null;                                                  // identical content → already in sync
+    } else if (rec.hash === undefined) {
+      winner = CONFLICT_WINNER;                                       // differ with no history → policy decides
+    } else {
+      const fdChanged = rec.hash !== fdHash;
+      const notionChanged = rec.hash !== notionHash;
+      if (fdChanged && notionChanged) winner = CONFLICT_WINNER;       // both edited since last sync
+      else if (fdChanged) winner = 'focusden';
+      else winner = 'notion';
+    }
 
     if (winner === 'focusden') {
       try {
@@ -288,11 +298,25 @@ async function syncOnce() {
     }
   }
 
-  // ---- write back (guarded against an app write that landed during this run) ----
+  // ---- write back ----
   if (docDirty) {
     const fresh = await fbGet(fdMainUrl());
     if (fresh && fresh._updatedAt && fresh._updatedAt !== docStamp) {
-      log('Focus Den changed mid-sync — skipping write this cycle, will reconcile next run.');
+      // the app wrote to the cloud during this run. Don't clobber it — instead MERGE our
+      // Notion links (and any tasks we created from Notion) onto the fresh doc, so the
+      // notionId links are never lost (losing them is what caused duplicate-page churn).
+      fresh.tasks = Array.isArray(fresh.tasks) ? fresh.tasks : [];
+      const freshById = new Map(fresh.tasks.map(t => [t.id, t]));
+      for (const t of doc.tasks) {
+        const f = freshById.get(t.id);
+        if (f) { if (t.notionId && f.notionId !== t.notionId) f.notionId = t.notionId; }
+        else fresh.tasks.push(t);                    // a task we created from a Notion page this run
+      }
+      const fsubj = new Set((fresh.subjects || []).map(s => s.id));
+      for (const s of (doc.subjects || [])) if (!fsubj.has(s.id)) (fresh.subjects = fresh.subjects || []).push(s);
+      fresh._updatedAt = Date.now(); fresh._device = 'notion-sync';
+      await fbPut(fdMainUrl(), fresh);
+      log('merged Notion links onto a concurrently-updated Focus Den doc.');
     } else {
       doc._updatedAt = Date.now();
       doc._device = 'notion-sync';
@@ -307,9 +331,13 @@ async function syncOnce() {
   if (errors.length) errors.forEach(e => log('  !', e));
 }
 
+let syncing = false;                     // mutex: never let two reconciliations overlap
 async function safeSync() {
+  if (syncing) return;                   // a previous cycle is still running — skip this tick
+  syncing = true;
   try { await syncOnce(); }
   catch (e) { lastStatus = { ...lastStatus, ok: false, lastRun: new Date().toISOString(), errors: [e.message] }; log('sync FAILED:', e.message); }
+  finally { syncing = false; }
 }
 
 // ---------------------------------------------------------------- run
