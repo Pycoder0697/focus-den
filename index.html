@@ -135,6 +135,41 @@
   .tabview.show{display:block;animation:fade .3s ease}
   @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
+  /* ---- TickTick-style vertical nav rail ---- */
+  .shell{display:flex;align-items:flex-start;min-height:100vh}
+  .shell>.wrap{flex:1;min-width:0}
+  .rail{position:sticky;top:0;align-self:stretch;flex:none;width:60px;min-height:100vh;box-sizing:border-box;
+    display:flex;flex-direction:column;align-items:center;gap:5px;padding:14px 0 16px;
+    background:var(--card-bg);border-right:1px solid var(--stroke-soft);z-index:30}
+  .rail-logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;margin-bottom:8px;flex:none;
+    background:var(--amber);color:#3a1810;font-family:'Fraunces',serif;font-style:italic;font-weight:600;font-size:18px;box-shadow:0 0 14px var(--amber)}
+  .railtab{position:relative;width:44px;height:44px;border-radius:12px;flex:none;display:grid;place-items:center;
+    color:var(--muted);background:transparent;border:none;cursor:pointer;transition:.18s}
+  .railtab svg{width:21px;height:21px}
+  .railtab:hover{background:var(--glass-2);color:var(--ink)}
+  .railtab.active{background:var(--glass-2);color:var(--amber)}
+  .railtab.active::before{content:"";position:absolute;left:-8px;top:11px;bottom:11px;width:3px;border-radius:0 3px 3px 0;background:var(--amber)}
+  .rail-tip{position:absolute;left:50px;top:50%;transform:translateY(-50%);white-space:nowrap;
+    background:var(--ink);color:var(--bg);font-size:11.5px;font-weight:600;padding:5px 9px;border-radius:7px;
+    opacity:0;pointer-events:none;transition:.15s;z-index:60}
+  .railtab:hover .rail-tip{opacity:1}
+  .rail-spacer{flex:1 1 auto}
+  .rail-bottom{display:flex;flex-direction:column;align-items:center;gap:7px}
+  .rail-dplus{font-size:9.5px;color:var(--faint);background:var(--track-bg);padding:4px 6px;border-radius:8px;border:1px solid var(--stroke-soft);text-align:center;line-height:1.15;cursor:pointer;max-width:48px}
+  .rail-sync{font-size:15px;line-height:1}
+  .rail-ibtn{width:38px;height:38px;border-radius:11px;flex:none;display:grid;place-items:center;color:var(--muted);background:transparent;border:none;cursor:pointer;transition:.18s}
+  .rail-ibtn:hover{background:var(--glass-2);color:var(--ink)}
+  .rail-ibtn svg{width:19px;height:19px}
+  @media(max-width:880px){
+    .rail{width:52px}
+    .railtab{width:40px;height:40px}
+    .rail-ibtn{width:34px;height:34px}
+  }
+  /* ---- Tasks: collapsible vertical list panel (TickTick second column) ---- */
+  .tasks-split{display:flex;gap:20px;align-items:flex-start}
+  .tasks-main{flex:1;min-width:0}
+  #tab-tasks.nav-collapsed .task-views{display:none}
+
   /* SUBJECTS */
   .subj-card{padding:18px}
   .total-row{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:14px;border-bottom:1px solid var(--stroke-soft);margin-bottom:12px}
@@ -196,9 +231,11 @@
   .mh-bar{width:100%;max-width:30px;display:flex;flex-direction:column-reverse;border-radius:6px 6px 2px 2px;overflow:hidden;min-height:3px;background:rgba(255,255,255,.05)}
   .mh-l{font-size:10px;color:var(--faint)}
   /* ---- tasks / planner ---- */
-  .task-views{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px}
-  .task-views button{flex:none;font-family:inherit;font-size:12.5px;color:var(--muted);background:var(--track-bg);border:1px solid var(--stroke-soft);padding:8px 14px;border-radius:999px;cursor:pointer;white-space:nowrap}
+  .task-views{display:flex;flex-direction:column;gap:3px;flex:none;width:172px;padding:0;margin:0}
+  .task-views button{width:100%;text-align:left;font-family:inherit;font-size:13px;color:var(--muted);background:transparent;border:1px solid transparent;padding:9px 13px;border-radius:9px;cursor:pointer;white-space:nowrap;transition:.15s}
+  .task-views button:hover{background:var(--glass-2);color:var(--ink)}
   .task-views button.on{background:var(--amber);color:#3a1810;border-color:transparent;font-weight:600}
+  @media(max-width:720px){.tasks-split{flex-direction:column}.task-views{flex-direction:row;width:100%;overflow-x:auto}.task-views button{width:auto}}
   .tv-more-btn{flex:none;font-family:inherit;font-size:12.5px;color:var(--muted);background:var(--track-bg);border:1px solid var(--stroke-soft);padding:8px 14px;border-radius:999px;cursor:pointer;white-space:nowrap}
   .tv-more-btn.on{background:var(--amber);color:#3a1810;border-color:transparent;font-weight:600}
   .tv-more-menu{position:fixed;z-index:60;display:none;flex-direction:column;gap:2px;background:var(--pop-bg);border:1px solid var(--stroke);border-radius:12px;padding:6px;box-shadow:var(--shadow);min-width:168px}
@@ -957,8 +994,26 @@
 <body>
 <div class="bg"></div><div class="bgimg" id="bgImg"></div><div class="bgscrim" id="bgScrim"></div><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div><div class="grain"></div>
 
-<div class="wrap">
-  <div class="brand"><h1>Focus Den</h1><span class="dot"></span><span>track · focus · flow</span><span class="dplus" id="syncBadge" style="display:none">☁</span><span class="dplus" id="dplus">D-—</span><button class="theme-btn" id="prefBtn" title="Preferences — theme, task visibility, sounds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2.4" fill="var(--track-bg)"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2.4" fill="var(--track-bg)"/></svg></button></div>
+<div class="shell">
+  <!-- VERTICAL NAV RAIL -->
+  <nav class="rail">
+    <div class="rail-logo" title="Focus Den">F</div>
+    <button class="railtab active" data-tab="subjects" title="Subjects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5A1.5 1.5 0 0 0 20 18.5z"/></svg><span class="rail-tip">Subjects</span></button>
+    <button class="railtab" data-tab="tasks" title="Tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6l1 1 2-2"/><path d="M4 12l1 1 2-2"/><circle cx="5" cy="18" r="1.2"/></svg><span class="rail-tip">Tasks</span></button>
+    <button class="railtab" data-tab="calendar" title="Calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg><span class="rail-tip">Calendar</span></button>
+    <button class="railtab" data-tab="stats" title="Stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="rail-tip">Stats</span></button>
+    <button class="railtab" data-tab="log" title="Log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="rail-tip">Log</span></button>
+    <button class="railtab" data-tab="music" title="Music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg><span class="rail-tip">Music</span></button>
+    <div class="rail-spacer"></div>
+    <div class="rail-bottom">
+      <span class="rail-sync" id="syncBadge" style="display:none" title="Cloud sync on">☁</span>
+      <span class="rail-dplus" id="dplus" title="Days to exam">D-—</span>
+      <button class="rail-ibtn" id="prefBtn" title="Preferences — theme, task visibility, sounds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2.4" fill="var(--track-bg)"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2.4" fill="var(--track-bg)"/></svg></button>
+      <button class="rail-ibtn" id="railSettings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    </div>
+  </nav>
+
+  <div class="wrap">
 
   <!-- TIMER -->
   <section class="card timer-card">
@@ -1007,14 +1062,6 @@
 
   <!-- PANEL -->
   <section class="panel">
-    <div class="tabs">
-      <button data-tab="subjects" class="active">Subjects</button>
-      <button data-tab="tasks">Tasks</button>
-      <button data-tab="calendar">Calendar</button>
-      <button data-tab="stats">Stats</button>
-      <button data-tab="log">Log</button>
-      <button data-tab="music">Music</button>
-    </div>
 
     <!-- SUBJECTS -->
     <div class="tabview show" id="tab-subjects">
@@ -1027,20 +1074,24 @@
 
     <!-- TASKS / PLANNER -->
     <div class="tabview" id="tab-tasks">
-      <div class="task-views" id="taskViews">
-        <button data-v="all" class="on">All</button>
-        <button data-v="today">Today</button>
-        <button data-v="next7">Next 7 days</button>
-        <button data-v="inbox">⮈ Inbox</button>
-        <button data-v="boards">▤ Boards</button>
-        <button data-v="horizon">≣ Horizon</button>
-        <button data-v="matrix">▥ Matrix</button>
-        <button data-v="dashboard">◎ Dashboard</button>
+      <div class="tasks-split">
+        <div class="task-views" id="taskViews">
+          <button data-v="all" class="on">All</button>
+          <button data-v="today">Today</button>
+          <button data-v="next7">Next 7 days</button>
+          <button data-v="inbox">⮈ Inbox</button>
+          <button data-v="boards">▤ Boards</button>
+          <button data-v="horizon">≣ Horizon</button>
+          <button data-v="matrix">▥ Matrix</button>
+          <button data-v="dashboard">◎ Dashboard</button>
+        </div>
+        <div class="tasks-main">
+          <div class="task-toolbar">
+            <button id="taskFilterBtn" class="tv-filter" title="Filter tasks by subject &amp; priority"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg> Filter<span class="tv-filter-badge" id="taskFilterBadge"></span></button>
+          </div>
+          <div id="taskBody"></div>
+        </div>
       </div>
-      <div class="task-toolbar">
-        <button id="taskFilterBtn" class="tv-filter" title="Filter tasks by subject &amp; priority"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg> Filter<span class="tv-filter-badge" id="taskFilterBadge"></span></button>
-      </div>
-      <div id="taskBody"></div>
     </div>
 
     <!-- CALENDAR -->
@@ -1089,7 +1140,8 @@
   </section>
 
   <div class="footnote">Runs entirely in your browser · data stays on this device · live Google/Apple Calendar sync needs a server, so use <b>Export .ics</b> to push sessions to your calendar</div>
-</div>
+  </div><!-- /.wrap -->
+</div><!-- /.shell -->
 
 <!-- TASK FILTER POPOVER (subject + priority) -->
 <div id="taskFilterMenu" class="pref-menu filter-menu">
@@ -1287,7 +1339,7 @@ function cloudSave(){ if(!cloudOn())return; setSync('saving'); clearTimeout(_clo
     const r=await fetch(cloudRef(),{method:'PUT',body:JSON.stringify(snap)}); setSync(r.ok?'ok':'err'); }catch(e){ setSync('err'); }
     finally{ _cloudT=null; } },700); }   // clear the flag so pollCloud resumes pulling Notion/other-device edits
 function setSync(s){ const b=document.getElementById('syncBadge'); if(!b)return; if(!cloudOn()){b.style.display='none';return;} b.style.display='';
-  b.textContent=s==='saving'?'☁ saving…':s==='loading'?'☁ loading…':s==='err'?'☁ offline':'☁ synced';
+  b.textContent='☁'; b.title='Cloud sync — '+(s==='saving'?'saving…':s==='loading'?'loading…':s==='err'?'offline':'synced');
   b.style.color=s==='err'?'var(--rose)':'var(--faint)'; }
 /* pull remote changes made on other devices / the Notion embed (last-write-wins by timestamp) */
 function applyRemote(cloud){
@@ -3517,9 +3569,9 @@ function wireWeekGrid(scope){ const wk=weekStartMon(calAnchor);
 /* ---- full-width takeover: column & analytical views span the whole app ---- */
 function isWideView(){ return true; }   // task surfaces always take the full app width (list / kanban / timeline alike)
 function applyTaskWidth(){ const wrap=document.querySelector('.wrap'); if(!wrap)return;
-  const tasksActive=$('tab-tasks')&&$('tab-tasks').classList.contains('show');
-  const calActive=$('tab-calendar')&&$('tab-calendar').classList.contains('show');   // Calendar is its own page — full-width, timer hidden
-  wrap.classList.toggle('tasks-wide', !!((tasksActive && isWideView()) || calActive)); }
+  // Only the Subjects tab keeps the timer beside it; every other tab (Tasks, Calendar, Stats, Log, Music) is full-width
+  const subjActive=$('tab-subjects')&&$('tab-subjects').classList.contains('show');
+  wrap.classList.toggle('tasks-wide', !subjActive); }
 
 /* ---------- collapsible timer sidebar (#3) ---------- */
 function applyTimerCollapsed(){ const wrap=document.querySelector('.wrap'); if(!wrap)return;
@@ -3866,16 +3918,23 @@ $('distractSave').onclick=()=>{ const v=$('distractNote').value.trim();
 $('distractNote').onkeydown=e=>{ if(e.key==='Enter')$('distractSave').click(); };
 
 /* ---------- tabs ---------- */
-document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x===b));
+/* expand/contract the Tasks smart-list panel (clicking the Tasks rail icon while already on Tasks) */
+function toggleTasksNav(){ $('tab-tasks').classList.toggle('nav-collapsed'); }
+function switchTab(name){
+  document.querySelectorAll('.railtab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));
   document.querySelectorAll('.tabview').forEach(v=>v.classList.remove('show'));
-  $('tab-'+b.dataset.tab).classList.add('show');
-  if(b.dataset.tab==='stats')refreshStats();
-  if(b.dataset.tab==='calendar'){ const cb=$('calBody'); cb.innerHTML=calendarHTML(); wireCalendar(cb); }
-  if(b.dataset.tab==='log')renderCalendar();
+  $('tab-'+name).classList.add('show');
+  if(name==='stats')refreshStats();
+  if(name==='calendar'){ const cb=$('calBody'); cb.innerHTML=calendarHTML(); wireCalendar(cb); }
+  if(name==='log')renderCalendar();
   // re-opening Tasks in single-column mode should land back on today / the current period, not wherever a stray scroll left us
-  if(b.dataset.tab==='tasks'){ if(colsVisible()===1)colsScrollGoCur=true; renderTasks(); }
+  if(name==='tasks'){ if(colsVisible()===1)colsScrollGoCur=true; renderTasks(); }
   applyTaskWidth();
+}
+document.querySelectorAll('.railtab').forEach(b=>b.onclick=()=>{
+  const name=b.dataset.tab, already=$('tab-'+name).classList.contains('show');
+  if(name==='tasks' && already){ toggleTasksNav(); return; }   // second click on Tasks collapses/expands the list panel
+  switchTab(name);
 });
 
 /* ---------- settings ---------- */
@@ -3887,6 +3946,7 @@ $('settingsBtn').onclick=()=>{$('setFocus').value=settings.focus;$('setSessions'
   $('setCloudUrl').value=CLOUD.url||''; $('setCloudKey').value=CLOUD.key||''; refreshCloudState();
   $('setNotionProxy').value=settings.notionProxy||''; $('setNotionKey').value=settings.notionKey||'';
   $('ovSettings').classList.add('show');};
+$('railSettings').onclick=()=>$('settingsBtn').click();   // settings reachable from the rail on every tab (timer can be hidden)
 /* connect / update sync: adopt cloud data if it already exists, otherwise seed it from this device */
 $('cloudConnect').onclick=()=>{ applyCloudCfg($('setCloudUrl').value,$('setCloudKey').value);
   if(!cloudOn()){ refreshCloudState(); askConfirm('That URL/key doesn\'t look complete. Sync stays off.',()=>{}); return; }
@@ -3974,8 +4034,10 @@ function syncPrefMenu(){
   $('prefSound').classList.toggle('on',settings.taskSound!==false);
 }
 function openPref(){ const m=$('prefMenu'),b=$('prefBtn'); syncPrefMenu();
-  m.style.visibility='hidden'; m.classList.add('open'); const r=b.getBoundingClientRect(), w=m.offsetWidth||236;
-  m.style.left=Math.max(8,Math.min(r.right-w, innerWidth-8-w))+'px'; m.style.top=(r.bottom+8)+'px'; m.style.visibility=''; }
+  m.style.visibility='hidden'; m.classList.add('open'); const r=b.getBoundingClientRect(), w=m.offsetWidth||236, h=m.offsetHeight||280;
+  m.style.left=Math.max(8,Math.min(r.right+8, innerWidth-8-w))+'px';   // flyout to the right of the rail
+  m.style.top=Math.max(8,Math.min(r.bottom+8, innerHeight-8-h))+'px';  // flip up when the button sits near the bottom
+  m.style.visibility=''; }
 function closePref(){ $('prefMenu').classList.remove('open'); }
 $('prefBtn').onclick=e=>{ e.stopPropagation(); $('prefMenu').classList.contains('open')?closePref():openPref(); };
 document.addEventListener('mousedown',e=>{ const m=$('prefMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#prefBtn')||m.contains(e.target))return; closePref(); });
