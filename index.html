@@ -289,9 +289,17 @@
   .gs-seg select:focus{border-color:var(--accent)}
   .gk-dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none;vertical-align:middle;margin-right:2px}
   .kanban{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px}
-  .kcol{flex:1 1 240px;min-width:230px;background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:14px;padding:12px;display:flex;flex-direction:column;min-height:300px}
+  .kcol{flex:0 0 270px;min-width:270px;background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:14px;padding:12px;display:flex;flex-direction:column;min-height:300px}
   .kcol h4{font-size:13px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;color:var(--ink)}
   .kcol h4 .n{color:var(--faint);font-weight:400}
+  /* "show with calendar" split — tasks left, month calendar right */
+  .vm-cal{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-family:inherit;font-size:12.5px;color:var(--muted);background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:999px;padding:6px 13px;cursor:pointer}
+  .vm-cal:hover{color:var(--ink);border-color:var(--accent)}
+  .vm-cal.on{color:var(--accent-ink);background:var(--accent);border-color:transparent;font-weight:600}
+  .tk-split{display:flex;gap:18px;align-items:flex-start}
+  .tk-split-list{flex:1 1 0;min-width:0}
+  .tk-split-cal{flex:0 0 clamp(360px,44%,640px);min-width:0;position:sticky;top:8px}
+  @media(max-width:880px){ .tk-split{flex-direction:column} .tk-split-cal{flex:none;width:100%;position:static} }
   /* smart-list (All/Today/Next 7/Inbox) — list mode grouped sections */
   .sl-list{display:flex;flex-direction:column;gap:14px}
   .sl-sec{display:flex;flex-direction:column;gap:8px}
@@ -327,7 +335,7 @@
   /* on phones, never crush columns below a readable width — let them swipe horizontally instead */
   @media(max-width:600px){
     .cols.fit .ccol{min-width:248px}
-    .kcol{flex:0 0 230px;min-width:230px}
+    .kcol{flex:0 0 250px;min-width:250px}
     /* reclaim the deep nesting gutter so subtask cards aren't squeezed thin on phones */
     .tk-subs{padding-left:14px}
     .ccol .tk-subs{padding-left:8px}
@@ -810,7 +818,7 @@
   .tv-filter.active{color:var(--accent-ink);background:var(--accent);border-color:transparent;font-weight:600}
   .tv-filter-badge{display:none;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:rgba(0,0,0,.22);color:inherit;font-size:10.5px;line-height:16px;text-align:center;font-weight:700}
   .tv-filter.active .tv-filter-badge{display:inline-block}
-  .filter-menu{min-width:248px}
+  .filter-menu{min-width:248px;width:min(340px,calc(100vw - 16px))}
   .filter-chips{display:flex;flex-wrap:wrap;gap:7px}
   .filter-chip{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12px;color:var(--muted);background:var(--field-bg);border:1px solid var(--stroke-soft);border-radius:999px;padding:6px 11px;cursor:pointer;transition:.15s}
   .filter-chip:hover{border-color:var(--accent);color:var(--ink)}
@@ -1002,6 +1010,7 @@
     <div class="tabs">
       <button data-tab="subjects" class="active">Subjects</button>
       <button data-tab="tasks">Tasks</button>
+      <button data-tab="calendar">Calendar</button>
       <button data-tab="stats">Stats</button>
       <button data-tab="log">Log</button>
       <button data-tab="music">Music</button>
@@ -1023,8 +1032,6 @@
         <button data-v="today">Today</button>
         <button data-v="next7">Next 7 days</button>
         <button data-v="inbox">⮈ Inbox</button>
-        <button data-v="day">Days</button>
-        <button data-v="calendar">Calendar</button>
         <button data-v="boards">▤ Boards</button>
         <button data-v="horizon">≣ Horizon</button>
         <button data-v="matrix">▥ Matrix</button>
@@ -1034,6 +1041,11 @@
         <button id="taskFilterBtn" class="tv-filter" title="Filter tasks by subject &amp; priority"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg> Filter<span class="tv-filter-badge" id="taskFilterBadge"></span></button>
       </div>
       <div id="taskBody"></div>
+    </div>
+
+    <!-- CALENDAR -->
+    <div class="tabview" id="tab-calendar">
+      <div id="calBody"></div>
     </div>
 
     <!-- STATS -->
@@ -1552,6 +1564,7 @@ function normalizeData(){
 }
 /* next order value → appends a new task to the bottom of every list */
 function nextOrder(){ return (tasks.reduce((m,t)=>Math.max(m,t.order||0),0))+100; }
+function topOrder(){ return (tasks.reduce((m,t)=>Math.min(m,t.order||0),0))-100; }   // sink to the TOP of manual order (new tasks land first)
 /* matrix axes (priority → important, due proximity → urgent) */
 function isImportant(t){ return (t.priority||0)>=2; }
 function isUrgent(t){ if(!t.due)return false; const today=todayKey();
@@ -2215,7 +2228,7 @@ function addDays(key,n){ const [y,m,d]=key.split('-').map(Number); const dt=new 
 function daysBetween(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
 function prettyDate(key){ const [y,m,d]=key.split('-').map(Number); return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]; }
 const PRI_COL=['transparent','#5fc24a','#f5a623','#ff5a5a'];
-function newTask(name,due){ taskSound(); return {id:uid('t'),name,due:due||'',dueEnd:'',priority:0,subjectId:'',checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:nextOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
+function newTask(name,due){ taskSound(); return {id:uid('t'),name,due:due||'',dueEnd:'',priority:0,subjectId:'',checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
 
 /* ---- TeuxDeux-style smart entry: parse priority, date & repeat from free text ---- */
 const SMART_WD={sunday:0,sun:0,monday:1,mon:1,tuesday:2,tues:2,tue:2,wednesday:3,weds:3,wed:3,thursday:4,thurs:4,thur:4,thu:4,friday:5,fri:5,saturday:6,sat:6};
@@ -2615,7 +2628,6 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
     <div class="tk-main">
       <button class="tk-check pri${pri} ${done?'on':''}" data-act="check" title="Mark done"${pri?` style="--prc:${PRI_COL[pri]}"`:''}>${CHK}</button>
       <span class="tk-name" title="Open task">${esc(t.name)}</span>
-      <button class="tk-ic" data-act="play" title="${(active&&currentTask===t.id)?'Pause':'Start'} timer">${(active&&currentTask===t.id)?'⏸':'▶'}</button>
       <button class="tk-ic tk-menu" data-act="menu" title="More options">⋯</button>
     </div>
     ${tags?`<div class="tk-tags">${tags}</div>`:''}
@@ -2708,6 +2720,8 @@ function _startGesture(e, card, t, main, nested, re){
     const tHolder=(zone===origZone||!zone)?holder:(zone.querySelector('.ccol-body')||zone);
     if(zone && zone!==origZone && zone._taskDrop){ zone._taskDrop(t); }      // cross-list move: apply its schedule/list
     const listTasks=_topCards(tHolder).filter(c=>c.dataset.id!==t.id).map(c=>tasks.find(x=>x.id===c.dataset.id)).filter(Boolean);
+    // priority sort: dropping above a task adopts that task's priority band (so the manual move actually sticks)
+    if((settings.sortBy||'manual')==='priority' && listTasks.length){ const nb=listTasks[Math.min(idx,listTasks.length-1)]; if(nb)t.priority=nb.priority||0; }
     _placeOrder(listTasks, t, Math.min(idx, listTasks.length));
     save(); re();
   }
@@ -2744,7 +2758,6 @@ function wireTasks(scope, re){ re=re||(()=>renderTasks());
   el.querySelectorAll('[data-act]').forEach(node=>{ if(node.closest('.tk')!==el)return; // skip nested-child controls
     const act=node.dataset.act;
     if(act==='check') node.onclick=(e)=>{e.stopPropagation();toggleTask(t);save();re();};
-    else if(act==='play') node.onclick=(e)=>{e.stopPropagation();startTaskTimer(t);};
     else if(act==='menu') node.onclick=(e)=>{e.stopPropagation();openCtxMenu(el.querySelector('.tk-menu')||node,buildTaskMenu(t,re));};
     else if(act==='subtoggle') node.onclick=(e)=>{e.stopPropagation(); if(expandedGoals.has(t.id)){expandedGoals.delete(t.id);collapseSound();} else {expandedGoals.add(t.id);expandSound();} re();};
   });
@@ -2816,6 +2829,15 @@ function kanbanGroups(gb){ const today=todayKey();
     {key:'later',label:'Later',color:'var(--violet)',match:t=>t.due&&t.due>horizon,drop:t=>{t.due=addDays(today,N+1);t.dueEnd='';t.horizon='day';t.hkey='';}},
     {key:'nodate',label:'No date',color:'var(--faint)',match:t=>!t.due,drop:t=>boardDropTask(t,3)}
   ]; }
+/* coarse date buckets (TickTick-style) — used by the All & Inbox smart lists so they aren't a wall of per-day columns */
+function smartDateGroups(){ const today=todayKey(); const wk=addDays(today,7);
+  return [
+    {key:'overdue',label:'Overdue',color:'var(--rose)',match:t=>t.due&&t.due<today&&!(t.dueEnd&&t.dueEnd>=today),drop:t=>boardDropTask(t,0)},
+    {key:'today',label:'Today',color:'var(--accent)',match:t=>t.due&&((t.due===today)||(t.due<today&&t.dueEnd&&t.dueEnd>=today)),drop:t=>boardDropTask(t,1)},
+    {key:'next7',label:'Next 7 days',color:'var(--teal)',match:t=>t.due&&t.due>today&&t.due<=wk,drop:t=>boardDropTask(t,2)},
+    {key:'later',label:'Later',color:'var(--violet)',match:t=>t.due&&t.due>wk,drop:t=>{t.due=addDays(today,8);t.dueEnd='';t.horizon='day';t.hkey='';}},
+    {key:'nodate',label:'No date',color:'var(--faint)',match:t=>!t.due,drop:t=>boardDropTask(t,3)}
+  ]; }
 const GROUP_OPTS=[['none','None'],['date','Date'],['priority','Priority'],['subject','Subject'],['board','Board'],['list','List']];
 const SORT_OPTS=[['manual','Manual'],['priority','Priority'],['date','Date'],['title','Title']];
 function groupSortBar(showGroup){ const gb=settings.groupBy||'list', sb=settings.sortBy||'manual';
@@ -2860,15 +2882,19 @@ function renderSmartList(view){ const body=$('taskBody'); const mode=smartViewMo
   if(!settings.groupBy) settings.groupBy='date';                     // date-first feel for smart lists
   const gb=settings.groupBy||'date';
   const pool=topLevel(applyFilter(smartPool(view),taskFilter));
-  const toolbar=`<div class="view-ctl sl-ctl">${viewModeToggle()}${mode==='timeline'?'':groupSortBar()}</div>`;
-  const cols=kanbanGroups(gb);
-  if(mode==='timeline'){ body.innerHTML=toolbar+timelineHTML(smartPool(view)); wireTimeline(body); wireViewMode(body); return; }
+  const showCal = mode!=='timeline' && !!settings.showCal;   // TickTick-style "show with calendar" split
+  const calBtn = mode==='timeline' ? '' : `<button class="lay-toggle vm-cal ${settings.showCal?'on':''}" data-calsplit title="Show alongside a calendar — drag tasks onto a day to schedule">📅 Calendar</button>`;
+  const toolbar=`<div class="view-ctl sl-ctl">${viewModeToggle()}${mode==='timeline'?'':groupSortBar()}${calBtn}</div>`;
+  // All & Inbox use the roomy coarse buckets (Overdue/Today/Next 7/Later/No date); Today & Next7 keep per-day
+  const cols=(gb==='date'&&(view==='all'||view==='inbox'))?smartDateGroups():kanbanGroups(gb);
+  if(mode==='timeline'){ body.innerHTML=toolbar+timelineHTML(smartPool(view)); wireTimeline(body); wireViewMode(body); body.querySelectorAll('[data-calsplit]').forEach(b=>b.onclick=()=>{settings.showCal=!settings.showCal;save();renderTasks();}); return; }
+  let main;
   if(mode==='kanban'){
     const colsHTML=cols.map(c=>{ const items=sortTasks(pool.filter(c.match)); if(!items.length)return'';   // hide empty buckets (no stray "Later"/etc.)
       const activeN=items.filter(t=>!isTaskDone(t)).length;
       return `<div class="kcol" data-gk="${esc(c.key)}"><h4><span class="gk-dot" style="background:${c.color}"></span> ${esc(c.label)} <span class="n">${activeN}</span></h4>
         <div class="ccol-body">${renderTaskList(items,'sk|'+view+'|'+c.key)}</div></div>`; }).join('');
-    body.innerHTML=toolbar+`<div class="kanban">${colsHTML||'<div class="empty-t">Nothing here yet.</div>'}</div>`;
+    main=`<div class="kanban">${colsHTML||'<div class="empty-t">Nothing here yet.</div>'}</div>`;
   } else {
     let listHTML;
     if(gb==='none'){ const items=sortTasks(pool); listHTML=items.length?renderTaskList(items,'sk|'+view):'<div class="empty-t">Nothing here yet.</div>'; }
@@ -2876,16 +2902,23 @@ function renderSmartList(view){ const body=$('taskBody'); const mode=smartViewMo
         return `<div class="sl-sec" data-gk="${esc(c.key)}"><div class="sl-head"><span class="gk-dot" style="background:${c.color}"></span> ${esc(c.label)} <span class="n">${activeN}</span></div>
           <div class="sl-body">${renderTaskList(items,'sk|'+view+'|'+c.key)}</div></div>`; }).join('');
       listHTML=secs||'<div class="empty-t">Nothing here yet.</div>'; }
-    body.innerHTML=toolbar+smartQuickAdd(view)+`<div class="sl-list">${listHTML}</div>`;
+    main=smartQuickAdd(view)+`<div class="sl-list">${listHTML}</div>`;
   }
+  if(showCal) body.innerHTML=toolbar+`<div class="tk-split"><div class="tk-split-list">${main}</div><div class="tk-split-cal">${calMonthHTML(monthKey(todayKey()))}</div></div>`;
+  else body.innerHTML=toolbar+main;
   wireTasks(body); wireTaskGestures(body); wireGroupSort(body); wireViewMode(body); wireSmartAdd(body,view);
+  body.querySelectorAll('[data-calsplit]').forEach(b=>b.onclick=()=>{settings.showCal=!settings.showCal;save();renderTasks();});
+  if(showCal){ wireMonth(body); wireCalDropZones(body); }
   // drop targets (columns in kanban, sections in list) reassign per the group-by
   body.querySelectorAll('[data-gk]').forEach(node=>{ const desc=cols.find(c=>c.key===node.dataset.gk); if(!desc)return;
     node._taskDrop=(t)=>{ desc.drop(t); clampRepeat(t); };
     node.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();node.classList.add('drop');} });
     node.addEventListener('dragleave',()=>node.classList.remove('drop'));
     node.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); node.classList.remove('drop');
-      const t=tasks.find(x=>x.id===taskDragId); if(t){ desc.drop(t); clampRepeat(t); save(); renderTasks(); } }); });
+      const t=tasks.find(x=>x.id===taskDragId); if(t){ desc.drop(t); clampRepeat(t); save(); renderTasks(); } });
+    // in-column quick-add (kanban): create a task that lands in this bucket, at the top
+    if(mode==='kanban'){ node._addTask=(v)=>{ if(!v)return; const t=smartTask(v); desc.drop(t); clampRepeat(t); tasks.push(t); save(); renderTasks(); };
+      node.dataset.addkey='ka|'+view+'|'+desc.key; installHoverAdd(node.querySelector('.ccol-body'), node._addTask, node.dataset.addkey); } });
 }
 function wireViewMode(scope){ scope.querySelectorAll('[data-vm]').forEach(b=>b.onclick=()=>{ settings.smartMode=b.dataset.vm; save(); renderTasks(); }); }
 function wireSmartAdd(scope,view){ const inp=scope.querySelector('.sl-add'), btn=scope.querySelector('.sl-addbtn'); if(!inp)return; const today=todayKey();
@@ -3373,6 +3406,12 @@ function wireMonth(scope){
     card.addEventListener('dragleave',()=>card.classList.remove('drop'));
     card.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); card.classList.remove('drop');
       const t=tasks.find(x=>x.id===taskDragId); if(t){ assignHorizon(t,h,key); clampRepeat(t); save(); renderTasks(); } }); }); }
+/* let the pointer-gesture task drag (from a list/kanban pane) drop onto calendar cells in the "show with calendar" split */
+function wireCalDropZones(scope){
+  scope.querySelectorAll('.cv2-cell').forEach(cell=>{ const k=cell.dataset.day; cell._taskDrop=(t)=>{ t.horizon='day';t.hkey='';t.due=k;t.dueEnd='';clampRepeat(t); }; });
+  scope.querySelectorAll('.cv2-wcell').forEach(cell=>{ const wk=cell.dataset.week; cell._taskDrop=(t)=>{ assignHorizon(t,'week',wk);clampRepeat(t); }; });
+  scope.querySelectorAll('.cv2-hzcard').forEach(card=>{ const h=card.dataset.hz,key=card.dataset.key; card._taskDrop=(t)=>{ assignHorizon(t,h,key);clampRepeat(t); }; });
+}
 
 /* ---- Quarter / Year sub-views — mini-month overviews ---- */
 function miniMonthHTML(mk,opts){ opts=opts||{}; const today=todayKey(); const [y,mo]=mk.split('-').map(Number);
@@ -3476,16 +3515,11 @@ function wireWeekGrid(scope){ const wk=weekStartMon(calAnchor);
   if(wrap){ if(wkScroll==null){ const h=new Date().getHours(); wkScroll=Math.max(0,(h-1))*TLH_H; } wrap.scrollTop=wkScroll; wrap.addEventListener('scroll',()=>{wkScroll=wrap.scrollTop;}); } }
 
 /* ---- full-width takeover: column & analytical views span the whole app ---- */
-function isWideView(){
-  if(taskView==='calendar') return true;
-  if(['dashboard','matrix'].includes(taskView)) return true;
-  if(SMART_VIEWS.includes(taskView)) return smartViewMode()!=='list';   // kanban/timeline = full width; list stays in-panel
-  if(taskView==='boards'){ const b=boardById(currentBoardId); return !b || b.layout!=='list'; }
-  if(['day','week','month','quarter','year','horizon'].includes(taskView)) return taskLayout()==='columns';
-  return false; }
+function isWideView(){ return true; }   // task surfaces always take the full app width (list / kanban / timeline alike)
 function applyTaskWidth(){ const wrap=document.querySelector('.wrap'); if(!wrap)return;
   const tasksActive=$('tab-tasks')&&$('tab-tasks').classList.contains('show');
-  wrap.classList.toggle('tasks-wide', !!(tasksActive && isWideView())); }
+  const calActive=$('tab-calendar')&&$('tab-calendar').classList.contains('show');   // Calendar is its own page — full-width, timer hidden
+  wrap.classList.toggle('tasks-wide', !!((tasksActive && isWideView()) || calActive)); }
 
 /* ---------- collapsible timer sidebar (#3) ---------- */
 function applyTimerCollapsed(){ const wrap=document.querySelector('.wrap'); if(!wrap)return;
@@ -3502,7 +3536,6 @@ $('timerRestore').onclick=()=>{ settings.timerCollapsed=false; save(); applyTime
 
 function renderTasks(){ const body=$('taskBody'); if(!body)return; const today=todayKey(); applyTaskWidth();
   taskView=migrateView(taskView);
-  if(taskView==='calendar'){ body.innerHTML=calendarHTML(); wireCalendar(body); return; }
   if(SMART_VIEWS.includes(taskView)){ renderSmartList(taskView); return; }   // All · Today · Next 7 days · Inbox
   if(taskView==='boards'){ body.innerHTML=boardsHTML(); wireBoards(body); return; }
   if(taskView==='matrix'){ body.innerHTML=matrixHTML(); wireMatrix(body); return; }
@@ -3514,7 +3547,7 @@ function renderTasks(){ const body=$('taskBody'); if(!body)return; const today=t
   renderSmartList('all');   // fallback
 }
 /* obsolete view ids → new homes (Agenda board, standalone Kanban/Timeline pages are now All + a view mode) */
-function migrateView(v){ return ({board:'all',kanban:'all',timeline:'all'})[v]||v; }
+function migrateView(v){ return ({board:'all',kanban:'all',timeline:'all',calendar:'all',day:'all'})[v]||v; }
 /* ---- Inbox: multiple named lists, each with its own quick-add ---- */
 function inboxHTML(){ const all=topLevel(applyFilter(tasksInHorizon(''),taskFilter).sort(taskSort));
   const def=inboxLists[0].id; const multi=inboxLists.length>1;
@@ -3838,6 +3871,7 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tabview').forEach(v=>v.classList.remove('show'));
   $('tab-'+b.dataset.tab).classList.add('show');
   if(b.dataset.tab==='stats')refreshStats();
+  if(b.dataset.tab==='calendar'){ const cb=$('calBody'); cb.innerHTML=calendarHTML(); wireCalendar(cb); }
   if(b.dataset.tab==='log')renderCalendar();
   // re-opening Tasks in single-column mode should land back on today / the current period, not wherever a stray scroll left us
   if(b.dataset.tab==='tasks'){ if(colsVisible()===1)colsScrollGoCur=true; renderTasks(); }
