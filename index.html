@@ -301,6 +301,11 @@
   /* fit mode: show exactly --cn columns across the visible width, rest swipe in (TeuxDeux-style) */
   .cols.fit{scroll-snap-type:x proximity}
   .cols.fit .ccol{flex:0 0 calc((100% - (var(--cn) - 1)*14px)/var(--cn));max-width:none;scroll-snap-align:start}
+  /* on phones, never crush columns below a readable width — let them swipe horizontally instead */
+  @media(max-width:600px){
+    .cols.fit .ccol{min-width:248px}
+    .kcol{flex:0 0 230px;min-width:230px}
+  }
   .cz-vis{display:inline-flex;gap:3px;background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:999px;padding:4px}
   .cz-vis button{font-family:inherit;font-size:12px;color:var(--muted);background:transparent;border:none;padding:6px 11px;border-radius:999px;cursor:pointer;min-width:30px}
   .cz-vis button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
@@ -474,8 +479,8 @@
   .wk-dh .wd{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.3px}
   .wk-dh .dn{font-size:16px;font-weight:600;color:var(--ink);line-height:1.1}
   .wk-dh.today .dn{background:var(--accent);color:var(--accent-ink);width:26px;height:26px;border-radius:50%;display:grid;place-items:center}
-  .wk-adrow{border-top:1px solid var(--stroke-soft);border-bottom:1px solid var(--stroke);min-height:30px;max-height:240px;overflow-y:auto}
-  .wk-adcell{border-left:1px solid var(--stroke-soft);padding:3px;display:flex;flex-direction:column;gap:3px;min-width:0}
+  .wk-adrow{border-top:1px solid var(--stroke-soft);border-bottom:1px solid var(--stroke);min-height:30px}
+  .wk-adcell{border-left:1px solid var(--stroke-soft);padding:3px;display:flex;flex-direction:column;gap:3px;min-width:0;max-height:92px;overflow-y:auto}
   .wk-adcell.drop{background:var(--glass-2)}
   .wk-adchip{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--ink);background:var(--track-bg);border-left:3px solid var(--bc,var(--violet));border-radius:5px;padding:2px 5px;cursor:grab;white-space:nowrap;overflow:hidden;min-width:0}
   .wk-adchip.done{opacity:.55}.wk-adchip.done .cn{text-decoration:line-through}
@@ -803,6 +808,7 @@
 
   /* ===== TimeStripe-style context menu (tasks + subjects) — flyout submenus ===== */
   .ctx-menu{position:fixed;z-index:90;display:none;flex-direction:column;min-width:212px;max-width:calc(100vw - 16px);
+    max-height:min(70vh,calc(100vh - 16px));overflow-y:auto;
     background:var(--pop-bg);border:1px solid var(--stroke);border-radius:14px;padding:6px;box-shadow:var(--shadow);font-family:inherit}
   .ctx-menu.show{display:flex}
   .ctx-colors{display:flex;gap:8px;justify-content:space-between;padding:6px 7px 9px;margin-bottom:4px;border-bottom:1px solid var(--stroke-soft)}
@@ -2070,7 +2076,8 @@ const colsVisible=()=>{ const n=settings.colsVisible; return (n===1||n===3||n===
 function keepColsScroll(scope){ const c=scope.querySelector('.cols'); if(!c)return;
   if(colsScrollGoCur){ const cur=c.querySelector('.ccol.cur'); if(cur)colsScrollX=Math.max(0,cur.offsetLeft-12); colsScrollGoCur=false; }
   c.scrollLeft=colsScrollX;
-  c.addEventListener('scroll',()=>{ colsScrollX=c.scrollLeft; },{passive:true}); }
+  // only capture real user scrolls — a re-render while the panel is hidden/zero-width would otherwise reset us to day 0
+  c.addEventListener('scroll',()=>{ if(c.clientWidth>0)colsScrollX=c.scrollLeft; },{passive:true}); }
 let taskFilter='all', subjTaskFilter='all';
 /* TickTick-style task filter: narrow visible tasks by subject(s) and/or priority. Empty set = no constraint. */
 let filterSubjects=new Set(), filterPriorities=new Set();
@@ -2871,7 +2878,7 @@ function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
   if(elsewhere) items.push({ic:'⮈',label:'Move to No date',run:()=>{assignHorizon(t,'','');t.boardId='';t.listId='';t.inboxListId='';clampRepeat(t);save();refreshTaskSurfaces();}});
   items.push(
       {sep:true},
-      /* 'Make it a subgoal of…' temporarily disabled */
+      {ic:'↳',label:'Make it a subgoal of…',sub:()=>({items:parentItems})},
       {ic:'⧉',label:'Duplicate',run:()=>{duplicateTask(t);re();}},
       {ic:'⏱',label:'Start stopwatch',run:()=>startTaskStopwatch(t)},
       {ic:'▶',label:'Start pomodoro',sub:()=>({items:[
@@ -3421,7 +3428,7 @@ function wireDashboard(scope){
   scope.querySelectorAll('[data-act="gtoggle"]').forEach(b=>b.onclick=()=>{ const g=b.closest('.goal'); const id=g.dataset.id;
     if(collapsedGoals.has(id))collapsedGoals.delete(id);else collapsedGoals.add(id); g.classList.toggle('collapsed'); });
 }
-function setTaskView(v){ if(v!==taskView){ colsScrollX=0; colsScrollGoCur=false; } taskView=v;
+function setTaskView(v){ if(v!==taskView){ colsScrollX=0; colsScrollGoCur=true; } taskView=v;  // entering a column view lands on the current period
   document.querySelectorAll('#taskViews [data-v]').forEach(x=>x.classList.toggle('on',x.dataset.v===v));
   renderTasks(); }
 document.querySelectorAll('#taskViews [data-v]').forEach(b=>b.onclick=()=>setTaskView(b.dataset.v));
@@ -3488,7 +3495,8 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   $('tab-'+b.dataset.tab).classList.add('show');
   if(b.dataset.tab==='stats')refreshStats();
   if(b.dataset.tab==='log')renderCalendar();
-  if(b.dataset.tab==='tasks')renderTasks();
+  // re-opening Tasks in single-column mode should land back on today / the current period, not wherever a stray scroll left us
+  if(b.dataset.tab==='tasks'){ if(colsVisible()===1)colsScrollGoCur=true; renderTasks(); }
   applyTaskWidth();
 });
 
