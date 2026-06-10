@@ -320,6 +320,11 @@
   @media(max-width:600px){
     .cols.fit .ccol{min-width:248px}
     .kcol{flex:0 0 230px;min-width:230px}
+    /* reclaim the deep nesting gutter so subtask cards aren't squeezed thin on phones */
+    .tk-subs{padding-left:14px}
+    .ccol .tk-subs{padding-left:8px}
+    .tk-children{padding-left:6px}
+    .tk-children .tk-tags{padding-left:32px}
   }
   .cz-vis{display:inline-flex;gap:3px;background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:999px;padding:4px}
   .cz-vis button{font-family:inherit;font-size:12px;color:var(--muted);background:transparent;border:none;padding:6px 11px;border-radius:999px;cursor:pointer;min-width:30px}
@@ -450,7 +455,7 @@
   .tlh-head button{background:var(--glass-2);border:1px solid var(--stroke);color:var(--ink);border-radius:9px;font-family:inherit;font-size:12px;padding:6px 10px;cursor:pointer;line-height:1}
   .tlh-head button:hover{border-color:var(--accent)}
   .tlh-head button.now{font-weight:600}
-  .tlh-allday{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border:1px solid var(--stroke-soft);border-radius:12px;background:var(--track-bg);margin-bottom:8px}
+  .tlh-allday{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border:1px solid var(--stroke-soft);border-radius:12px;background:var(--track-bg);margin-bottom:8px;max-height:140px;overflow-y:auto}
   .tlh-allday .lbl{font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;color:var(--faint);margin-right:2px}
   .tlh-ad-chip{display:inline-flex;align-items:center;gap:6px;background:var(--bc,var(--violet));color:#fff;border-radius:999px;padding:3px 10px 3px 6px;font-size:11.5px;max-width:200px;cursor:grab;user-select:none}
   .tlh-ad-chip.done{opacity:.5;text-decoration:line-through}
@@ -501,9 +506,9 @@
   .wk-dh .dn{font-size:16px;font-weight:600;color:var(--ink);line-height:1.1}
   .wk-dh.today .dn{background:var(--accent);color:var(--accent-ink);width:26px;height:26px;border-radius:50%;display:grid;place-items:center}
   .wk-adrow{border-top:1px solid var(--stroke-soft);border-bottom:1px solid var(--stroke);min-height:30px}
-  .wk-adcell{border-left:1px solid var(--stroke-soft);padding:3px;display:flex;flex-direction:column;gap:3px;min-width:0;max-height:92px;overflow-y:auto}
+  .wk-adcell{border-left:1px solid var(--stroke-soft);padding:3px;display:flex;flex-direction:column;gap:4px;min-width:0;max-height:120px;overflow-y:auto}
   .wk-adcell.drop{background:var(--glass-2)}
-  .wk-adchip{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--ink);background:var(--track-bg);border-left:3px solid var(--bc,var(--violet));border-radius:5px;padding:2px 5px;cursor:grab;white-space:nowrap;overflow:hidden;min-width:0}
+  .wk-adchip{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink);background:var(--track-bg);border-left:3px solid var(--bc,var(--violet));border-radius:5px;padding:4px 6px;cursor:grab;white-space:nowrap;overflow:hidden;min-width:0}
   .wk-adchip.done{opacity:.55}.wk-adchip.done .cn{text-decoration:line-through}
   .wk-adchip .cb{width:13px;height:13px;border-radius:4px;border:1.5px solid var(--faint);background:none;flex:none;display:grid;place-items:center;cursor:pointer;padding:0}
   .wk-adchip .cb.on{background:var(--ok);border-color:var(--ok)}
@@ -828,7 +833,7 @@
   html[data-theme="light"] .donut::after{box-shadow:inset 0 0 0 1px rgba(60,30,80,.06)}
 
   /* ===== TimeStripe-style context menu (tasks + subjects) — flyout submenus ===== */
-  .ctx-menu{position:fixed;z-index:90;display:none;flex-direction:column;min-width:212px;max-width:calc(100vw - 16px);
+  .ctx-menu{position:fixed;z-index:90;display:none;flex-direction:column;min-width:212px;max-width:min(320px,calc(100vw - 16px));
     max-height:min(70vh,calc(100vh - 16px));overflow-y:auto;
     background:var(--pop-bg);border:1px solid var(--stroke);border-radius:14px;padding:6px;box-shadow:var(--shadow);font-family:inherit}
   .ctx-menu.show{display:flex}
@@ -3397,7 +3402,8 @@ function isWideView(){
   if(taskView==='calendar') return true;
   if(['inbox','board','kanban','timeline','dashboard','matrix'].includes(taskView)) return true;
   if(taskView==='boards'){ const b=boardById(currentBoardId); return !b || b.layout!=='list'; }
-  if(['day','week','month','quarter','year','horizon'].includes(taskView)) return taskLayout()==='columns';
+  if(taskView==='horizon') return true;   // horizon is columns-only → always full-width
+  if(['day','week','month','quarter','year'].includes(taskView)) return taskLayout()==='columns';
   return false; }
 function applyTaskWidth(){ const wrap=document.querySelector('.wrap'); if(!wrap)return;
   const tasksActive=$('tab-tasks')&&$('tab-tasks').classList.contains('show');
@@ -3465,7 +3471,7 @@ function wireInbox(scope){
       askConfirm('Delete this list? Its tasks move to the first list.',()=>{ tasks.forEach(t=>{ if(t.inboxListId===lid)t.inboxListId=''; }); inboxLists=inboxLists.filter(x=>x.id!==lid); save(); renderTasks(); }); } }); }
 
 /* ---- shared view controls (layout toggle + carousel pager) ---- */
-function layoutToggle(){ const c=taskLayout();
+function layoutToggle(){ if(taskView==='horizon') return ''; const c=taskLayout();
   return `<div class="lay-toggle"><button data-lay="columns" class="${c==='columns'?'on':''}">▦ Columns</button><button data-lay="list" class="${c==='list'?'on':''}">☰ List</button></div>`; }
 function wireLayoutToggle(scope){ scope.querySelectorAll('[data-lay]').forEach(b=>b.onclick=()=>{ settings.taskLayout=b.dataset.lay; save(); renderTasks(); }); }
 
@@ -3558,9 +3564,9 @@ function renderHorizon(body){
   const nav=HZ_PANES.map(([v,l])=>`<button data-hzp="${v}" class="${horizonPane===v?'on':''}">${esc(l)}</button>`).join('');
   body.innerHTML=`<div class="view-filter hz-subnav">${nav}</div><div id="hzPane" class="hz-pane"></div>`;
   const host=body.querySelector('#hzPane');
-  if(horizonPane==='snapshot'){ if(taskLayout()==='columns'){ host.innerHTML=horizonColsHTML(); wireHorizonCols(host); } else { host.innerHTML=horizonHTML(); wireHorizon(host); } }
-  else if(horizonPane==='day'){ if(taskLayout()==='columns') renderCarousel('day',host); else renderDayList(host); }
-  else { if(taskLayout()==='columns') renderCarousel(horizonPane,host); else renderPeriodView(host,horizonPane); }
+  // Horizon is a columns-only feature — no list view (layout toggle suppressed below)
+  if(horizonPane==='snapshot'){ host.innerHTML=horizonColsHTML(); wireHorizonCols(host); }
+  else renderCarousel(horizonPane==='day'?'day':horizonPane,host);
   body.querySelectorAll('[data-hzp]').forEach(b=>b.onclick=()=>{ horizonPane=b.dataset.hzp; settings.horizonPane=horizonPane; save(); renderTasks(); });
 }
 /* ---- Horizon view: nested broad→narrow sections, drag a card between them to reassign ---- */
@@ -3604,7 +3610,7 @@ function horizonColsHTML(){ const today=todayKey();
   const cols=secs.map(([h,key,lbl])=>{ const items=topLevel(applyFilter(tasksInHorizon(h,key),taskFilter).sort(taskSort));
     return `<div class="ccol" data-hz="${h}" data-key="${key}" data-addkey="hzc|${h}|${key}"><div class="ccol-h"><span class="t" style="color:${HZ_DOT[h]}">${lbl}</span><span class="s">${esc(horizonLabel(h,key))}</span></div>
       <div class="ccol-body">${renderTaskList(items,'hzc|'+h+'|'+key)}</div></div>`; }).join('');
-  return `<div class="view-ctl">${layoutToggle()}</div><div class="cols">${cols}</div>`;
+  const ctl=layoutToggle(); return `${ctl?`<div class="view-ctl">${ctl}</div>`:''}<div class="cols">${cols}</div>`;
 }
 function wireHorizonCols(scope){ wireTasks(scope); wireTaskGestures(scope); wireLayoutToggle(scope);
   scope.querySelectorAll('.ccol').forEach(col=>{ const h=col.dataset.hz, key=col.dataset.key;
