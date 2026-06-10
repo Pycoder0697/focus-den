@@ -2796,13 +2796,20 @@ function kanbanGroups(gb){ const today=todayKey();
   if(gb==='list'){ const cols=[]; boards.forEach(b=>b.lists.forEach(l=>cols.push({key:'l'+b.id+'|'+l.id,label:b.name+' · '+l.name,color:'var(--amber)',
         match:t=>t.boardId===b.id&&t.listId===l.id,drop:t=>{ t.boardId=b.id; t.listId=l.id; notionMaybeCreate(t); }})));
       cols.push({key:'lnone',label:'No list',color:'var(--faint)',match:t=>!t.boardId&&!t.listId,drop:t=>{t.boardId='';t.listId='';}}); return cols; }
-  // date — mutually exclusive AND exhaustive buckets (every task lands in exactly one; undated → No date)
-  const wk=addDays(today,7);
+  // date — TickTick-style: Overdue · per-day (Today/Tomorrow/weekday) · Later · No date.
+  // Mutually exclusive AND exhaustive (every task lands in exactly one); empty buckets are
+  // hidden by the renderers, so only days that actually have tasks show as columns/sections.
+  const N=14, DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], horizon=addDays(today,N);
+  const days=[];
+  for(let i=0;i<=N;i++){ const d=addDays(today,i);
+    const lbl = i===0?'Today' : i===1?'Tomorrow' : `${DOW[new Date(d+'T00:00:00').getDay()]} ${prettyDate(d)}`;
+    const match = i===0 ? (t=>t.due&&((t.due===today)||(t.due<today&&t.dueEnd&&t.dueEnd>=today))) : (t=>t.due===d);
+    days.push({key:'d'+d,label:lbl,color:i===0?'var(--accent)':'var(--teal)',match,drop:t=>{t.due=d;t.dueEnd='';t.horizon='day';t.hkey='';}});
+  }
   return [
     {key:'overdue',label:'Overdue',color:'var(--rose)',match:t=>t.due&&t.due<today&&!(t.dueEnd&&t.dueEnd>=today),drop:t=>boardDropTask(t,0)},
-    {key:'today',label:'Today',color:'var(--accent)',match:t=>t.due&&((t.due===today)||(t.due<=today&&t.dueEnd&&t.dueEnd>=today)),drop:t=>boardDropTask(t,1)},
-    {key:'next7',label:'Next 7 days',color:'var(--teal)',match:t=>t.due&&t.due>today&&t.due<=wk,drop:t=>boardDropTask(t,2)},
-    {key:'later',label:'Later',color:'var(--violet)',match:t=>t.due&&t.due>wk,drop:t=>{t.due=addDays(today,8);t.dueEnd='';t.horizon='day';t.hkey='';}},
+    ...days,
+    {key:'later',label:'Later',color:'var(--violet)',match:t=>t.due&&t.due>horizon,drop:t=>{t.due=addDays(today,N+1);t.dueEnd='';t.horizon='day';t.hkey='';}},
     {key:'nodate',label:'No date',color:'var(--faint)',match:t=>!t.due,drop:t=>boardDropTask(t,3)}
   ]; }
 const GROUP_OPTS=[['none','None'],['date','Date'],['priority','Priority'],['subject','Subject'],['board','Board'],['list','List']];
