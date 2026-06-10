@@ -166,7 +166,7 @@
     .rail-ibtn{width:34px;height:34px}
   }
   /* ---- Tasks: collapsible vertical list panel (TickTick second column) ---- */
-  .tasks-split{display:flex;gap:20px;align-items:flex-start}
+  .tasks-split{display:flex;gap:16px;align-items:flex-start}
   .tasks-main{flex:1;min-width:0}
   #tab-tasks.nav-collapsed .task-views{display:none}
 
@@ -231,8 +231,8 @@
   .mh-bar{width:100%;max-width:30px;display:flex;flex-direction:column-reverse;border-radius:6px 6px 2px 2px;overflow:hidden;min-height:3px;background:rgba(255,255,255,.05)}
   .mh-l{font-size:10px;color:var(--faint)}
   /* ---- tasks / planner ---- */
-  .task-views{display:flex;flex-direction:column;gap:3px;flex:none;width:172px;padding:0;margin:0}
-  .task-views button{width:100%;text-align:left;font-family:inherit;font-size:13px;color:var(--muted);background:transparent;border:1px solid transparent;padding:9px 13px;border-radius:9px;cursor:pointer;white-space:nowrap;transition:.15s}
+  .task-views{display:flex;flex-direction:column;gap:1px;flex:none;width:166px;padding:0;margin:0}
+  .task-views button{width:100%;text-align:left;font-family:inherit;font-size:13px;color:var(--muted);background:transparent;border:1px solid transparent;padding:7px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s}
   .task-views button:hover{background:var(--glass-2);color:var(--ink)}
   .task-views button.on{background:var(--amber);color:#3a1810;border-color:transparent;font-weight:600}
   @media(max-width:720px){.tasks-split{flex-direction:column}.task-views{flex-direction:row;width:100%;overflow-x:auto}.task-views button{width:auto}}
@@ -325,8 +325,10 @@
   .gs-seg select{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--glass-2);border:1px solid var(--stroke-soft);border-radius:999px;padding:4px 8px;outline:none;cursor:pointer}
   .gs-seg select:focus{border-color:var(--accent)}
   .gk-dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none;vertical-align:middle;margin-right:2px}
-  .kanban{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px}
-  .kcol{flex:0 0 270px;min-width:270px;background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:14px;padding:12px;display:flex;flex-direction:column;min-height:300px}
+  .kanban{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;--kw:270px}
+  .kanban.k-medium{--kw:320px}
+  .kanban.k-big{--kw:380px}
+  .kcol{flex:0 0 var(--kw);min-width:var(--kw);background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:14px;padding:12px;display:flex;flex-direction:column;min-height:300px}
   .kcol h4{font-size:13px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;color:var(--ink)}
   .kcol h4 .n{color:var(--faint);font-weight:400}
   /* "show with calendar" split — tasks left, month calendar right */
@@ -335,7 +337,7 @@
   .vm-cal.on{color:var(--accent-ink);background:var(--accent);border-color:transparent;font-weight:600}
   .tk-split{display:flex;gap:18px;align-items:flex-start}
   .tk-split-list{flex:1 1 0;min-width:0}
-  .tk-split-cal{flex:0 0 clamp(360px,44%,640px);min-width:0;position:sticky;top:8px}
+  .tk-split-cal{flex:0 0 clamp(440px,54%,820px);min-width:0;position:sticky;top:8px}
   @media(max-width:880px){ .tk-split{flex-direction:column} .tk-split-cal{flex:none;width:100%;position:static} }
   /* smart-list (All/Today/Next 7/Inbox) — list mode grouped sections */
   .sl-list{display:flex;flex-direction:column;gap:14px}
@@ -849,12 +851,23 @@
   .pref-seg button{flex:1;white-space:nowrap}
   .pref-row{display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:13px;color:var(--ink)}
   /* task filter (TickTick-style) */
-  .task-toolbar{display:flex;justify-content:flex-end;margin:-2px 0 12px}
-  .tv-filter{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12.5px;color:var(--muted);background:var(--track-bg);border:1px solid var(--stroke-soft);padding:7px 13px;border-radius:999px;cursor:pointer}
-  .tv-filter:hover{color:var(--ink);border-color:var(--accent)}
-  .tv-filter.active{color:var(--accent-ink);background:var(--accent);border-color:transparent;font-weight:600}
-  .tv-filter-badge{display:none;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:rgba(0,0,0,.22);color:inherit;font-size:10.5px;line-height:16px;text-align:center;font-weight:700}
-  .tv-filter.active .tv-filter-badge{display:inline-block}
+  /* TickTick-style task header: view name + Filter·Sort·Group + ⋯ view options */
+  .tv-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-2px 0 12px}
+  .tv-title{font-size:21px;font-weight:700;color:var(--ink);letter-spacing:-.01em;line-height:1.1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tv-actions{display:flex;align-items:center;gap:4px;flex:none}
+  .tv-iconbtn{position:relative;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:9px;cursor:pointer;transition:.15s}
+  .tv-iconbtn:hover{color:var(--ink);background:var(--glass-2)}
+  .tv-iconbtn.open{color:var(--accent);background:var(--glass-2)}
+  .tv-dot{position:absolute;top:5px;right:5px;min-width:8px;height:8px;border-radius:999px;background:var(--accent);display:none}
+  .tv-iconbtn.active .tv-dot{display:block}
+  .pref-divider{height:1px;background:var(--stroke-soft);margin:2px 0}
+  .gs-pick{font-family:inherit;font-size:13px;color:var(--ink);background:var(--field-bg);border:1px solid var(--stroke-soft);border-radius:9px;padding:7px 10px;outline:none;cursor:pointer;width:100%}
+  .gs-pick:focus{border-color:var(--accent)}
+  .vm-pick{display:flex;gap:6px}
+  .vm-pick button{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;font-family:inherit;font-size:11.5px;color:var(--muted);background:var(--field-bg);border:1px solid var(--stroke-soft);border-radius:11px;padding:10px 4px;cursor:pointer;transition:.15s}
+  .vm-pick button svg{width:20px;height:20px}
+  .vm-pick button:hover{border-color:var(--accent);color:var(--ink)}
+  .vm-pick button.on{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
   .filter-menu{min-width:248px;width:min(340px,calc(100vw - 16px))}
   .filter-chips{display:flex;flex-wrap:wrap;gap:7px}
   .filter-chip{display:inline-flex;align-items:center;gap:6px;font-family:inherit;font-size:12px;color:var(--muted);background:var(--field-bg);border:1px solid var(--stroke-soft);border-radius:999px;padding:6px 11px;cursor:pointer;transition:.15s}
@@ -1086,8 +1099,12 @@
           <button data-v="dashboard">◎ Dashboard</button>
         </div>
         <div class="tasks-main">
-          <div class="task-toolbar">
-            <button id="taskFilterBtn" class="tv-filter" title="Filter tasks by subject &amp; priority"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg> Filter<span class="tv-filter-badge" id="taskFilterBadge"></span></button>
+          <div class="tv-head">
+            <div class="tv-title" id="tvTitle">All</div>
+            <div class="tv-actions">
+              <button id="tvSortBtn" class="tv-iconbtn" title="Filter · Sort · Group"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 20l-3-3M7 20l3-3"/><path d="M12 6h9M12 12h6M12 18h3"/></svg><span class="tv-dot" id="tvFilterDot"></span></button>
+              <button id="tvViewBtn" class="tv-iconbtn" title="View &amp; layout"><svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+            </div>
           </div>
           <div id="taskBody"></div>
         </div>
@@ -1143,9 +1160,19 @@
   </div><!-- /.wrap -->
 </div><!-- /.shell -->
 
-<!-- TASK FILTER POPOVER (subject + priority) -->
+<!-- TASK FILTER · SORT · GROUP POPOVER (TickTick-style, one symbol) -->
 <div id="taskFilterMenu" class="pref-menu filter-menu">
+  <div class="pref-group gs-group" id="filterGroupRow">
+    <div class="pref-h">Group by</div>
+    <select id="tvGroupSel" class="gs-pick"></select>
+  </div>
+  <div class="pref-group gs-group" id="filterSortRow">
+    <div class="pref-h">Sort by</div>
+    <select id="tvSortSel" class="gs-pick"></select>
+  </div>
+  <div class="pref-divider" id="filterDivider"></div>
   <div class="pref-group">
+    <div class="pref-h">Filter — match</div>
     <div class="view-filter pref-seg" id="filterMatch">
       <button data-match="all">Match all</button>
       <button data-match="any">Match any</button>
@@ -1168,6 +1195,29 @@
     <div class="filter-chips" id="filterDate"></div>
   </div>
   <div class="filter-foot"><button class="filter-clear" id="filterClear">Clear all</button></div>
+</div>
+
+<!-- VIEW & LAYOUT POPOVER (the ⋯ next to the sort symbol) -->
+<div id="tvViewMenu" class="pref-menu">
+  <div class="pref-group">
+    <div class="pref-h">View</div>
+    <div class="vm-pick" id="tvViewModePick">
+      <button data-vm="list" title="List"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16"/><path d="M9 6h11M9 12h11M9 18h11"/></svg><span>List</span></button>
+      <button data-vm="kanban" title="Kanban"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="16" rx="1.6"/><rect x="14" y="4" width="6" height="11" rx="1.6"/></svg><span>Kanban</span></button>
+      <button data-vm="timeline" title="Timeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4v16"/><path d="M4 6h11M4 12h7M4 18h13"/></svg><span>Timeline</span></button>
+    </div>
+  </div>
+  <div class="pref-group" id="tvSizeGroup">
+    <div class="pref-h">Card size</div>
+    <div class="view-filter pref-seg" id="tvSizePick">
+      <button data-ks="small">Small</button>
+      <button data-ks="medium">Medium</button>
+      <button data-ks="big">Large</button>
+    </div>
+  </div>
+  <div class="pref-group" id="tvCalGroup">
+    <div class="pref-row"><span>Show calendar on the side</span><div class="toggle" id="tvCalToggle"></div></div>
+  </div>
 </div>
 
 <!-- floating restore pill — shown only when the timer sidebar is hidden -->
@@ -1220,7 +1270,7 @@
   <p style="font-size:11px;color:var(--faint);margin:-2px 0 6px;line-height:1.5">Pull rows from specific Notion databases into specific board lists — they live only in that list, never in your inbox/planner. Needs a one-time Cloudflare Worker (holds your Notion token securely); the Worker URL goes above. See <b>notion-proxy-worker.js</b> in the repo for the 5-min setup.</p>
   <button class="save" id="saveSettings">Save</button>
   <button class="danger" id="resetAll">Reset all data</button>
-  <p style="text-align:center;font-size:10px;color:var(--faint);margin:10px 0 0;opacity:.7">Focus Den v2.7.0</p>
+  <p style="text-align:center;font-size:10px;color:var(--faint);margin:10px 0 0;opacity:.7">Focus Den v2.8.0</p>
 </div></div>
 
 <!-- PAUSE MODAL -->
@@ -1493,7 +1543,7 @@ const todayKey=()=>dateKey(Date.now());
 
 /* ---------- state ---------- */
 const PALETTE=['#f5a623','#ff7a33','#2f9bff','#e0218a','#ff6b4a','#4f8cff','#c026d3','#5fc24a','#3fb36b','#a78bfa','#5fd3c4'];
-const FD_VERSION='2.7.0';
+const FD_VERSION='2.8.0';
 const DEF={focus:50,short:10,long:30,sessions:4,rounds:4,goal:240,autostart:false,examDate:'',urgentDays:3,theme:'dark'};
 let settings=Object.assign({...DEF}, JSON.parse(store.get('fd_settings')||'{}'));
 let subjects=JSON.parse(store.get('fd_subjects')||'null');
@@ -2919,6 +2969,19 @@ function wireGenericKanban(body){ wireTasks(body); wireTaskGestures(body); wireG
    columns by the chosen group-by. "All" + Kanban + Group=Date reproduces the old Agenda board. */
 const SMART_VIEWS=['all','today','next7','inbox'];
 function smartViewMode(){ return ['kanban','timeline'].includes(settings.smartMode)?settings.smartMode:'list'; }
+/* ---- persistent Tasks header (.tv-head): view name + Filter·Sort·Group + ⋯ view options ---- */
+const VIEW_TITLES={all:'All',today:'Today',next7:'Next 7 Days',inbox:'Inbox',boards:'Boards',horizon:'Horizon',matrix:'Matrix',dashboard:'Dashboard',day:'Day',week:'Week',month:'Month',quarter:'Quarter',year:'Year',life:'Life'};
+function viewTitle(v){ return VIEW_TITLES[v]||'Tasks'; }
+function kanbanSizeClass(){ const s=settings.kanbanSize||'small'; return s==='big'?'k-big':s==='medium'?'k-medium':''; }
+function updateTvHead(view){
+  const t=$('tvTitle'); if(t)t.textContent=viewTitle(view);
+  const smart=SMART_VIEWS.includes(view);
+  const vb=$('tvViewBtn'); if(vb)vb.style.display=smart?'':'none';   // list/kanban/timeline + calendar + size live here, smart-lists only
+  const showGroup=smart, showSort=smart||view==='matrix'||view==='dashboard';
+  const gr=$('filterGroupRow'); if(gr)gr.style.display=showGroup?'':'none';
+  const sr=$('filterSortRow'); if(sr)sr.style.display=showSort?'':'none';
+  const dv=$('filterDivider'); if(dv)dv.style.display=(showGroup||showSort)?'':'none';
+}
 function smartPool(view){ const today=todayKey();
   if(view==='today') return tasks.filter(t=> (t.due===today) || (t.due && t.dueEnd && t.due<=today && t.dueEnd>=today) );  // today only (overdue lives in All)
   if(view==='next7')  return tasks.filter(t=> t.due && t.due>=today && t.due<=addDays(today,7) );
@@ -2935,18 +2998,17 @@ function renderSmartList(view){ const body=$('taskBody'); const mode=smartViewMo
   const gb=settings.groupBy||'date';
   const pool=topLevel(applyFilter(smartPool(view),taskFilter));
   const showCal = mode!=='timeline' && !!settings.showCal;   // TickTick-style "show with calendar" split
-  const calBtn = mode==='timeline' ? '' : `<button class="lay-toggle vm-cal ${settings.showCal?'on':''}" data-calsplit title="Show alongside a calendar — drag tasks onto a day to schedule">📅 Calendar</button>`;
-  const toolbar=`<div class="view-ctl sl-ctl">${viewModeToggle()}${mode==='timeline'?'':groupSortBar()}${calBtn}</div>`;
+  const toolbar='';   // Filter·Sort·Group + view mode now live in the persistent header (.tv-head)
   // All & Inbox use the roomy coarse buckets (Overdue/Today/Next 7/Later/No date); Today & Next7 keep per-day
   const cols=(gb==='date'&&(view==='all'||view==='inbox'))?smartDateGroups():kanbanGroups(gb);
-  if(mode==='timeline'){ body.innerHTML=toolbar+timelineHTML(smartPool(view)); wireTimeline(body); wireViewMode(body); body.querySelectorAll('[data-calsplit]').forEach(b=>b.onclick=()=>{settings.showCal=!settings.showCal;save();renderTasks();}); return; }
+  if(mode==='timeline'){ body.innerHTML=toolbar+timelineHTML(smartPool(view)); wireTimeline(body); return; }
   let main;
   if(mode==='kanban'){
     const colsHTML=cols.map(c=>{ const items=sortTasks(pool.filter(c.match)); if(!items.length)return'';   // hide empty buckets (no stray "Later"/etc.)
       const activeN=items.filter(t=>!isTaskDone(t)).length;
       return `<div class="kcol" data-gk="${esc(c.key)}"><h4><span class="gk-dot" style="background:${c.color}"></span> ${esc(c.label)} <span class="n">${activeN}</span></h4>
         <div class="ccol-body">${renderTaskList(items,'sk|'+view+'|'+c.key)}</div></div>`; }).join('');
-    main=`<div class="kanban">${colsHTML||'<div class="empty-t">Nothing here yet.</div>'}</div>`;
+    main=`<div class="kanban ${kanbanSizeClass()}">${colsHTML||'<div class="empty-t">Nothing here yet.</div>'}</div>`;
   } else {
     let listHTML;
     if(gb==='none'){ const items=sortTasks(pool); listHTML=items.length?renderTaskList(items,'sk|'+view):'<div class="empty-t">Nothing here yet.</div>'; }
@@ -3587,7 +3649,7 @@ $('timerCollapse').onclick=()=>{ settings.timerCollapsed=true; save(); applyTime
 $('timerRestore').onclick=()=>{ settings.timerCollapsed=false; save(); applyTimerCollapsed(); };
 
 function renderTasks(){ const body=$('taskBody'); if(!body)return; const today=todayKey(); applyTaskWidth();
-  taskView=migrateView(taskView);
+  taskView=migrateView(taskView); updateTvHead(taskView);
   if(SMART_VIEWS.includes(taskView)){ renderSmartList(taskView); return; }   // All · Today · Next 7 days · Inbox
   if(taskView==='boards'){ body.innerHTML=boardsHTML(); wireBoards(body); return; }
   if(taskView==='matrix'){ body.innerHTML=matrixHTML(); wireMatrix(body); return; }
@@ -4073,8 +4135,15 @@ function renderFilterMenu(){
   dt.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>tog(filterDates,b.dataset.date));
 }
 function afterFilterChange(){ persistFilters(); renderFilterMenu(); updateFilterBadge(); refreshTaskSurfaces(); }
-function updateFilterBadge(){ const n=filterSubjects.size+filterPriorities.size+filterBoards.size+filterLists.size+filterDates.size; const btn=$('taskFilterBtn'); if(!btn)return;
-  btn.classList.toggle('active',n>0); $('taskFilterBadge').textContent=n||''; }
+function updateFilterBadge(){ const n=filterSubjects.size+filterPriorities.size+filterBoards.size+filterLists.size+filterDates.size; const btn=$('tvSortBtn'); if(!btn)return;
+  btn.classList.toggle('active',n>0); }
+/* Group-by / Sort-by selects live at the top of the same popover (one TickTick-style symbol) */
+function renderGroupSortControls(){
+  const gs=$('tvGroupSel'); if(gs){ gs.innerHTML=GROUP_OPTS.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join(''); gs.value=settings.groupBy||'date';
+    gs.onchange=()=>{ settings.groupBy=gs.value; save(); renderTasks(); }; }
+  const ss=$('tvSortSel'); if(ss){ ss.innerHTML=SORT_OPTS.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join(''); ss.value=settings.sortBy||'manual';
+    ss.onchange=()=>{ settings.sortBy=ss.value; save(); renderTasks(); }; }
+}
 /* filters are device-local (survive a Safari reload) but not synced — they're a view state, not data */
 function persistFilters(){ try{ store.set('fd_filters', JSON.stringify({
   subjects:[...filterSubjects], priorities:[...filterPriorities], boards:[...filterBoards], lists:[...filterLists], dates:[...filterDates], all:filterMatchAll })); }catch(e){} }
@@ -4082,15 +4151,36 @@ function loadFilters(){ try{ const f=JSON.parse(store.get('fd_filters')||'null')
   filterSubjects=new Set(f.subjects||[]); filterPriorities=new Set((f.priorities||[]).map(Number));
   filterBoards=new Set(f.boards||[]); filterLists=new Set(f.lists||[]); filterDates=new Set(f.dates||[]);
   filterMatchAll=f.all!==false; }catch(e){} }
-function openTaskFilter(){ const m=$('taskFilterMenu'),b=$('taskFilterBtn'); renderFilterMenu();
+function openTaskFilter(){ const m=$('taskFilterMenu'),b=$('tvSortBtn'); closeTvView(); renderFilterMenu(); renderGroupSortControls(); b.classList.add('open');
   m.style.visibility='hidden'; m.classList.add('open'); const r=b.getBoundingClientRect(), w=m.offsetWidth||248;
   m.style.left=Math.max(8,Math.min(r.right-w, innerWidth-8-w))+'px'; m.style.top=(r.bottom+8)+'px'; m.style.visibility=''; }
-function closeTaskFilter(){ $('taskFilterMenu').classList.remove('open'); }
-$('taskFilterBtn').onclick=e=>{ e.stopPropagation(); $('taskFilterMenu').classList.contains('open')?closeTaskFilter():openTaskFilter(); };
+function closeTaskFilter(){ $('taskFilterMenu').classList.remove('open'); const b=$('tvSortBtn'); if(b)b.classList.remove('open'); }
+$('tvSortBtn').onclick=e=>{ e.stopPropagation(); $('taskFilterMenu').classList.contains('open')?closeTaskFilter():openTaskFilter(); };
 $('filterMatch').querySelectorAll('[data-match]').forEach(b=>b.onclick=()=>{ filterMatchAll=(b.dataset.match==='all'); afterFilterChange(); });
 $('filterClear').onclick=()=>{ filterSubjects.clear(); filterPriorities.clear(); filterBoards.clear(); filterLists.clear(); filterDates.clear(); afterFilterChange(); };
-document.addEventListener('mousedown',e=>{ const m=$('taskFilterMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#taskFilterBtn')||m.contains(e.target))return; closeTaskFilter(); });
+document.addEventListener('mousedown',e=>{ const m=$('taskFilterMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#tvSortBtn')||m.contains(e.target))return; closeTaskFilter(); });
 window.addEventListener('resize',closeTaskFilter);
+
+/* ---------- view & layout popover (the ⋯ button): view mode · card size · show-calendar ---------- */
+function syncTvViewMenu(){
+  const mode=smartViewMode();
+  $('tvViewModePick').querySelectorAll('[data-vm]').forEach(b=>b.classList.toggle('on',b.dataset.vm===mode));
+  $('tvSizeGroup').style.display=(mode==='kanban')?'':'none';   // card size only matters for the kanban
+  const ks=settings.kanbanSize||'small';
+  $('tvSizePick').querySelectorAll('[data-ks]').forEach(b=>b.classList.toggle('on',b.dataset.ks===ks));
+  $('tvCalGroup').style.display=(mode==='timeline')?'none':'';   // calendar split doesn't apply to timeline
+  $('tvCalToggle').classList.toggle('on',!!settings.showCal);
+}
+function openTvView(){ const m=$('tvViewMenu'),b=$('tvViewBtn'); closeTaskFilter(); syncTvViewMenu(); b.classList.add('open');
+  m.style.visibility='hidden'; m.classList.add('open'); const r=b.getBoundingClientRect(), w=m.offsetWidth||236;
+  m.style.left=Math.max(8,Math.min(r.right-w, innerWidth-8-w))+'px'; m.style.top=(r.bottom+8)+'px'; m.style.visibility=''; }
+function closeTvView(){ const m=$('tvViewMenu'); if(m)m.classList.remove('open'); const b=$('tvViewBtn'); if(b)b.classList.remove('open'); }
+$('tvViewBtn').onclick=e=>{ e.stopPropagation(); $('tvViewMenu').classList.contains('open')?closeTvView():openTvView(); };
+$('tvViewModePick').querySelectorAll('[data-vm]').forEach(b=>b.onclick=()=>{ settings.smartMode=b.dataset.vm; save(); syncTvViewMenu(); renderTasks(); });
+$('tvSizePick').querySelectorAll('[data-ks]').forEach(b=>b.onclick=()=>{ settings.kanbanSize=b.dataset.ks; save(); syncTvViewMenu(); renderTasks(); });
+$('tvCalToggle').onclick=()=>{ settings.showCal=!settings.showCal; save(); syncTvViewMenu(); renderTasks(); };
+document.addEventListener('mousedown',e=>{ const m=$('tvViewMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#tvViewBtn')||m.contains(e.target))return; closeTvView(); });
+window.addEventListener('resize',closeTvView);
 
 /* ---------- JSON backup: export / import ---------- */
 $('exportJson').onclick=()=>{ const data=JSON.stringify({...snapshot(),_app:'focus-den',_version:FD_VERSION},null,2);
