@@ -282,8 +282,13 @@
   .tk-acts button:hover{background:rgba(255,255,255,.16)}
   .tk-acts .del{color:var(--rose);border-color:var(--stroke-soft)}
   .empty-t{color:var(--faint);font-size:13.5px;text-align:center;padding:24px 0;font-style:italic}
+  .gs-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .gs-seg{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--faint);background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:999px;padding:4px 6px 4px 11px}
+  .gs-seg select{font-family:inherit;font-size:12.5px;color:var(--ink);background:var(--glass-2);border:1px solid var(--stroke-soft);border-radius:999px;padding:4px 8px;outline:none;cursor:pointer}
+  .gs-seg select:focus{border-color:var(--accent)}
+  .gk-dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none;vertical-align:middle;margin-right:2px}
   .kanban{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px}
-  .kcol{flex:1 1 240px;min-width:0;background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:14px;padding:12px;display:flex;flex-direction:column;min-height:300px}
+  .kcol{flex:1 1 240px;min-width:230px;background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:14px;padding:12px;display:flex;flex-direction:column;min-height:300px}
   .kcol h4{font-size:13px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;color:var(--ink)}
   .kcol h4 .n{color:var(--faint);font-weight:400}
 
@@ -794,6 +799,8 @@
   .filter-chip:hover{border-color:var(--accent);color:var(--ink)}
   .filter-chip.on{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
   .filter-chip .pdot{width:9px;height:9px;border-radius:50%;flex:none}
+  .filter-chip.sub{font-size:11px;padding:5px 10px;opacity:.92}
+  .filter-menu{max-height:min(78vh,calc(100vh - 16px));overflow-y:auto}
   .filter-foot{display:flex;justify-content:flex-end;border-top:1px solid var(--stroke-soft);padding-top:12px}
   .filter-clear{font-family:inherit;font-size:12px;color:var(--rose);background:none;border:none;cursor:pointer;padding:2px}
   .filter-clear:hover{text-decoration:underline}
@@ -1000,6 +1007,8 @@
         <button data-v="calendar">Calendar</button>
         <button data-v="horizon">≣ Horizon</button>
         <button data-v="boards">▤ Boards</button>
+        <button data-v="kanban">▦ Kanban</button>
+        <button data-v="timeline">▭ Timeline</button>
         <button data-v="dashboard">◎ Dashboard</button>
         <button data-v="matrix">▥ Matrix</button>
       </div>
@@ -1055,12 +1064,26 @@
 <!-- TASK FILTER POPOVER (subject + priority) -->
 <div id="taskFilterMenu" class="pref-menu filter-menu">
   <div class="pref-group">
+    <div class="view-filter pref-seg" id="filterMatch">
+      <button data-match="all">Match all</button>
+      <button data-match="any">Match any</button>
+    </div>
+  </div>
+  <div class="pref-group">
     <div class="pref-h">Priority</div>
     <div class="filter-chips" id="filterPri"></div>
   </div>
   <div class="pref-group">
     <div class="pref-h">Subjects</div>
     <div class="filter-chips" id="filterSubj"></div>
+  </div>
+  <div class="pref-group" id="filterBoardGroup">
+    <div class="pref-h">Boards &amp; lists</div>
+    <div class="filter-chips" id="filterBL"></div>
+  </div>
+  <div class="pref-group">
+    <div class="pref-h">Date</div>
+    <div class="filter-chips" id="filterDate"></div>
   </div>
   <div class="filter-foot"><button class="filter-clear" id="filterClear">Clear all</button></div>
 </div>
@@ -1411,6 +1434,11 @@ function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_
   store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
   store.set('fd_notionsrc',JSON.stringify(notionSources));
   store.set('fd_running',JSON.stringify(running));cloudSave();}
+/* device-local live-timer snapshot so an active session survives an iOS-Safari tab reload.
+   All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
+function timerSnap(){ return { active, mode, phase, subjectId:(typeof $==='function'&&$('activeSubject')?$('activeSubject').value:''),
+  currentTask, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, savedAt:Date.now() }; }
+function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} }
 
 /* ====================================================================
    UNIFIED TASK MODEL  — a single `tasks` array is the source of truth.
@@ -1585,20 +1613,20 @@ function startTimer(){ active=true; $('startBtn').textContent='Pause'; workedMs=
   else { endStamp=Date.now()+remaining*1000; phaseStart=Date.now(); if(phase==='focus'){ focusStart=Date.now(); running={subjectId:activeSubjectId(),start:focusStart,mode:'pomo'}; } }
   sessionDistract=0; $('distractCount').textContent='0'; $('distractBtn').classList.add('show');
   timerStartSound&&timerStartSound();
-  save(); clearInterval(tick); tick=setInterval(tickFn,250); renderClock(); }
+  save(); clearInterval(tick); tick=setInterval(tickFn,250); renderClock(); saveTimer(); }
 function resumeTimer(){ active=true; $('startBtn').textContent='Pause'; segStart=Date.now();
   if(mode==='pomo'){ endStamp=Date.now()+remaining*1000; if(phase==='focus'&&!phaseStart)phaseStart=Date.now(); }
   timerStartSound&&timerStartSound();
-  $('distractBtn').classList.add('show'); save(); clearInterval(tick); tick=setInterval(tickFn,250); renderClock(); }
+  $('distractBtn').classList.add('show'); save(); clearInterval(tick); tick=setInterval(tickFn,250); renderClock(); saveTimer(); }
 function endSeg(){ if(segStart){ const now=Date.now(); if(now-segStart>=500)segs.push({start:segStart,end:now}); workedMs+=now-segStart; segStart=null; } }
 function freeze(){ clearInterval(tick); active=false; $('startBtn').textContent='Start';
   endSeg();
-  if(mode==='pomo') remaining=endStamp?Math.max(0,(endStamp-Date.now())/1000):remaining; renderClock(); }
+  if(mode==='pomo') remaining=endStamp?Math.max(0,(endStamp-Date.now())/1000):remaining; renderClock(); saveTimer(); }
 function pauseTimer(){ if(!active)return; freeze(); timerPauseSound&&timerPauseSound(); $('distractBtn').classList.remove('show'); $('ovPause').classList.add('show'); }
 function commit(logIt){ endSeg();
   if(logIt && (mode==='stopwatch'||phase==='focus')){ const sid=activeSubjectId();
     segs.forEach(g=>pushSpan(sid,g.start,g.end,currentTask)); } // each work segment logged separately → pauses excluded, start times truthful, midnight split
-  segs=[]; workedMs=0; running=null; save(); renderSubjects(); refreshStats(); }
+  segs=[]; workedMs=0; running=null; save(); saveTimer(); renderSubjects(); refreshStats(); }
 function afterStop(){ $('distractBtn').classList.remove('show'); $('startBtn').textContent='Start'; muteAmbient();
   if(mode==='pomo'){ remaining=phaseMin()*60; phaseStart=null; } renderClock(); reflectTimer&&reflectTimer(); }
 function completePhase(){ clearInterval(tick); active=false; chime(); flash();
@@ -1615,7 +1643,33 @@ function completePhase(){ clearInterval(tick); active=false; chime(); flash();
 function resetTimer(){ clearInterval(tick); active=false; $('startBtn').textContent='Start'; oneShot=false; muteAmbient();
   $('distractBtn').classList.remove('show'); $('ovPause').classList.remove('show');
   workedMs=0; segs=[]; segStart=null; focusStart=null; running=null;
-  if(mode==='pomo'){ remaining=phaseMin()*60; phaseStart=null; } save(); renderClock(); renderSubjects(); refreshStats(); }
+  if(mode==='pomo'){ remaining=phaseMin()*60; phaseStart=null; } save(); saveTimer(); renderClock(); renderSubjects(); refreshStats(); }
+/* configure the timer panel chrome for the current mode/active state (used by restore) */
+function applyTimerPanel(){ const pomo=mode==='pomo';
+  document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m===mode));
+  $('phases').style.display=pomo?'flex':'none'; $('dots').style.display=pomo?'flex':'none';
+  $('timeAdjust').style.display=pomo?'flex':'none'; $('skipBtn').style.display=pomo?'':'none';
+  if(pomo){ setPhaseButtons(); renderDots(); }
+  $('startBtn').textContent=active?'Pause':'Start';
+  updateTimerTaskUI&&updateTimerTaskUI(); renderClock(); }
+/* resume an in-progress session after an iOS-Safari tab reload. Returns true if a live timer was restored. */
+function restoreTimer(){ let snap=null; try{ snap=JSON.parse(store.get('fd_timer')||'null'); }catch(e){}
+  if(!snap || !snap.active) return false;
+  const now=Date.now();
+  if(snap.savedAt && now-snap.savedAt > 12*3600000) return false;                 // too stale to trust
+  if(snap.mode==='pomo' && snap.endStamp && snap.endStamp<=now) return false;       // the phase finished while away → idle
+  mode = snap.mode==='stopwatch'?'stopwatch':'pomo'; phase=snap.phase||'focus'; roundCount=snap.roundCount||0; oneShot=!!snap.oneShot;
+  if(snap.subjectId && subjById(snap.subjectId)) $('activeSubject').value=snap.subjectId;
+  if(snap.currentTask){ const t=tasks.find(x=>x.id===snap.currentTask); if(t){ currentTask=t.id; $('taskChipName').textContent=t.name; $('taskChip').classList.add('show'); } }
+  const open=snap.segStart||0;
+  workedMs=(snap.workedMs||0)+(open?Math.max(0,now-open):0);
+  if(mode==='stopwatch' && workedMs>18*3600000) return false;                       // implausible → bail
+  segs=Array.isArray(snap.segs)?snap.segs.slice():[]; if(open) segs.push({start:open,end:now});
+  segStart=now; active=true;
+  if(mode==='pomo'){ endStamp=snap.endStamp; phaseStart=snap.phaseStart||now; remaining=Math.max(0,(endStamp-now)/1000); running={subjectId:activeSubjectId(),start:phaseStart,mode:'pomo'}; }
+  else { remaining=settings.focus*60; running={subjectId:activeSubjectId(),start:open||now,mode:'stopwatch'}; }
+  applyTimerPanel(); $('distractBtn').classList.add('show');
+  clearInterval(tick); tick=setInterval(tickFn,250); saveTimer(); return true; }
 function setMode(m){ if(active){freeze();commit(true);} else if(workedMs>0){commit(true);} mode=m; active=false; oneShot=false;
   $('distractBtn').classList.remove('show');
   document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m===m));
@@ -2093,7 +2147,7 @@ $('exportBtn').onclick=()=>{
 /* ====================================================================
    TASKS / PLANNER  (Today · Tomorrow · Next 7 · Inbox · Board)
    ==================================================================== */
-let taskView='day'; let currentTask=null;
+let taskView=(()=>{ try{ return store.get('fd_view')||'day'; }catch(e){ return 'day'; } })(); let currentTask=null;
 let horizonPane=(typeof settings!=='undefined'&&settings&&settings.horizonPane)||'snapshot'; // sub-view inside the Horizon tab: snapshot|day|week|month|quarter|year
 const CAROUSEL_VIEWS=['day','week','month','quarter','year'];          // views that support the scrollable column layout
 let colOffset={day:0,week:0,month:0,quarter:0,year:0,horizon:0};       // page offset per carousel view
@@ -2109,13 +2163,28 @@ function keepColsScroll(scope){ const c=scope.querySelector('.cols'); if(!c)retu
   // only capture real user scrolls — a re-render while the panel is hidden/zero-width would otherwise reset us to day 0
   c.addEventListener('scroll',()=>{ if(c.clientWidth>0)colsScrollX=c.scrollLeft; },{passive:true}); }
 let taskFilter='all', subjTaskFilter='all';
-/* TickTick-style task filter: narrow visible tasks by subject(s) and/or priority. Empty set = no constraint. */
-let filterSubjects=new Set(), filterPriorities=new Set();
-function filtersActive(){ return filterSubjects.size>0 || filterPriorities.size>0; }
+/* TickTick-style advanced filter: chip groups (priority / subject / board+list / date) combined by Match All or Any.
+   Within a group the selected chips are OR'd; across groups it's AND (All) or OR (Any). Empty = no constraint. */
+let filterSubjects=new Set(), filterPriorities=new Set(), filterBoards=new Set(), filterLists=new Set(), filterDates=new Set();
+let filterMatchAll=true;
+function filtersActive(){ return filterSubjects.size>0 || filterPriorities.size>0 || filterBoards.size>0 || filterLists.size>0 || filterDates.size>0; }
+function filterDateMatch(t){ const today=todayKey();
+  for(const d of filterDates){
+    if(d==='overdue'){ if(t.due&&t.due<today&&!isTaskDone(t)) return true; }
+    else if(d==='today'){ if(t.due===today||(t.due&&t.dueEnd&&t.due<=today&&t.dueEnd>=today)) return true; }
+    else if(d==='next7'){ if(t.due&&t.due>today&&t.due<=addDays(today,7)) return true; }
+    else if(d==='hasdate'){ if(t.due) return true; }
+    else if(d==='nodate'){ if(!t.due) return true; }
+  } return false; }
 function passesTaskFilters(t){
-  if(filterSubjects.size && !filterSubjects.has(t.subjectId||'')) return false;
-  if(filterPriorities.size && !filterPriorities.has(t.priority||0)) return false;
-  return true;
+  const groups=[];                                  // one bool per active chip group
+  if(filterPriorities.size) groups.push(filterPriorities.has(t.priority||0));
+  if(filterSubjects.size)   groups.push(filterSubjects.has(t.subjectId||''));
+  if(filterBoards.size || filterLists.size)         // board + list are one dimension: board chip OR specific-list chip
+    groups.push((filterBoards.size && filterBoards.has(t.boardId||'')) || (filterLists.size && filterLists.has((t.boardId||'')+'|'+(t.listId||''))));
+  if(filterDates.size)      groups.push(filterDateMatch(t));
+  if(!groups.length) return true;
+  return filterMatchAll!==false ? groups.every(Boolean) : groups.some(Boolean);
 }
 const PERIOD_VIEWS=['week','month','quarter','year'];
 let planKeys={};                                  // currently-viewed period per horizon (defaults to current)
@@ -2694,6 +2763,55 @@ function boardDropTask(t,ci){ if(!t)return; const today=todayKey();
   else { t.due=''; t.dueEnd=''; t.horizon=''; t.hkey=''; } }               // Inbox → unassign
 function boardDrop(ci){ const t=tasks.find(x=>x.id===taskDragId); if(!t)return; boardDropTask(t,ci); save(); renderTasks(); }
 
+/* ===== TickTick-style Sort & Group (used by the Kanban + Timeline views) =====
+   Group → sections/columns; Sort → order within each group; Completed always sinks (renderTaskList). */
+function sortTasks(list){ const sb=settings.sortBy||'manual';
+  return list.slice().sort((a,b)=>{ const ad=isTaskDone(a),bd=isTaskDone(b); if(ad!==bd)return ad?1:-1;   // done last
+    if(sb==='priority'){ const d=(b.priority||0)-(a.priority||0); if(d)return d; }
+    else if(sb==='date'){ const x=a.due||'9999-99-99',y=b.due||'9999-99-99'; if(x!==y)return x<y?-1:1; }
+    else if(sb==='title'){ const d=(a.name||'').localeCompare(b.name||''); if(d)return d; }
+    return (a.order||0)-(b.order||0); }); }
+/* column/section descriptors for a group-by key: {key,label,color,match(t),drop(t)} */
+function kanbanGroups(gb){ const today=todayKey();
+  if(gb==='priority') return [3,2,1,0].map(p=>({key:'p'+p,label:PRI_NAMES[p],color:PRI_COL[p]||'var(--faint)',match:t=>(t.priority||0)===p,drop:t=>{t.priority=p;}}));
+  if(gb==='subject') return subjects.map(s=>({key:'s'+s.id,label:s.name,color:s.color,match:t=>t.subjectId===s.id,drop:t=>{t.subjectId=s.id;}}))
+      .concat([{key:'snone',label:'No subject',color:'var(--faint)',match:t=>!t.subjectId,drop:t=>{t.subjectId='';}}]);
+  if(gb==='board') return boards.map(b=>({key:'b'+b.id,label:b.name,color:'var(--amber)',match:t=>t.boardId===b.id,
+      drop:t=>{ t.boardId=b.id; if(!t.listId||!b.lists.some(l=>l.id===t.listId)) t.listId=(b.lists[0]&&b.lists[0].id)||''; notionMaybeCreate(t); }}))
+      .concat([{key:'bnone',label:'No board',color:'var(--faint)',match:t=>!t.boardId,drop:t=>{t.boardId='';t.listId='';}}]);
+  if(gb==='list'){ const cols=[]; boards.forEach(b=>b.lists.forEach(l=>cols.push({key:'l'+b.id+'|'+l.id,label:b.name+' · '+l.name,color:'var(--amber)',
+        match:t=>t.boardId===b.id&&t.listId===l.id,drop:t=>{ t.boardId=b.id; t.listId=l.id; notionMaybeCreate(t); }})));
+      cols.push({key:'lnone',label:'No list',color:'var(--faint)',match:t=>!t.boardId&&!t.listId,drop:t=>{t.boardId='';t.listId='';}}); return cols; }
+  // date (default for kanban)
+  return [
+    {key:'overdue',label:'Overdue',color:'var(--rose)',match:t=>t.due&&t.due<today&&!isTaskDone(t),drop:t=>boardDropTask(t,0)},
+    {key:'today',label:'Today',color:'var(--accent)',match:t=>t.due===today||(t.due&&t.dueEnd&&t.due<=today&&t.dueEnd>=today),drop:t=>boardDropTask(t,1)},
+    {key:'next7',label:'Next 7 days',color:'var(--teal)',match:t=>t.due&&t.due>today&&t.due<=addDays(today,7),drop:t=>boardDropTask(t,2)},
+    {key:'nodate',label:'No date',color:'var(--faint)',match:t=>!t.due&&!t.horizon&&!t.boardId,drop:t=>boardDropTask(t,3)}
+  ]; }
+const GROUP_OPTS=[['list','List'],['board','Board'],['priority','Priority'],['date','Date'],['subject','Subject']];
+const SORT_OPTS=[['manual','Manual'],['priority','Priority'],['date','Date'],['title','Title']];
+function groupSortBar(showGroup){ const gb=settings.groupBy||'list', sb=settings.sortBy||'manual';
+  const grp = showGroup===false ? '' : `<label class="gs-seg">Group<select data-gs="group">${GROUP_OPTS.map(o=>`<option value="${o[0]}" ${gb===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>`;
+  return `<div class="gs-bar">${grp}<label class="gs-seg">Sort<select data-gs="sort">${SORT_OPTS.map(o=>`<option value="${o[0]}" ${sb===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label></div>`; }
+function wireGroupSort(scope){ scope.querySelectorAll('[data-gs]').forEach(sel=>sel.onchange=()=>{
+  if(sel.dataset.gs==='group') settings.groupBy=sel.value; else settings.sortBy=sel.value; save(); renderTasks(); }); }
+/* generic Kanban view: columns = the chosen group-by, cards sorted by the chosen sort-by */
+function genericKanbanHTML(){ const gb=settings.groupBy||'list'; const cols=kanbanGroups(gb);
+  const pool=topLevel(applyFilter(tasks,taskFilter));
+  const colsHTML=cols.map(c=>{ const items=sortTasks(pool.filter(c.match)); const activeN=items.filter(t=>!isTaskDone(t)).length;
+    return `<div class="kcol" data-gk="${esc(c.key)}"><h4><span class="gk-dot" style="background:${c.color}"></span> ${esc(c.label)} <span class="n">${activeN}</span></h4>
+      <div class="ccol-body">${items.length?renderTaskList(items,'gk|'+c.key):'<div class="empty-t" style="padding:8px 0">—</div>'}</div></div>`; }).join('');
+  return `<div class="view-ctl">${groupSortBar()}</div><div class="kanban">${colsHTML}</div>`; }
+function wireGenericKanban(body){ wireTasks(body); wireTaskGestures(body); wireGroupSort(body);
+  const cols=kanbanGroups(settings.groupBy||'list');
+  body.querySelectorAll('[data-gk]').forEach(col=>{ const desc=cols.find(c=>c.key===col.dataset.gk); if(!desc)return;
+    col._taskDrop=(t)=>{ desc.drop(t); clampRepeat(t); };
+    col.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();col.classList.add('drop');} });
+    col.addEventListener('dragleave',()=>col.classList.remove('drop'));
+    col.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); col.classList.remove('drop');
+      const t=tasks.find(x=>x.id===taskDragId); if(t){ desc.drop(t); clampRepeat(t); save(); renderTasks(); } }); }); }
+
 /* ---- Eisenhower matrix (priority → important, due proximity → urgent) ---- */
 function matrixHTML(){
   const quads=[
@@ -2787,19 +2905,25 @@ function timelineHTML(){
         <div class="g-bar ${d?'done':''}" data-id="${t.id}" style="left:calc(${cs}*var(--colw));width:calc(${w}*var(--colw) - 4px);background:${col}">${esc(t.name)}${allowResize?'<span class="rz" data-act="rz"></span>':''}</div>
       </div></div>`; };
   const section=(title,arr)=>`<div class="g-section">${title} (${arr.length})</div>`+(arr.length?arr.map(bar).join(''):'<div class="g-empty">No tasks at this zoom.</div>');
-  if(tlZoom==='hours') return tlZoomRow()+tlHoursHTML();
+  if(tlZoom==='hours') return tlZoomRow()+groupSortBar()+tlHoursHTML();
   const hidden=tasks.filter(t=>!taskSpan(t)).length;
-  return tlZoomRow()+`
+  // group-by turns the To-do list into one section per group value (sorted by the chosen sort); Done stays at the bottom
+  const gb=settings.groupBy||'none';
+  let rows;
+  if(gb==='none'){ rows=section('To do',todo)+section('Done',done); }
+  else { rows = kanbanGroups(gb).map(g=>{ const arr=sortTasks(todo.filter(g.match)); return arr.length?section(g.label,arr):''; }).join('')
+           + (done.length?section('Done',sortTasks(done)):''); }
+  return tlZoomRow()+groupSortBar()+`
     <div class="gantt-wrap"><div class="gantt" style="--colw:${colw}px;--lblw:${lblw}px">
       <div class="g-head"><div class="lbl">Task</div>${head}</div>
-      ${section('To do',todo)}
-      ${section('Done',done)}
+      ${rows}
     </div></div>
     <div class="g-note">${allowResize?'Drag a bar sideways to reschedule · drag its right edge to span more days · ⋯ to edit.':'Drag a bar to a different column to re-plan it for that '+tlZoom+' · ⋯ to edit.'} ${hidden?`<b>${hidden}</b> life / undated task(s) aren't shown here.`:''}</div>`;
 }
 function tlZoomRow(){ const zoomBtns=['hours','day','week','month','quarter','year'].map(z=>`<button data-z="${z}" class="${tlZoom===z?'on':''}">${z[0].toUpperCase()+z.slice(1)}</button>`).join('');
   return `<div class="view-filter" id="tlZoom" style="display:flex;max-width:100%;overflow-x:auto">${zoomBtns}</div>`; }
 function wireTimeline(scope){
+  wireGroupSort(scope);
   scope.querySelectorAll('#tlZoom button').forEach(b=>b.onclick=()=>{ tlZoom=b.dataset.z; renderTasks(); });
   if(tlZoom==='hours'){ wireTlHours(scope); return; }
   const buckets=TL.buckets, n=buckets.length, coarse=tlZoom!=='day';
@@ -3271,7 +3395,7 @@ function wireWeekGrid(scope){ const wk=weekStartMon(calAnchor);
 /* ---- full-width takeover: column & analytical views span the whole app ---- */
 function isWideView(){
   if(taskView==='calendar') return true;
-  if(['inbox','board','dashboard','matrix'].includes(taskView)) return true;
+  if(['inbox','board','kanban','timeline','dashboard','matrix'].includes(taskView)) return true;
   if(taskView==='boards'){ const b=boardById(currentBoardId); return !b || b.layout!=='list'; }
   if(['day','week','month','quarter','year','horizon'].includes(taskView)) return taskLayout()==='columns';
   return false; }
@@ -3305,6 +3429,8 @@ function renderTasks(){ const body=$('taskBody'); if(!body)return; const today=t
       col.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); col.classList.remove('drop'); boardDrop(ci); }); });
     return; }
   if(taskView==='boards'){ body.innerHTML=boardsHTML(); wireBoards(body); return; }
+  if(taskView==='kanban'){ body.innerHTML=genericKanbanHTML(); wireGenericKanban(body); return; }
+  if(taskView==='timeline'){ body.innerHTML=timelineHTML(); wireTimeline(body); return; }
   if(taskView==='matrix'){ body.innerHTML=matrixHTML(); wireMatrix(body); return; }
   if(taskView==='dashboard'){ body.innerHTML=dashboardHTML(); wireDashboard(body); return; }
   if(taskView==='horizon'){ renderHorizon(body); return; }
@@ -3570,6 +3696,7 @@ function wireDashboard(scope){
     if(collapsedGoals.has(id))collapsedGoals.delete(id);else collapsedGoals.add(id); g.classList.toggle('collapsed'); });
 }
 function setTaskView(v){ if(v!==taskView){ colsScrollX=0; colsScrollGoCur=true; } taskView=v;  // entering a column view lands on the current period
+  try{ store.set('fd_view', v); }catch(e){}                                 // device-local so a Safari reload reopens the same view
   document.querySelectorAll('#taskViews [data-v]').forEach(x=>x.classList.toggle('on',x.dataset.v===v));
   renderTasks(); }
 document.querySelectorAll('#taskViews [data-v]').forEach(b=>b.onclick=()=>setTaskView(b.dataset.v));
@@ -3749,24 +3876,47 @@ $('prefSound').onclick=()=>{ settings.taskSound=(settings.taskSound===false); $(
 
 /* ---------- task filter popover (by subject + priority, TickTick-style) ---------- */
 const PRI_NAMES=['No priority','Low','Medium','High'];
+const FILTER_DATES=[['overdue','Overdue'],['today','Today'],['next7','Next 7 days'],['hasdate','Has date'],['nodate','No date']];
 function renderFilterMenu(){
+  $('filterMatch').querySelectorAll('[data-match]').forEach(b=>b.classList.toggle('on',(b.dataset.match==='all')===(filterMatchAll!==false)));
   const pri=$('filterPri'); pri.innerHTML=[3,2,1,0].map(p=>
     `<button class="filter-chip ${filterPriorities.has(p)?'on':''}" data-pri="${p}"><span class="pdot" style="background:${PRI_COL[p]||'var(--faint)'}"></span>${PRI_NAMES[p]}</button>`).join('');
   const sb=$('filterSubj'); sb.innerHTML=subjects.map(s=>
     `<button class="filter-chip ${filterSubjects.has(s.id)?'on':''}" data-subj="${s.id}"><span class="pdot" style="background:${s.color}"></span>${esc(s.name)}</button>`).join('')
     + `<button class="filter-chip ${filterSubjects.has('')?'on':''}" data-subj=""><span class="pdot" style="background:var(--faint)"></span>No subject</button>`;
-  pri.querySelectorAll('[data-pri]').forEach(b=>b.onclick=()=>{ const p=+b.dataset.pri; filterPriorities.has(p)?filterPriorities.delete(p):filterPriorities.add(p); afterFilterChange(); });
-  sb.querySelectorAll('[data-subj]').forEach(b=>b.onclick=()=>{ const id=b.dataset.subj; filterSubjects.has(id)?filterSubjects.delete(id):filterSubjects.add(id); afterFilterChange(); });
+  // boards (filled chip) + each list under it; plus "No board"
+  const bl=$('filterBL'); let blHTML='';
+  boards.forEach(b=>{ blHTML+=`<button class="filter-chip ${filterBoards.has(b.id)?'on':''}" data-board="${b.id}"><span class="pdot" style="background:var(--amber)"></span>${esc(b.name)}</button>`;
+    b.lists.forEach(l=>{ const k=b.id+'|'+l.id; blHTML+=`<button class="filter-chip sub ${filterLists.has(k)?'on':''}" data-list="${esc(k)}"><span class="pdot" style="background:var(--stroke)"></span>${esc(l.name)}</button>`; }); });
+  blHTML+=`<button class="filter-chip ${filterBoards.has('')?'on':''}" data-board=""><span class="pdot" style="background:var(--faint)"></span>No board</button>`;
+  bl.innerHTML=blHTML;
+  $('filterBoardGroup').style.display=boards.length?'':'none';
+  const dt=$('filterDate'); dt.innerHTML=FILTER_DATES.map(([k,lbl])=>
+    `<button class="filter-chip ${filterDates.has(k)?'on':''}" data-date="${k}">${lbl}</button>`).join('');
+  const tog=(set,key)=>{ set.has(key)?set.delete(key):set.add(key); afterFilterChange(); };
+  pri.querySelectorAll('[data-pri]').forEach(b=>b.onclick=()=>tog(filterPriorities,+b.dataset.pri));
+  sb.querySelectorAll('[data-subj]').forEach(b=>b.onclick=()=>tog(filterSubjects,b.dataset.subj));
+  bl.querySelectorAll('[data-board]').forEach(b=>b.onclick=()=>tog(filterBoards,b.dataset.board));
+  bl.querySelectorAll('[data-list]').forEach(b=>b.onclick=()=>tog(filterLists,b.dataset.list));
+  dt.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>tog(filterDates,b.dataset.date));
 }
-function afterFilterChange(){ renderFilterMenu(); updateFilterBadge(); refreshTaskSurfaces(); }
-function updateFilterBadge(){ const n=filterSubjects.size+filterPriorities.size; const btn=$('taskFilterBtn'); if(!btn)return;
+function afterFilterChange(){ persistFilters(); renderFilterMenu(); updateFilterBadge(); refreshTaskSurfaces(); }
+function updateFilterBadge(){ const n=filterSubjects.size+filterPriorities.size+filterBoards.size+filterLists.size+filterDates.size; const btn=$('taskFilterBtn'); if(!btn)return;
   btn.classList.toggle('active',n>0); $('taskFilterBadge').textContent=n||''; }
+/* filters are device-local (survive a Safari reload) but not synced — they're a view state, not data */
+function persistFilters(){ try{ store.set('fd_filters', JSON.stringify({
+  subjects:[...filterSubjects], priorities:[...filterPriorities], boards:[...filterBoards], lists:[...filterLists], dates:[...filterDates], all:filterMatchAll })); }catch(e){} }
+function loadFilters(){ try{ const f=JSON.parse(store.get('fd_filters')||'null'); if(!f)return;
+  filterSubjects=new Set(f.subjects||[]); filterPriorities=new Set((f.priorities||[]).map(Number));
+  filterBoards=new Set(f.boards||[]); filterLists=new Set(f.lists||[]); filterDates=new Set(f.dates||[]);
+  filterMatchAll=f.all!==false; }catch(e){} }
 function openTaskFilter(){ const m=$('taskFilterMenu'),b=$('taskFilterBtn'); renderFilterMenu();
   m.style.visibility='hidden'; m.classList.add('open'); const r=b.getBoundingClientRect(), w=m.offsetWidth||248;
   m.style.left=Math.max(8,Math.min(r.right-w, innerWidth-8-w))+'px'; m.style.top=(r.bottom+8)+'px'; m.style.visibility=''; }
 function closeTaskFilter(){ $('taskFilterMenu').classList.remove('open'); }
 $('taskFilterBtn').onclick=e=>{ e.stopPropagation(); $('taskFilterMenu').classList.contains('open')?closeTaskFilter():openTaskFilter(); };
-$('filterClear').onclick=()=>{ filterSubjects.clear(); filterPriorities.clear(); afterFilterChange(); };
+$('filterMatch').querySelectorAll('[data-match]').forEach(b=>b.onclick=()=>{ filterMatchAll=(b.dataset.match==='all'); afterFilterChange(); });
+$('filterClear').onclick=()=>{ filterSubjects.clear(); filterPriorities.clear(); filterBoards.clear(); filterLists.clear(); filterDates.clear(); afterFilterChange(); };
 document.addEventListener('mousedown',e=>{ const m=$('taskFilterMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#taskFilterBtn')||m.contains(e.target))return; closeTaskFilter(); });
 window.addEventListener('resize',closeTaskFilter);
 
@@ -3815,6 +3965,7 @@ $('bgReset').onclick=()=>{try{localStorage.removeItem('fd_bg');}catch(e){}delete
 /* ---------- boot: load cloud (if enabled) → resume → render ---------- */
 async function boot(){
   applyTheme();
+  loadFilters(); updateFilterBadge();          // restore advanced-filter chips (device-local) so a Safari reload keeps them
   setSync('loading');
   const cloud=await cloudLoad();
   if(cloud){
@@ -3837,23 +3988,15 @@ async function boot(){
   applyTimerCollapsed();
   setSync('ok');
   refreshDplus(); renderSubjectSelect();
-  // restore an in-progress stopwatch (paused) so a long session survives a reload; stale (>6h) or pomodoro left to reset
-  let restored=false;
-  if(running && running.mode==='stopwatch' && running.subjectId && subjById(running.subjectId)){
-    const elapsed=Date.now()-running.start;
-    if(elapsed>1000 && elapsed<6*3600000){
-      mode='stopwatch'; $('activeSubject').value=running.subjectId; workedMs=elapsed; segs=[{start:running.start,end:Date.now()}]; segStart=null; restored=true;
-    }
-  }
-  if(restored){
-    document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='stopwatch'));
-    $('phases').style.display='none'; $('dots').style.display='none'; $('timeAdjust').style.display='none'; $('skipBtn').style.display='none';
-    $('startBtn').textContent='Start'; renderClock();
-  } else { running=null; setMode('pomo'); }
+  // resume a live focus session that an iOS-Safari tab-reload would otherwise lose (stopwatch + pomodoro, running)
+  if(!restoreTimer()){ running=null; setMode('pomo'); }
+  document.querySelectorAll('#taskViews [data-v]').forEach(x=>x.classList.toggle('on',x.dataset.v===taskView)); // reflect the restored view
   renderSubjects(); refreshStats(); renderCalendar();
   // two-way cloud convergence: pull other-device / Notion-sync edits periodically and on refocus
   setInterval(pollCloud,6000);
-  document.addEventListener('visibilitychange',()=>{ if(!document.hidden)pollCloud(); });
+  // capture the live timer the instant the tab is backgrounded — iOS Safari may reload it before we get another chance
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else pollCloud(); });
+  window.addEventListener('pagehide',saveTimer);
   // Notion DB → board list sync: near-realtime both ways (push is instant; pull polls ~10s while visible, 60s hidden, and immediately on refocus)
   if(notionOn()) notionSyncAll();
   scheduleNotionPoll();
