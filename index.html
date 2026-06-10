@@ -416,14 +416,18 @@
   @media(hover:none){ .tk-menu{display:none} }
 
   /* eisenhower matrix */
-  .ei-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  @media(max-width:520px){.ei-grid{grid-template-columns:1fr}}
-  .ei-q{background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:14px;padding:12px;min-height:90px;border-top:3px solid var(--qc)}
-  .ei-q h5{font-size:12.5px;margin-bottom:3px;color:var(--ink);display:flex;justify-content:space-between;align-items:center}
-  .ei-q .sub{font-size:10.5px;color:var(--faint);margin-bottom:9px}
-  .ei-q .n{font-size:11px;color:var(--faint);font-weight:400}
+  .ei-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:12px}
+  @media(max-width:520px){.ei-grid{grid-template-columns:1fr;grid-template-rows:none}}
+  .ei-q{background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:14px;border-top:3px solid var(--qc);display:flex;flex-direction:column;min-height:170px;max-height:46vh;overflow:hidden}
+  .ei-qh{display:flex;align-items:baseline;gap:8px;padding:11px 13px 10px;border-bottom:1px solid var(--stroke-soft)}
+  .ei-qdot{width:8px;height:8px;border-radius:50%;background:var(--qc);align-self:center;flex:none}
+  .ei-qt{font-size:13px;font-weight:600;color:var(--ink);flex:none}
+  .ei-qsub{font-size:10.5px;color:var(--faint);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ei-qh .n{font-size:11.5px;color:var(--qc);font-weight:700;flex:none}
+  .ei-qbody{flex:1;overflow-y:auto;padding:10px 11px;display:flex;flex-direction:column;gap:6px}
+  .ei-empty{font-size:12px;color:var(--faint);font-style:italic;padding:4px 2px}
   .ei-q.drop{outline:2px dashed var(--accent);outline-offset:-4px}
-  .ei-mini{display:flex;align-items:center;gap:8px;background:var(--card-bg);border:1px solid var(--stroke-soft);border-radius:10px;padding:7px 9px;margin-bottom:6px;cursor:grab;font-size:13px}
+  .ei-mini{display:flex;align-items:center;gap:8px;background:var(--card-bg);border:1px solid var(--stroke-soft);border-radius:10px;padding:7px 9px;cursor:grab;font-size:13px;flex:0 0 auto}
   .ei-mini:active{cursor:grabbing}
   .ei-mini.done span{text-decoration:line-through;color:var(--faint)}
   .ei-mini .mc{width:17px;height:17px;border-radius:5px;flex:none;display:grid;place-items:center}
@@ -2895,18 +2899,19 @@ function matrixHTML(){
   const quads=[
     {q:3,t:'Do first',sub:'Urgent · Important',c:'var(--rose)'},
     {q:2,t:'Schedule',sub:'Important · Not urgent',c:'var(--teal)'},
-    {q:1,t:'Delegate / quick',sub:'Urgent · Not important',c:'var(--amber)'},
-    {q:0,t:'Eliminate',sub:'Neither',c:'var(--faint)'}
+    {q:1,t:'Delegate',sub:'Urgent · Not important',c:'var(--amber)'},
+    {q:0,t:"Don't do",sub:'Neither',c:'var(--faint)'}
   ];
   const pool=topLevel(applyFilter(tasks,taskFilter));
-  const cells=quads.map(qd=>{ const items=pool.filter(t=>quadrant(t)===qd.q).sort(taskSort);
-    const mini=items.map(t=>{const d=isTaskDone(t);return `<div class="ei-mini ${d?'done':''}" draggable="true" data-id="${t.id}"><span class="mc tk-check ${d?'on':''}" data-act="check">${CHK}</span><span class="mn">${esc(t.name)}</span></div>`;}).join('')||'<div class="g-empty">—</div>';
-    return `<div class="ei-q" data-q="${qd.q}" style="--qc:${qd.c}"><h5>${qd.t} <span class="n">${items.length}</span></h5><div class="sub">${qd.sub}</div>${mini}</div>`;
+  const cells=quads.map(qd=>{ const items=sortTasks(pool.filter(t=>quadrant(t)===qd.q));
+    const activeN=items.filter(t=>!isTaskDone(t)).length;
+    const mini=items.map(t=>{const d=isTaskDone(t);return `<div class="ei-mini ${d?'done':''}" draggable="true" data-id="${t.id}"><span class="mc tk-check ${d?'on':''}" data-act="check">${CHK}</span><span class="mn">${esc(t.name)}</span></div>`;}).join('')||'<div class="ei-empty">No tasks</div>';
+    return `<div class="ei-q" data-q="${qd.q}" style="--qc:${qd.c}"><div class="ei-qh"><span class="ei-qdot"></span><span class="ei-qt">${qd.t}</span><span class="ei-qsub">${qd.sub}</span><span class="n">${activeN}</span></div><div class="ei-qbody">${mini}</div></div>`;
   }).join('');
   const win=(settings.urgentDays==null?3:settings.urgentDays);
-  return `<div class="ei-grid">${cells}</div><div class="ei-note"><b>Important</b> = priority Medium/High · <b>Urgent</b> = due today/overdue or within ${win} day(s). Drag a card into another quadrant to set its priority &amp; due date to match (window editable in Settings).</div>`;
+  return `<div class="view-ctl">${groupSortBar(false)}</div><div class="ei-grid">${cells}</div><div class="ei-note"><b>Important</b> = priority Medium/High · <b>Urgent</b> = due today/overdue or within ${win} day(s). Drag a card into another quadrant to set its priority &amp; due date to match.</div>`;
 }
-function wireMatrix(scope){
+function wireMatrix(scope){ wireGroupSort(scope);
   scope.querySelectorAll('.ei-mini [data-act="check"]').forEach(n=>{ n.onclick=e=>{ e.stopPropagation(); const t=tasks.find(x=>x.id===n.closest('.ei-mini').dataset.id); if(t){toggleTask(t);save();renderTasks();} }; });
   let dragId=null;
   scope.querySelectorAll('.ei-mini').forEach(m=>{
