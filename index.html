@@ -292,6 +292,13 @@
   .kcol{flex:1 1 240px;min-width:230px;background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:14px;padding:12px;display:flex;flex-direction:column;min-height:300px}
   .kcol h4{font-size:13px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;color:var(--ink)}
   .kcol h4 .n{color:var(--faint);font-weight:400}
+  /* smart-list (All/Today/Next 7/Inbox) — list mode grouped sections */
+  .sl-list{display:flex;flex-direction:column;gap:14px}
+  .sl-sec{display:flex;flex-direction:column;gap:8px}
+  .sl-sec.drop{outline:2px dashed var(--accent);outline-offset:4px;border-radius:12px}
+  .sl-head{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink);padding:2px 2px 0}
+  .sl-head .n{color:var(--faint);font-weight:400}
+  .sl-qa{margin-bottom:14px}
 
   /* ---- view controls: layout toggle + carousel pager ---- */
   .view-ctl{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
@@ -1008,15 +1015,16 @@
     <!-- TASKS / PLANNER -->
     <div class="tabview" id="tab-tasks">
       <div class="task-views" id="taskViews">
+        <button data-v="all" class="on">All</button>
+        <button data-v="today">Today</button>
+        <button data-v="next7">Next 7 days</button>
         <button data-v="inbox">⮈ Inbox</button>
-        <button data-v="day" class="on">Days</button>
+        <button data-v="day">Days</button>
         <button data-v="calendar">Calendar</button>
-        <button data-v="horizon">≣ Horizon</button>
         <button data-v="boards">▤ Boards</button>
-        <button data-v="kanban">▦ Kanban</button>
-        <button data-v="timeline">▭ Timeline</button>
-        <button data-v="dashboard">◎ Dashboard</button>
+        <button data-v="horizon">≣ Horizon</button>
         <button data-v="matrix">▥ Matrix</button>
+        <button data-v="dashboard">◎ Dashboard</button>
       </div>
       <div class="task-toolbar">
         <button id="taskFilterBtn" class="tv-filter" title="Filter tasks by subject &amp; priority"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg> Filter<span class="tv-filter-badge" id="taskFilterBadge"></span></button>
@@ -2153,7 +2161,7 @@ $('exportBtn').onclick=()=>{
 /* ====================================================================
    TASKS / PLANNER  (Today · Tomorrow · Next 7 · Inbox · Board)
    ==================================================================== */
-let taskView=(()=>{ try{ return store.get('fd_view')||'day'; }catch(e){ return 'day'; } })(); let currentTask=null;
+let taskView=(()=>{ try{ return migrateView(store.get('fd_view')||'all'); }catch(e){ return 'all'; } })(); let currentTask=null;
 let horizonPane=(typeof settings!=='undefined'&&settings&&settings.horizonPane)||'snapshot'; // sub-view inside the Horizon tab: snapshot|day|week|month|quarter|year
 const CAROUSEL_VIEWS=['day','week','month','quarter','year'];          // views that support the scrollable column layout
 let colOffset={day:0,week:0,month:0,quarter:0,year:0,horizon:0};       // page offset per carousel view
@@ -2788,14 +2796,16 @@ function kanbanGroups(gb){ const today=todayKey();
   if(gb==='list'){ const cols=[]; boards.forEach(b=>b.lists.forEach(l=>cols.push({key:'l'+b.id+'|'+l.id,label:b.name+' · '+l.name,color:'var(--amber)',
         match:t=>t.boardId===b.id&&t.listId===l.id,drop:t=>{ t.boardId=b.id; t.listId=l.id; notionMaybeCreate(t); }})));
       cols.push({key:'lnone',label:'No list',color:'var(--faint)',match:t=>!t.boardId&&!t.listId,drop:t=>{t.boardId='';t.listId='';}}); return cols; }
-  // date (default for kanban)
+  // date — mutually exclusive AND exhaustive buckets (every task lands in exactly one; undated → No date)
+  const wk=addDays(today,7);
   return [
-    {key:'overdue',label:'Overdue',color:'var(--rose)',match:t=>t.due&&t.due<today&&!isTaskDone(t),drop:t=>boardDropTask(t,0)},
-    {key:'today',label:'Today',color:'var(--accent)',match:t=>t.due===today||(t.due&&t.dueEnd&&t.due<=today&&t.dueEnd>=today),drop:t=>boardDropTask(t,1)},
-    {key:'next7',label:'Next 7 days',color:'var(--teal)',match:t=>t.due&&t.due>today&&t.due<=addDays(today,7),drop:t=>boardDropTask(t,2)},
-    {key:'nodate',label:'No date',color:'var(--faint)',match:t=>!t.due&&!t.horizon&&!t.boardId,drop:t=>boardDropTask(t,3)}
+    {key:'overdue',label:'Overdue',color:'var(--rose)',match:t=>t.due&&t.due<today&&!(t.dueEnd&&t.dueEnd>=today),drop:t=>boardDropTask(t,0)},
+    {key:'today',label:'Today',color:'var(--accent)',match:t=>t.due&&((t.due===today)||(t.due<=today&&t.dueEnd&&t.dueEnd>=today)),drop:t=>boardDropTask(t,1)},
+    {key:'next7',label:'Next 7 days',color:'var(--teal)',match:t=>t.due&&t.due>today&&t.due<=wk,drop:t=>boardDropTask(t,2)},
+    {key:'later',label:'Later',color:'var(--violet)',match:t=>t.due&&t.due>wk,drop:t=>{t.due=addDays(today,8);t.dueEnd='';t.horizon='day';t.hkey='';}},
+    {key:'nodate',label:'No date',color:'var(--faint)',match:t=>!t.due,drop:t=>boardDropTask(t,3)}
   ]; }
-const GROUP_OPTS=[['list','List'],['board','Board'],['priority','Priority'],['date','Date'],['subject','Subject']];
+const GROUP_OPTS=[['none','None'],['date','Date'],['priority','Priority'],['subject','Subject'],['board','Board'],['list','List']];
 const SORT_OPTS=[['manual','Manual'],['priority','Priority'],['date','Date'],['title','Title']];
 function groupSortBar(showGroup){ const gb=settings.groupBy||'list', sb=settings.sortBy||'manual';
   const grp = showGroup===false ? '' : `<label class="gs-seg">Group<select data-gs="group">${GROUP_OPTS.map(o=>`<option value="${o[0]}" ${gb===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>`;
@@ -2817,6 +2827,59 @@ function wireGenericKanban(body){ wireTasks(body); wireTaskGestures(body); wireG
     col.addEventListener('dragleave',()=>col.classList.remove('drop'));
     col.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); col.classList.remove('drop');
       const t=tasks.find(x=>x.id===taskDragId); if(t){ desc.drop(t); clampRepeat(t); save(); renderTasks(); } }); }); }
+
+/* ===== Smart lists (TickTick-style): All · Today · Next 7 days · Inbox =====
+   Each is a filtered pool of tasks rendered through the shared view-mode + group/sort/filter
+   toolbar. List mode = grouped collapsible sections (or flat when Group=None); Kanban mode =
+   columns by the chosen group-by. "All" + Kanban + Group=Date reproduces the old Agenda board. */
+const SMART_VIEWS=['all','today','next7','inbox'];
+function smartViewMode(){ return settings.smartMode==='kanban'?'kanban':'list'; }
+function smartPool(view){ const today=todayKey();
+  if(view==='today') return tasks.filter(t=> (t.due && t.due<=today) || (t.due && t.dueEnd && t.due<=today && t.dueEnd>=today) );
+  if(view==='next7')  return tasks.filter(t=> t.due && t.due>=today && t.due<=addDays(today,7) );
+  if(view==='inbox')  return tasks.filter(t=> !t.due && !t.horizon && !t.boardId );
+  return tasks.slice();   // all
+}
+function viewModeToggle(){ const m=smartViewMode();
+  return `<div class="lay-toggle vm-toggle">`+[['list','☰ List'],['kanban','▦ Kanban']]
+    .map(([v,l])=>`<button data-vm="${v}" class="${m===v?'on':''}">${l}</button>`).join('')+`</div>`; }
+function smartQuickAdd(view){ const ph = view==='inbox'?'Add to inbox…' : view==='today'?'Add a task for today…' : view==='next7'?'Add a task…' : 'Add a task…';
+  return `<div class="qadd qadd-bottom sl-qa"><input class="sl-add" placeholder="${ph}" maxlength="200"><button class="sl-addbtn">+</button></div>`; }
+function renderSmartList(view){ const body=$('taskBody'); const mode=smartViewMode();
+  if(!settings.groupBy) settings.groupBy='date';                     // date-first feel for smart lists
+  const gb=settings.groupBy||'date';
+  const pool=topLevel(applyFilter(smartPool(view),taskFilter));
+  const toolbar=`<div class="view-ctl sl-ctl">${viewModeToggle()}${groupSortBar()}</div>`;
+  const cols=kanbanGroups(gb);
+  if(mode==='kanban'){
+    const colsHTML=cols.map(c=>{ const items=sortTasks(pool.filter(c.match)); const activeN=items.filter(t=>!isTaskDone(t)).length;
+      return `<div class="kcol" data-gk="${esc(c.key)}"><h4><span class="gk-dot" style="background:${c.color}"></span> ${esc(c.label)} <span class="n">${activeN}</span></h4>
+        <div class="ccol-body">${items.length?renderTaskList(items,'sk|'+view+'|'+c.key):'<div class="empty-t" style="padding:8px 0">—</div>'}</div></div>`; }).join('');
+    body.innerHTML=toolbar+`<div class="kanban">${colsHTML}</div>`;
+  } else {
+    let listHTML;
+    if(gb==='none'){ const items=sortTasks(pool); listHTML=items.length?renderTaskList(items,'sk|'+view):'<div class="empty-t">Nothing here yet.</div>'; }
+    else { const secs=cols.map(c=>{ const items=sortTasks(pool.filter(c.match)); if(!items.length)return''; const activeN=items.filter(t=>!isTaskDone(t)).length;
+        return `<div class="sl-sec" data-gk="${esc(c.key)}"><div class="sl-head"><span class="gk-dot" style="background:${c.color}"></span> ${esc(c.label)} <span class="n">${activeN}</span></div>
+          <div class="sl-body">${renderTaskList(items,'sk|'+view+'|'+c.key)}</div></div>`; }).join('');
+      listHTML=secs||'<div class="empty-t">Nothing here yet.</div>'; }
+    body.innerHTML=toolbar+smartQuickAdd(view)+`<div class="sl-list">${listHTML}</div>`;
+  }
+  wireTasks(body); wireTaskGestures(body); wireGroupSort(body); wireViewMode(body); wireSmartAdd(body,view);
+  // drop targets (columns in kanban, sections in list) reassign per the group-by
+  body.querySelectorAll('[data-gk]').forEach(node=>{ const desc=cols.find(c=>c.key===node.dataset.gk); if(!desc)return;
+    node._taskDrop=(t)=>{ desc.drop(t); clampRepeat(t); };
+    node.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();node.classList.add('drop');} });
+    node.addEventListener('dragleave',()=>node.classList.remove('drop'));
+    node.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); node.classList.remove('drop');
+      const t=tasks.find(x=>x.id===taskDragId); if(t){ desc.drop(t); clampRepeat(t); save(); renderTasks(); } }); });
+}
+function wireViewMode(scope){ scope.querySelectorAll('[data-vm]').forEach(b=>b.onclick=()=>{ settings.smartMode=b.dataset.vm; save(); renderTasks(); }); }
+function wireSmartAdd(scope,view){ const inp=scope.querySelector('.sl-add'), btn=scope.querySelector('.sl-addbtn'); if(!inp)return; const today=todayKey();
+  const add=()=>{ const v=inp.value.trim(); if(!v)return;
+    const t=smartTask(v, x=>{ if(view==='today'){ x.due=today; x.horizon='day'; x.hkey=''; } else if(view==='next7'){ x.due=addDays(today,1); x.horizon='day'; x.hkey=''; } });
+    tasks.push(t); inp.value=''; save(); renderTasks(); };
+  if(btn)btn.onclick=add; inp.onkeydown=e=>{ if(e.key==='Enter')add(); }; }
 
 /* ---- Eisenhower matrix (priority → important, due proximity → urgent) ---- */
 function matrixHTML(){
@@ -3401,7 +3464,8 @@ function wireWeekGrid(scope){ const wk=weekStartMon(calAnchor);
 /* ---- full-width takeover: column & analytical views span the whole app ---- */
 function isWideView(){
   if(taskView==='calendar') return true;
-  if(['inbox','board','kanban','timeline','dashboard','matrix'].includes(taskView)) return true;
+  if(['dashboard','matrix'].includes(taskView)) return true;
+  if(SMART_VIEWS.includes(taskView)) return smartViewMode()==='kanban';   // kanban = full width; list stays in-panel
   if(taskView==='boards'){ const b=boardById(currentBoardId); return !b || b.layout!=='list'; }
   if(taskView==='horizon') return true;   // horizon is columns-only → always full-width
   if(['day','week','month','quarter','year'].includes(taskView)) return taskLayout()==='columns';
@@ -3424,29 +3488,20 @@ $('timerCollapse').onclick=()=>{ settings.timerCollapsed=true; save(); applyTime
 $('timerRestore').onclick=()=>{ settings.timerCollapsed=false; save(); applyTimerCollapsed(); };
 
 function renderTasks(){ const body=$('taskBody'); if(!body)return; const today=todayKey(); applyTaskWidth();
+  taskView=migrateView(taskView);
   if(taskView==='calendar'){ body.innerHTML=calendarHTML(); wireCalendar(body); return; }
-  if(taskView==='board'||taskView==='inbox'){ body.innerHTML=kanbanHTML(); wireTasks(body); wireTaskGestures(body);
-    const dueFor=[addDays(today,-1),today,addDays(today,1),''];
-    body.querySelectorAll('[data-kcol]').forEach(col=>{ const ci=+col.dataset.kcol;
-      col._addTask=(v)=>{ const t=newTask(v,dueFor[ci]); clampRepeat(t); tasks.push(t); save(); renderTasks(); };
-      col._taskDrop=(t)=>boardDropTask(t,ci);
-      installHoverAdd(col.querySelector('.ccol-body'), col._addTask, 'kan|'+ci);
-      col.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();col.classList.add('drop');} });
-      col.addEventListener('dragleave',()=>col.classList.remove('drop'));
-      col.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); col.classList.remove('drop'); boardDrop(ci); }); });
-    return; }
+  if(SMART_VIEWS.includes(taskView)){ renderSmartList(taskView); return; }   // All · Today · Next 7 days · Inbox
   if(taskView==='boards'){ body.innerHTML=boardsHTML(); wireBoards(body); return; }
-  if(taskView==='kanban'){ body.innerHTML=genericKanbanHTML(); wireGenericKanban(body); return; }
-  if(taskView==='timeline'){ body.innerHTML=timelineHTML(); wireTimeline(body); return; }
   if(taskView==='matrix'){ body.innerHTML=matrixHTML(); wireMatrix(body); return; }
   if(taskView==='dashboard'){ body.innerHTML=dashboardHTML(); wireDashboard(body); return; }
   if(taskView==='horizon'){ renderHorizon(body); return; }
   if(CAROUSEL_VIEWS.includes(taskView) && taskLayout()==='columns'){ renderCarousel(taskView); return; }
   if(taskView==='day'){ renderDayList(body); return; }   // Days list view = day strip + selected day's tasks
   if(taskView==='week'||taskView==='month'||taskView==='quarter'||taskView==='year'||taskView==='life'){ renderPeriodView(body); return; }
-  // inbox = truly unassigned (no due, no horizon), grouped into named lists
-  body.innerHTML=inboxHTML(); wireTasks(body); wireTaskGestures(body); wireInbox(body);
+  renderSmartList('all');   // fallback
 }
+/* obsolete view ids → new homes (Agenda board, standalone Kanban/Timeline pages are now All + a view mode) */
+function migrateView(v){ return ({board:'all',kanban:'all',timeline:'all'})[v]||v; }
 /* ---- Inbox: multiple named lists, each with its own quick-add ---- */
 function inboxHTML(){ const all=topLevel(applyFilter(tasksInHorizon(''),taskFilter).sort(taskSort));
   const def=inboxLists[0].id; const multi=inboxLists.length>1;
