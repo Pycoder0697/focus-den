@@ -2833,7 +2833,7 @@ function wireGenericKanban(body){ wireTasks(body); wireTaskGestures(body); wireG
    toolbar. List mode = grouped collapsible sections (or flat when Group=None); Kanban mode =
    columns by the chosen group-by. "All" + Kanban + Group=Date reproduces the old Agenda board. */
 const SMART_VIEWS=['all','today','next7','inbox'];
-function smartViewMode(){ return settings.smartMode==='kanban'?'kanban':'list'; }
+function smartViewMode(){ return ['kanban','timeline'].includes(settings.smartMode)?settings.smartMode:'list'; }
 function smartPool(view){ const today=todayKey();
   if(view==='today') return tasks.filter(t=> (t.due===today) || (t.due && t.dueEnd && t.due<=today && t.dueEnd>=today) );  // today only (overdue lives in All)
   if(view==='next7')  return tasks.filter(t=> t.due && t.due>=today && t.due<=addDays(today,7) );
@@ -2841,7 +2841,7 @@ function smartPool(view){ const today=todayKey();
   return tasks.slice();   // all
 }
 function viewModeToggle(){ const m=smartViewMode();
-  return `<div class="lay-toggle vm-toggle">`+[['list','☰ List'],['kanban','▦ Kanban']]
+  return `<div class="lay-toggle vm-toggle">`+[['list','☰ List'],['kanban','▦ Kanban'],['timeline','▭ Timeline']]
     .map(([v,l])=>`<button data-vm="${v}" class="${m===v?'on':''}">${l}</button>`).join('')+`</div>`; }
 function smartQuickAdd(view){ const ph = view==='inbox'?'Add to inbox…' : view==='today'?'Add a task for today…' : view==='next7'?'Add a task…' : 'Add a task…';
   return `<div class="qadd qadd-bottom sl-qa"><input class="sl-add" placeholder="${ph}" maxlength="200"><button class="sl-addbtn">+</button></div>`; }
@@ -2849,8 +2849,9 @@ function renderSmartList(view){ const body=$('taskBody'); const mode=smartViewMo
   if(!settings.groupBy) settings.groupBy='date';                     // date-first feel for smart lists
   const gb=settings.groupBy||'date';
   const pool=topLevel(applyFilter(smartPool(view),taskFilter));
-  const toolbar=`<div class="view-ctl sl-ctl">${viewModeToggle()}${groupSortBar()}</div>`;
+  const toolbar=`<div class="view-ctl sl-ctl">${viewModeToggle()}${mode==='timeline'?'':groupSortBar()}</div>`;
   const cols=kanbanGroups(gb);
+  if(mode==='timeline'){ body.innerHTML=toolbar+timelineHTML(smartPool(view)); wireTimeline(body); wireViewMode(body); return; }
   if(mode==='kanban'){
     const colsHTML=cols.map(c=>{ const items=sortTasks(pool.filter(c.match)); if(!items.length)return'';   // hide empty buckets (no stray "Later"/etc.)
       const activeN=items.filter(t=>!isTaskDone(t)).length;
@@ -2958,13 +2959,13 @@ function tlBuckets(){ const today=todayKey(); const B=[];
   return {buckets:B,colw:42,lblw:120};
 }
 function bucketIndex(B,dk){ for(let i=0;i<B.length;i++){ if(dk>=B[i].s&&dk<=B[i].e)return i; } return dk<B[0].s?-1:B.length; }
-function timelineHTML(){
+function timelineHTML(srcPool){ const src=srcPool||tasks;
   const {buckets,colw,lblw}=tlBuckets(); TL.buckets=buckets; TL.colw=colw; const n=buckets.length;
   const head=buckets.map(b=>`<div class="g-col ${b.today?'today':''} ${b.wend?'wend':''}">${b.label}<br><span style="font-size:9px">${b.sub||''}</span></div>`).join('');
   const grid=buckets.map(b=>`<i class="${b.wend?'wend':''}"></i>`).join('');
   const place=t=>{ const sp=taskSpan(t); if(!sp)return null; let cs=bucketIndex(buckets,sp[0]),ce=bucketIndex(buckets,sp[1]);
     if(ce<0||cs>n-1)return null; cs=Math.max(0,cs); ce=Math.min(n-1,ce); if(ce<cs)return null; return [cs,ce]; };
-  const pool=topLevel(applyFilter(tasks.filter(taskSpan),taskFilter));
+  const pool=topLevel(applyFilter(src.filter(taskSpan),taskFilter));
   const todo=pool.filter(t=>!isTaskDone(t)).sort(taskSort);
   const done=pool.filter(t=>isTaskDone(t)).sort(taskSort);
   const allowResize=tlZoom==='day';
@@ -2976,7 +2977,7 @@ function timelineHTML(){
       </div></div>`; };
   const section=(title,arr)=>`<div class="g-section">${title} (${arr.length})</div>`+(arr.length?arr.map(bar).join(''):'<div class="g-empty">No tasks at this zoom.</div>');
   if(tlZoom==='hours') return tlZoomRow()+groupSortBar()+tlHoursHTML();
-  const hidden=tasks.filter(t=>!taskSpan(t)).length;
+  const hidden=src.filter(t=>!taskSpan(t)).length;
   // group-by turns the To-do list into one section per group value (sorted by the chosen sort); Done stays at the bottom
   const gb=settings.groupBy||'none';
   let rows;
@@ -3466,10 +3467,9 @@ function wireWeekGrid(scope){ const wk=weekStartMon(calAnchor);
 function isWideView(){
   if(taskView==='calendar') return true;
   if(['dashboard','matrix'].includes(taskView)) return true;
-  if(SMART_VIEWS.includes(taskView)) return smartViewMode()==='kanban';   // kanban = full width; list stays in-panel
+  if(SMART_VIEWS.includes(taskView)) return smartViewMode()!=='list';   // kanban/timeline = full width; list stays in-panel
   if(taskView==='boards'){ const b=boardById(currentBoardId); return !b || b.layout!=='list'; }
-  if(taskView==='horizon') return true;   // horizon is columns-only → always full-width
-  if(['day','week','month','quarter','year'].includes(taskView)) return taskLayout()==='columns';
+  if(['day','week','month','quarter','year','horizon'].includes(taskView)) return taskLayout()==='columns';
   return false; }
 function applyTaskWidth(){ const wrap=document.querySelector('.wrap'); if(!wrap)return;
   const tasksActive=$('tab-tasks')&&$('tab-tasks').classList.contains('show');
@@ -3528,7 +3528,7 @@ function wireInbox(scope){
       askConfirm('Delete this list? Its tasks move to the first list.',()=>{ tasks.forEach(t=>{ if(t.inboxListId===lid)t.inboxListId=''; }); inboxLists=inboxLists.filter(x=>x.id!==lid); save(); renderTasks(); }); } }); }
 
 /* ---- shared view controls (layout toggle + carousel pager) ---- */
-function layoutToggle(){ if(taskView==='horizon') return ''; const c=taskLayout();
+function layoutToggle(){ const c=taskLayout();
   return `<div class="lay-toggle"><button data-lay="columns" class="${c==='columns'?'on':''}">▦ Columns</button><button data-lay="list" class="${c==='list'?'on':''}">☰ List</button></div>`; }
 function wireLayoutToggle(scope){ scope.querySelectorAll('[data-lay]').forEach(b=>b.onclick=()=>{ settings.taskLayout=b.dataset.lay; save(); renderTasks(); }); }
 
@@ -3621,9 +3621,9 @@ function renderHorizon(body){
   const nav=HZ_PANES.map(([v,l])=>`<button data-hzp="${v}" class="${horizonPane===v?'on':''}">${esc(l)}</button>`).join('');
   body.innerHTML=`<div class="view-filter hz-subnav">${nav}</div><div id="hzPane" class="hz-pane"></div>`;
   const host=body.querySelector('#hzPane');
-  // Horizon is a columns-only feature — no list view (layout toggle suppressed below)
-  if(horizonPane==='snapshot'){ host.innerHTML=horizonColsHTML(); wireHorizonCols(host); }
-  else renderCarousel(horizonPane==='day'?'day':horizonPane,host);
+  if(horizonPane==='snapshot'){ if(taskLayout()==='columns'){ host.innerHTML=horizonColsHTML(); wireHorizonCols(host); } else { host.innerHTML=horizonHTML(); wireHorizon(host); } }
+  else if(horizonPane==='day'){ if(taskLayout()==='columns') renderCarousel('day',host); else renderDayList(host); }
+  else { if(taskLayout()==='columns') renderCarousel(horizonPane,host); else renderPeriodView(host,horizonPane); }
   body.querySelectorAll('[data-hzp]').forEach(b=>b.onclick=()=>{ horizonPane=b.dataset.hzp; settings.horizonPane=horizonPane; save(); renderTasks(); });
 }
 /* ---- Horizon view: nested broad→narrow sections, drag a card between them to reassign ---- */
@@ -3632,7 +3632,7 @@ function horizonSections(){ const today=todayKey();
   return [['year',currentPeriodKey('year')],['quarter',currentPeriodKey('quarter')],
           ['month',currentPeriodKey('month')],['week',currentPeriodKey('week')],['day',today],['','']]; }
 function horizonHTML(){
-  return horizonSections().map(([h,key])=>{
+  return `<div class="view-ctl">${layoutToggle()}</div>`+horizonSections().map(([h,key])=>{
     const items=topLevel(applyFilter(tasksInHorizon(h,key),taskFilter).sort(taskSort));
     const all=topLevel(tasksInHorizon(h,key)); const totN=all.length, doneN=all.filter(isTaskDone).length;
     const id=h||'inbox'; const collapsed=collapsedHorizons.has(id);
@@ -3646,7 +3646,7 @@ function horizonHTML(){
   }).join('');
 }
 function wireHorizon(scope){
-  wireTasks(scope); wireTaskGestures(scope);
+  wireTasks(scope); wireTaskGestures(scope); wireLayoutToggle(scope);
   scope.querySelectorAll('.hz-head').forEach(hd=>hd.onclick=e=>{ const sec=hd.closest('.hz-sec'); const id=sec.dataset.id;
     if(collapsedHorizons.has(id))collapsedHorizons.delete(id);else collapsedHorizons.add(id); sec.classList.toggle('collapsed'); });
   scope.querySelectorAll('.hz-sec').forEach(sec=>{ const h=sec.dataset.h, key=sec.dataset.key;
