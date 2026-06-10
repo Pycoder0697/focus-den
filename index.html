@@ -224,18 +224,28 @@
   .qadd input:focus{border-color:var(--amber)}
   .qadd button{background:var(--amber);color:#3a1810;border:none;border-radius:12px;width:46px;font-size:22px;cursor:pointer}
   .tk{background:rgba(255,255,255,.06);border:1px solid var(--stroke-soft);border-radius:12px;margin-bottom:8px}
-  .tk-main{display:flex;align-items:center;gap:10px;padding:10px 12px}
-  .tk-pri{width:14px;height:14px;border-radius:4px;flex:none;cursor:pointer;border:2px solid var(--faint);background:transparent}
-  .tk-check{width:20px;height:20px;border-radius:6px;border:2px solid var(--stroke);cursor:pointer;flex:none;display:grid;place-items:center}
+  .tk-main{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;touch-action:pan-y}
+  .tk-check{width:20px;height:20px;border-radius:6px;border:2px solid var(--prc,var(--faint));cursor:pointer;flex:none;display:grid;place-items:center}
   .tk-check.on{background:var(--ok);border-color:var(--ok)}
   .tk-check svg{width:12px;height:12px;opacity:0;color:#123}.tk-check.on svg{opacity:1}
   .tk-name{flex:1;font-size:14px;min-width:0;cursor:pointer;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
   .tk.done > .tk-main > .tk-name{text-decoration:line-through;color:var(--faint)}
-  .tk-tags{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 9px 46px;margin-top:-4px}
+  /* drag-to-reorder (pointer-based, works on touch) */
+  .tk.tkdrag{opacity:.32}
+  .tk.tk-armed{box-shadow:0 0 0 2px var(--accent);transform:scale(.99)}
+  .tk-ghost{position:fixed;left:0;top:0;z-index:120;pointer-events:none;margin:0;
+    background:var(--pop-bg);border:1px solid var(--accent);border-radius:12px;box-shadow:var(--shadow);opacity:.95;transform:rotate(-1deg)}
+  .tk-drop-line{height:2px;margin:2px 6px;border-radius:2px;background:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
+  .tk-zonehot{outline:2px dashed var(--accent);outline-offset:-3px;border-radius:12px}
+  /* completed group */
+  .tk-done-head{display:flex;align-items:center;gap:6px;width:100%;font-family:inherit;font-size:12px;color:var(--faint);
+    background:none;border:none;padding:8px 4px 6px;cursor:pointer;text-align:left}
+  .tk-done-head:hover{color:var(--ink)} .tk-done-head .cv{font-size:10px;opacity:.7;margin-left:auto}
+  .tk-tags{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 9px 42px;margin-top:-4px}
   .tk-chip{font-size:11px;color:var(--muted);background:var(--track-bg);padding:3px 9px;border-radius:999px;white-space:nowrap;flex:none}
   .tk-chip.over{color:#ffc2c2;background:rgba(255,90,90,.22)}
   /* nested subtasks / subgoals (inline, collapsible) */
-  .tk-subs{padding:0 12px 6px 46px}
+  .tk-subs{padding:0 12px 6px 42px}
   .ccol .tk-subs{padding-left:16px}
   .tk-subtoggle{display:inline-flex;align-items:center;gap:5px;font-family:inherit;font-size:11.5px;color:var(--muted);background:none;border:none;padding:2px 0 4px;cursor:pointer}
   .tk-subtoggle:hover{color:var(--ink)}
@@ -380,6 +390,12 @@
   .check.on,.tk-check.on,.cl .c.on{background:var(--ok);border-color:var(--ok);box-shadow:0 1px 6px -1px color-mix(in srgb,var(--ok) 50%,transparent)}
   .check.on svg,.tk-check.on svg,.cl .c.on svg{color:#fff;stroke-width:3.2}
   .tk-check:active,.check:active,.cl .c:active{transform:scale(.85)}
+  /* priority reads as the checkbox ring colour (done still wins with green) */
+  .tk-check.pri1:not(.on),.tk-check.pri2:not(.on),.tk-check.pri3:not(.on){border-color:var(--prc)}
+  /* ⋯ is a desktop hover affordance; touch uses long-press */
+  .tk-menu{opacity:0;transition:opacity .15s}
+  .tk-main:hover .tk-menu,.tk-menu:focus{opacity:1}
+  @media(hover:none){ .tk-menu{display:none} }
 
   /* eisenhower matrix */
   .ei-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -645,8 +661,6 @@
   .goal-kid .gk-pbar{flex:1;height:5px;border-radius:999px;background:var(--field-bg);overflow:hidden}
   .goal-kid .gk-pbar i{display:block;height:100%;background:var(--teal)}
   .goal-kid .gk-pct{font-variant-numeric:tabular-nums;flex:none;width:34px;text-align:right}
-  .tk[draggable="true"]{}
-  .tk.tkdrag{opacity:.4}
   .kcol.drop{outline:2px dashed var(--accent);outline-offset:-4px}
   .subj-item.subjdrop{outline:2px dashed var(--accent);outline-offset:-2px}
 
@@ -1161,6 +1175,7 @@
   <div class="field"><label>Priority</label><select id="tdPri"><option value="0">None</option><option value="1">Low</option><option value="2">Medium</option><option value="3">High</option></select></div>
   <div class="field"><label>Repeat</label><select id="tdRepeat"></select></div>
   <div class="field" id="tdTimeRow"><label>Time of day</label><span style="display:flex;gap:8px;align-items:center"><input type="time" id="tdStart"><input type="number" id="tdDur" min="0" max="600" placeholder="min" style="width:74px"></span></div>
+  <div id="tdActions" style="display:none;gap:8px;margin-top:4px"><button class="minor" id="tdDuplicate">⧉ Duplicate</button><button class="minor" id="tdDelete" style="color:var(--rose)">🗑 Delete</button></div>
   <button class="save" id="tdSave">Save task</button>
 </div></div>
 
@@ -1290,7 +1305,7 @@ async function notionSyncOne(src){
     let t=byPage.get(pid);
     if(!t){ if(_notionCreating>0) return;             // an unmatched row may be our own in-flight create — import it next cycle instead of duplicating
       t={id:uid('t'),name,subjectId:'',due:'',dueEnd:'',priority:0,checklist:[],
-        done,doneOn:done?todayKey():'',repeat:'none',start:'',dur:0,created:Date.now(),
+        done,doneOn:done?todayKey():'',repeat:'none',start:'',dur:0,created:Date.now(),order:nextOrder(),
         horizon:'',hkey:'',parentId:'',inboxListId:'',
         boardId:src.boardId,listId:src.listId,notionSourceId:src.id,notionPageId:pid,notionUrl:row.url||''};
       tasks.push(t); changed=true; }                    // NEW rows land in the pinned board list…
@@ -1480,7 +1495,17 @@ function normalizeData(){
     s.todos=[]; moved=true;
   } else { s.todos=[]; } });
   if(moved){ try{save();}catch(e){} }
+  // manual ordering (TickTick-style): seed once from the legacy sort so lists keep their look,
+  // then drag-to-reorder owns it. New tasks append to the bottom.
+  if(tasks.some(t=>typeof t.order!=='number')){
+    const legacy=(a,b)=>{ const ad=isTaskDone(a),bd=isTaskDone(b); if(ad!==bd)return ad?1:-1;
+      if((b.priority||0)!==(a.priority||0))return (b.priority||0)-(a.priority||0);
+      const x=a.due||'9999-99-99',y=b.due||'9999-99-99'; if(x!==y)return x<y?-1:1; return (a.created||0)-(b.created||0); };
+    tasks.slice().sort(legacy).forEach((t,i)=>{ if(typeof t.order!=='number') t.order=(i+1)*100; });
+  }
 }
+/* next order value → appends a new task to the bottom of every list */
+function nextOrder(){ return (tasks.reduce((m,t)=>Math.max(m,t.order||0),0))+100; }
 /* matrix axes (priority → important, due proximity → urgent) */
 function isImportant(t){ return (t.priority||0)>=2; }
 function isUrgent(t){ if(!t.due)return false; const today=todayKey();
@@ -1772,6 +1797,7 @@ function renderSubjects(){
     const grip=item.querySelector('.grip');
     grip.addEventListener('dragstart',()=>{dragId=s.id;item.classList.add('dragging');});
     grip.addEventListener('dragend',()=>{dragId=null;item.classList.remove('dragging');});
+    item._taskDrop=(t)=>{ t.subjectId=s.id; };   // drop a task card onto a subject → reassign (pointer engine)
     item.addEventListener('dragover',e=>{e.preventDefault(); if(taskDragId)item.classList.add('subjdrop');});
     item.addEventListener('dragleave',()=>item.classList.remove('subjdrop'));
     item.addEventListener('drop',e=>{e.preventDefault(); item.classList.remove('subjdrop');
@@ -1786,8 +1812,8 @@ function renderSubjects(){
     if(open){
       const listed=applyFilter(all.slice().sort(taskSort),subjTaskFilter);
       const holder=document.createElement('div');
-      holder.innerHTML = listed.length?listed.map(taskCard).join(''):'<div class="empty-t" style="padding:10px 0">No tasks in this filter.</div>';
-      wireTasks(holder, refreshTaskSurfaces); wireTaskDrag(holder);
+      holder.innerHTML = listed.length?renderTaskList(listed,'subj|'+s.id):'<div class="empty-t" style="padding:10px 0">No tasks in this filter.</div>';
+      wireTasks(holder, refreshTaskSurfaces); wireTaskGestures(holder, refreshTaskSurfaces);
       td.appendChild(holder);
       const add=document.createElement('div'); add.className='add-todo';
       add.innerHTML=`<input placeholder="Add task…" maxlength="200"><button title="Quick add">Add</button><button class="adv" title="Add with date, time, repeat">⚙</button>`;
@@ -1826,8 +1852,12 @@ function openTodo(defaultSubjectId,task){ _tdCtx={task};
   $('todoTitle').textContent=task?'Edit task':'New task';
   $('tdName').value=task?task.name:''; $('tdPri').value=task?(task.priority||0):0;
   $('tdStart').value=_tdDraft.start||''; $('tdDur').value=_tdDraft.dur||'';
+  $('tdActions').style.display=task?'flex':'none';   // Delete/Duplicate only when editing an existing task
   tdRenderSched();
   $('ovTodo').classList.add('show'); setTimeout(()=>$('tdName').focus(),60); }
+$('tdDuplicate').onclick=()=>{ const t=_tdCtx&&_tdCtx.task; if(!t)return; $('ovTodo').classList.remove('show'); _tdCtx=null;_tdDraft=null; duplicateTask(t); refreshTaskSurfaces(); };
+$('tdDelete').onclick=()=>{ const t=_tdCtx&&_tdCtx.task; if(!t)return; $('ovTodo').classList.remove('show'); _tdCtx=null;_tdDraft=null;
+  askConfirm('Delete this task?',()=>{ notionArchivePage(t); tasks=tasks.filter(x=>x.id!==t.id); save(); refreshTaskSurfaces(); }); };
 $('tdWhen').onclick=()=>openDatePicker($('tdWhen'),_tdDraft,()=>{ $('tdStart').value=_tdDraft.start||''; $('tdDur').value=_tdDraft.dur||''; tdRenderSched(); });
 $('tdRepeat').onchange=e=>{ _tdDraft.repeat=e.target.value; };
 $('tdStart').onchange=e=>{ _tdDraft.start=e.target.value; };
@@ -2098,7 +2128,7 @@ function addDays(key,n){ const [y,m,d]=key.split('-').map(Number); const dt=new 
 function daysBetween(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
 function prettyDate(key){ const [y,m,d]=key.split('-').map(Number); return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]; }
 const PRI_COL=['transparent','#5fc24a','#f5a623','#ff5a5a'];
-function newTask(name,due){ taskSound(); return {id:uid('t'),name,due:due||'',dueEnd:'',priority:0,subjectId:'',checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
+function newTask(name,due){ taskSound(); return {id:uid('t'),name,due:due||'',dueEnd:'',priority:0,subjectId:'',checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:nextOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
 
 /* ---- TeuxDeux-style smart entry: parse priority, date & repeat from free text ---- */
 const SMART_WD={sunday:0,sun:0,monday:1,mon:1,tuesday:2,tues:2,tue:2,wednesday:3,weds:3,wed:3,thursday:4,thurs:4,thur:4,thu:4,friday:5,fri:5,saturday:6,sat:6};
@@ -2460,9 +2490,10 @@ function validParents(task){ const banned=new Set(task?[task.id,...descendants(t
 /* a child task is only ever shown nested under its parent — keep it out of flat/column lists */
 function topLevel(list){ return list.filter(t=>!t.parentId); }
 const expandedGoals=new Set();   // task ids whose nested subgoals are currently expanded
+/* manual order wins (TickTick-style): done sinks to the bottom, otherwise the hand-arranged `order` */
 function taskSort(a,b){ const ad=isTaskDone(a),bd=isTaskDone(b); if(ad!==bd)return ad?1:-1;
-  if((b.priority||0)!==(a.priority||0))return (b.priority||0)-(a.priority||0);
-  const x=a.due||'9999-99-99',y=b.due||'9999-99-99'; if(x!==y)return x<y?-1:1; return a.created-b.created; }
+  const ao=(typeof a.order==='number')?a.order:a.created||0, bo=(typeof b.order==='number')?b.order:b.created||0;
+  if(ao!==bo)return ao-bo; return (a.created||0)-(b.created||0); }
 const CHK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>';
 function tasksForSubject(id){ return tasks.filter(t=>t.subjectId===id); }
 /* re-render whichever task surfaces are on screen (keeps both tabs in step) */
@@ -2492,41 +2523,140 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
     const lbl = kids.length ? `${kids.length} subgoal${kids.length>1?'s':''} · ${gp}%` : 'Subtasks';
     subs=`<div class="tk-subs"><button class="tk-subtoggle" data-act="subtoggle">${lbl} <span class="cv">${open?'⌃':'⌄'}</span></button>${inner}</div>`;
   }
-  return `<div class="tk ${done?'done':''} ${kids.length?'has-kids':''}" data-id="${t.id}" draggable="true">
+  const pri=t.priority||0;
+  return `<div class="tk ${done?'done':''} ${kids.length?'has-kids':''}" data-id="${t.id}">
     <div class="tk-main">
-      <button class="tk-pri" title="Cycle priority" data-act="pri" style="background:${PRI_COL[t.priority||0]};border-color:${(t.priority||0)?'transparent':'var(--faint)'}"></button>
-      <button class="tk-check ${done?'on':''}" data-act="check" title="Mark done">${CHK}</button>
-      <span class="tk-name" data-act="menu" title="Open task menu">${esc(t.name)}</span>
+      <button class="tk-check pri${pri} ${done?'on':''}" data-act="check" title="Mark done"${pri?` style="--prc:${PRI_COL[pri]}"`:''}>${CHK}</button>
+      <span class="tk-name" title="Open task">${esc(t.name)}</span>
       <button class="tk-ic" data-act="play" title="${(active&&currentTask===t.id)?'Pause':'Start'} timer">${(active&&currentTask===t.id)?'⏸':'▶'}</button>
       <button class="tk-ic tk-menu" data-act="menu" title="More options">⋯</button>
     </div>
     ${tags?`<div class="tk-tags">${tags}</div>`:''}
     ${subs}
   </div>`; }
+/* render a list with completed tasks collapsed into a bottom "Completed" group (TickTick-style) */
+const completedOpen=new Set();                                   // group keys whose Completed section is expanded
+function renderTaskList(items, key){
+  const active=items.filter(t=>!isTaskDone(t)), done=items.filter(isTaskDone);
+  if(!active.length) return items.map(taskCard).join('');         // nothing active → show as-is (e.g. the Done filter)
+  let html=active.map(taskCard).join('');
+  if(done.length){ const open=completedOpen.has(key);
+    html += `<button class="tk-done-head" data-cdone="${esc(String(key))}">✓ Completed · ${done.length} <span class="cv">${open?'⌃':'⌄'}</span></button>`;
+    if(open) html += done.map(taskCard).join(''); }
+  return html;
+}
 /* create a child (subtask) of `parent`, inheriting its schedule so it sits in the same column */
 function addSubtask(parent,name){ name=(name||'').trim(); if(!name)return null; expandedGoals.add(parent.id);
   const c=newTask(name,''); c.parentId=parent.id; c.horizon=parent.horizon||''; c.hkey=parent.hkey||'';
   c.due=parent.due||''; c.dueEnd=''; c.subjectId=parent.subjectId||''; clampRepeat(c); tasks.push(c); save(); return c; }
 
-/* shared task-card drag source — dedicated id so it never collides with subject-reorder `dragId` */
+/* shared task-card drag id — still read by the few native drop zones (subjects/calendar) */
 let taskDragId=null;
-function wireTaskDrag(scope){
-  scope.querySelectorAll('.tk[draggable="true"]').forEach(el=>{
-    el.addEventListener('dragstart',e=>{
-      if(e.target.closest('input,select,textarea')){ e.preventDefault(); return; } // don't hijack field interactions
-      taskDragId=el.dataset.id; el.classList.add('tkdrag');
-      try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',taskDragId);}catch(_){}
+
+/* ===== unified pointer gestures for task cards (mouse + touch) =====
+   tap → open detail · right-click / long-press → menu · drag → reorder / move (TickTick-style).
+   Replaces HTML5 drag so it works on phones too. Drop targets expose `el._taskDrop=(t)=>effect`. */
+const _holderOf=card=>card.parentElement;                                   // element whose direct .tk children form the list
+function _dropZoneOf(el){ for(let z=el; z; z=z.parentElement){ if(z._taskDrop) return z; } return null; }
+function _topCards(holder){ return [...holder.children].filter(c=>c.classList&&c.classList.contains('tk')); }
+function _insertIndex(holder, y, exclId){ const cards=_topCards(holder).filter(c=>c.dataset.id!==exclId);
+  let i=0; for(const c of cards){ const r=c.getBoundingClientRect(); if(y > r.top + r.height/2) i++; else break; } return i; }
+/* give the dragged task an `order` that lands it at `index` within `listTasks` (dragged excluded) */
+function _placeOrder(listTasks, dragged, index){ const prev=listTasks[index-1], next=listTasks[index];
+  const lo = prev?prev.order:(next?next.order-200:0), hi = next?next.order:(prev?prev.order+200:0);
+  if(prev && next && (hi-lo)<2){ listTasks.splice(index,0,dragged); listTasks.forEach((t,i)=>t.order=(i+1)*100); }
+  else dragged.order = Math.round((lo+hi)/2); }
+
+let _gho=null;                                                              // floating ghost element
+function wireTaskGestures(scope, re){ re=re||refreshTaskSurfaces;
+  scope.querySelectorAll('.tk').forEach(card=>{ const t=tasks.find(x=>x.id===card.dataset.id); if(!t)return;
+    const main=card.querySelector(':scope > .tk-main'); if(!main)return;
+    const nested=!!card.parentElement.closest('.tk-children');
+    card.addEventListener('contextmenu',e=>{ if(e.target.closest('input,textarea,select'))return;
+      e.preventDefault(); openCtxMenu(card.querySelector('.tk-menu')||main, buildTaskMenu(t,re)); });
+    main.addEventListener('pointerdown',e=>{
+      if(e.button===2) return;                                             // right-click → contextmenu handles it
+      if(e.target.closest('.tk-check,.tk-ic,.tk-subtoggle,input,textarea,select,button,a')) return; // controls keep their clicks
+      _startGesture(e, card, t, main, nested, re);
     });
-    el.addEventListener('dragend',()=>{ taskDragId=null; el.classList.remove('tkdrag'); });
   });
 }
+function _startGesture(e, card, t, main, nested, re){
+  const sx=e.clientX, sy=e.clientY, pid=e.pointerId, touch=(e.pointerType==='touch');
+  let moved=false, dragging=false, armed=!touch, idx=0, holder=null, zone=null, origZone=null;
+  // touch: hold to "arm" (then move=drag, release-still=menu); mouse: armed immediately, move=drag
+  const lp=setTimeout(()=>{ if(dragging) return; armed=true; if(touch){ try{navigator.vibrate&&navigator.vibrate(8);}catch(_){ } card.classList.add('tk-armed'); } }, 450);
+  const onMove=ev=>{ if(ev.pointerId!==pid) return; const dx=ev.clientX-sx, dy=ev.clientY-sy;
+    if(!dragging){ if(Math.hypot(dx,dy)<=6) return; clearTimeout(lp);
+      if(!armed || nested){ cleanup(true); return; }                        // un-armed touch move = let the list scroll
+      _beginDrag(ev); return; }
+    _dragMove(ev);
+  };
+  const onUp=ev=>{ if(ev.pointerId!==pid) return; clearTimeout(lp);
+    if(dragging){ _finishDrag(ev); cleanup(false); return; }
+    if(armed && touch && !moved){ openCtxMenu(card.querySelector('.tk-menu')||main, buildTaskMenu(t,re)); cleanup(false); return; } // long-press menu
+    if(!moved){ openTodo(null,t); }                                         // tap → detail box
+    cleanup(false);
+  };
+  function _beginDrag(ev){ dragging=true; card.classList.add('tkdrag'); taskDragId=t.id;
+    holder=_holderOf(card); origZone=_dropZoneOf(card);
+    const r=card.getBoundingClientRect();
+    _gho=card.cloneNode(true); _gho.classList.add('tk-ghost'); _gho.style.width=r.width+'px';
+    _gho._dx=ev.clientX-r.left; _gho._dy=ev.clientY-r.top; document.body.appendChild(_gho);
+    try{ main.setPointerCapture(pid); }catch(_){}
+    _dragMove(ev);
+  }
+  function _dragMove(ev){ if(ev.cancelable) ev.preventDefault();
+    _gho.style.left=(ev.clientX-_gho._dx)+'px'; _gho.style.top=(ev.clientY-_gho._dy)+'px';
+    _gho.style.display='none'; const under=document.elementFromPoint(ev.clientX, ev.clientY); _gho.style.display='';
+    zone=under?_dropZoneOf(under):null;
+    document.querySelectorAll('.tk-zonehot').forEach(z=>z.classList.remove('tk-zonehot'));
+    const tHolder=(zone===origZone||!zone)?holder:(zone.querySelector('.ccol-body')||zone);
+    if(zone && zone!==origZone) zone.classList.add('tk-zonehot');
+    idx=_insertIndex(tHolder, ev.clientY, t.id);
+    _showLine(tHolder, idx, t.id);
+    _autoScroll(ev.clientY);
+  }
+  function _finishDrag(ev){
+    const tHolder=(zone===origZone||!zone)?holder:(zone.querySelector('.ccol-body')||zone);
+    if(zone && zone!==origZone && zone._taskDrop){ zone._taskDrop(t); }      // cross-list move: apply its schedule/list
+    const listTasks=_topCards(tHolder).filter(c=>c.dataset.id!==t.id).map(c=>tasks.find(x=>x.id===c.dataset.id)).filter(Boolean);
+    _placeOrder(listTasks, t, Math.min(idx, listTasks.length));
+    save(); re();
+  }
+  function cleanup(scrolly){ document.removeEventListener('pointermove',onMove); document.removeEventListener('pointerup',onUp); document.removeEventListener('pointercancel',onUp);
+    try{ main.releasePointerCapture(pid); }catch(_){}
+    card.classList.remove('tkdrag','tk-armed'); taskDragId=null;
+    if(_gho){ _gho.remove(); _gho=null; } _clearLine(); _stopScroll();
+    document.querySelectorAll('.tk-zonehot').forEach(z=>z.classList.remove('tk-zonehot'));
+  }
+  document.addEventListener('pointermove',onMove,{passive:false});
+  document.addEventListener('pointerup',onUp);
+  document.addEventListener('pointercancel',onUp);
+}
+/* insertion line + autoscroll helpers */
+let _lineEl=null;
+function _showLine(holder, index, exclId){ _clearLine();
+  if(!_lineEl){ _lineEl=document.createElement('div'); _lineEl.className='tk-drop-line'; }
+  const cards=_topCards(holder).filter(c=>c.dataset.id!==exclId);
+  if(index>=cards.length) holder.appendChild(_lineEl); else holder.insertBefore(_lineEl, cards[index]);
+}
+function _clearLine(){ if(_lineEl&&_lineEl.parentNode) _lineEl.parentNode.removeChild(_lineEl); }
+let _scrTimer=null;
+function _autoScroll(y){ _stopScroll();
+  const cont=_scrollParentAt(y); if(!cont) return; const r=cont.getBoundingClientRect(); const M=44;
+  let dir=0; if(y<r.top+M) dir=-1; else if(y>r.bottom-M) dir=1; if(!dir) return;
+  _scrTimer=setInterval(()=>{ cont.scrollTop+=dir*12; }, 16);
+}
+function _scrollParentAt(y){ const x=(window.innerWidth/2); const el=document.elementFromPoint(x,y);
+  for(let z=el; z; z=z.parentElement){ const o=getComputedStyle(z).overflowY; if((o==='auto'||o==='scroll') && z.scrollHeight>z.clientHeight+4) return z; } return null; }
+function _stopScroll(){ if(_scrTimer){ clearInterval(_scrTimer); _scrTimer=null; } }
 
 function wireTasks(scope, re){ re=re||(()=>renderTasks());
   scope.querySelectorAll('.tk').forEach(el=>{ const id=el.dataset.id; const t=tasks.find(x=>x.id===id); if(!t)return;
   el.querySelectorAll('[data-act]').forEach(node=>{ if(node.closest('.tk')!==el)return; // skip nested-child controls
     const act=node.dataset.act;
-    if(act==='pri') node.onclick=(e)=>{e.stopPropagation();t.priority=((t.priority||0)+1)%4;save();re();};
-    else if(act==='check') node.onclick=(e)=>{e.stopPropagation();toggleTask(t);save();re();};
+    if(act==='check') node.onclick=(e)=>{e.stopPropagation();toggleTask(t);save();re();};
     else if(act==='play') node.onclick=(e)=>{e.stopPropagation();startTaskTimer(t);};
     else if(act==='menu') node.onclick=(e)=>{e.stopPropagation();openCtxMenu(el.querySelector('.tk-menu')||node,buildTaskMenu(t,re));};
     else if(act==='subtoggle') node.onclick=(e)=>{e.stopPropagation(); if(expandedGoals.has(t.id)){expandedGoals.delete(t.id);collapseSound();} else {expandedGoals.add(t.id);expandSound();} re();};
@@ -2538,7 +2668,11 @@ function wireTasks(scope, re){ re=re||(()=>renderTasks());
     inp.onclick=e=>e.stopPropagation();
     ent.onmousedown=e=>{ e.preventDefault(); _taskVia='click'; add(false); };
     consumeReopen('sub|'+t.id, inp); }
-  }); }
+  });
+  // collapsible "Completed" group headers
+  scope.querySelectorAll('[data-cdone]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const k=b.dataset.cdone;
+    if(completedOpen.has(k)){ completedOpen.delete(k); collapseSound&&collapseSound(); } else { completedOpen.add(k); expandSound&&expandSound(); } re(); });
+}
 
 /* ---- Board (kanban) — date columns; drag a card between columns to reschedule ---- */
 const KCOLS=[
@@ -2550,15 +2684,15 @@ const KCOLS=[
 function kanbanHTML(){ const today=todayKey();
   return '<div class="kanban">'+KCOLS.map((c,ci)=>{ const items=topLevel(applyFilter(tasks.filter(x=>c.f(x,today)),taskFilter).sort(taskSort));
     return `<div class="kcol" data-kcol="${ci}"><h4>${c.t} <span class="n">${items.length}</span></h4>
-      <div class="ccol-body">${items.length?items.map(taskCard).join(''):'<div class="empty-t" style="padding:8px 0">—</div>'}</div></div>`;
+      <div class="ccol-body">${items.length?renderTaskList(items,'kan|'+ci):'<div class="empty-t" style="padding:8px 0">—</div>'}</div></div>`;
   }).join('')+'</div>'; }
 /* dropping a card on a column sets its due date to match that bucket */
-function boardDrop(ci){ const t=tasks.find(x=>x.id===taskDragId); if(!t)return; const today=todayKey();
+function boardDropTask(t,ci){ if(!t)return; const today=todayKey();
   if(ci===0){ t.due=addDays(today,-1); t.horizon='day'; t.hkey=''; }       // Overdue → yesterday
   else if(ci===1){ assignHorizon(t,'day',today); }                         // Today
   else if(ci===2){ assignHorizon(t,'day',addDays(today,1)); }              // Next 7 days → tomorrow
-  else { t.due=''; t.dueEnd=''; t.horizon=''; t.hkey=''; }                 // Inbox → unassign
-  save(); renderTasks(); }
+  else { t.due=''; t.dueEnd=''; t.horizon=''; t.hkey=''; } }               // Inbox → unassign
+function boardDrop(ci){ const t=tasks.find(x=>x.id===taskDragId); if(!t)return; boardDropTask(t,ci); save(); renderTasks(); }
 
 /* ---- Eisenhower matrix (priority → important, due proximity → urgent) ---- */
 function matrixHTML(){
@@ -3160,10 +3294,11 @@ $('timerRestore').onclick=()=>{ settings.timerCollapsed=false; save(); applyTime
 
 function renderTasks(){ const body=$('taskBody'); if(!body)return; const today=todayKey(); applyTaskWidth();
   if(taskView==='calendar'){ body.innerHTML=calendarHTML(); wireCalendar(body); return; }
-  if(taskView==='board'||taskView==='inbox'){ body.innerHTML=kanbanHTML(); wireTasks(body); wireTaskDrag(body);
+  if(taskView==='board'||taskView==='inbox'){ body.innerHTML=kanbanHTML(); wireTasks(body); wireTaskGestures(body);
     const dueFor=[addDays(today,-1),today,addDays(today,1),''];
     body.querySelectorAll('[data-kcol]').forEach(col=>{ const ci=+col.dataset.kcol;
       col._addTask=(v)=>{ const t=newTask(v,dueFor[ci]); clampRepeat(t); tasks.push(t); save(); renderTasks(); };
+      col._taskDrop=(t)=>boardDropTask(t,ci);
       installHoverAdd(col.querySelector('.ccol-body'), col._addTask, 'kan|'+ci);
       col.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();col.classList.add('drop');} });
       col.addEventListener('dragleave',()=>col.classList.remove('drop'));
@@ -3177,14 +3312,14 @@ function renderTasks(){ const body=$('taskBody'); if(!body)return; const today=t
   if(taskView==='day'){ renderDayList(body); return; }   // Days list view = day strip + selected day's tasks
   if(taskView==='week'||taskView==='month'||taskView==='quarter'||taskView==='year'||taskView==='life'){ renderPeriodView(body); return; }
   // inbox = truly unassigned (no due, no horizon), grouped into named lists
-  body.innerHTML=inboxHTML(); wireTasks(body); wireTaskDrag(body); wireInbox(body);
+  body.innerHTML=inboxHTML(); wireTasks(body); wireTaskGestures(body); wireInbox(body);
 }
 /* ---- Inbox: multiple named lists, each with its own quick-add ---- */
 function inboxHTML(){ const all=topLevel(applyFilter(tasksInHorizon(''),taskFilter).sort(taskSort));
   const def=inboxLists[0].id; const multi=inboxLists.length>1;
   const sections=inboxLists.map(l=>{ const items=all.filter(t=>(t.inboxListId&&inboxLists.some(x=>x.id===t.inboxListId)?t.inboxListId:def)===l.id);
     const head = multi ? `<div class="inbox-lhead"><input class="inbox-lname" data-il="rename" data-id="${l.id}" value="${esc(l.name)}" maxlength="40"><span class="inbox-lcount">${items.length}</span><button class="inbox-ldel" data-il="del" data-id="${l.id}" title="Delete list">×</button></div>` : '';
-    const cards = items.length?items.map(taskCard).join(''):(multi?'<div class="empty-t small">Empty</div>':'<div class="empty-t">Nothing here yet — capture a task below.</div>');
+    const cards = items.length?renderTaskList(items,'inbox|'+l.id):(multi?'<div class="empty-t small">Empty</div>':'<div class="empty-t">Nothing here yet — capture a task below.</div>');
     return `<div class="inbox-list${multi?'':' bare'}" data-list="${l.id}">${head}${cards}<div class="qadd qadd-bottom"><input class="il-add" data-id="${l.id}" placeholder="Add a task…" maxlength="200"><button class="il-addbtn" data-id="${l.id}">+</button></div></div>`; }).join('');
   return sections + `<button class="inbox-newlist" data-il="new">＋ Add list</button>`; }
 function wireInbox(scope){
@@ -3192,10 +3327,11 @@ function wireInbox(scope){
     const inp=sec.querySelector('.il-add'), btn=sec.querySelector('.il-addbtn');
     const add=(reopen)=>{ const v=inp.value.trim(); if(!v)return; tasks.push(smartTask(v, x=>{x.inboxListId=lid;})); if(reopen)_pendingAddReopen='inbox|'+lid; inp.value=''; save(); renderTasks(); };
     if(btn)btn.onclick=()=>add(false); if(inp){ inp.onkeydown=e=>{ if(e.key==='Enter')add(true); }; consumeReopen('inbox|'+lid,inp); }
+    sec._taskDrop=(t)=>{ assignHorizon(t,'',''); t.boardId='';t.listId=''; t.inboxListId=lid; clampRepeat(t); };
     sec.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();sec.classList.add('drop');} });
     sec.addEventListener('dragleave',()=>sec.classList.remove('drop'));
     sec.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); sec.classList.remove('drop');
-      const t=tasks.find(x=>x.id===taskDragId); if(t){ assignHorizon(t,'',''); t.boardId='';t.listId=''; t.inboxListId=lid; clampRepeat(t); save(); renderTasks(); } }); });
+      const t=tasks.find(x=>x.id===taskDragId); if(t){ sec._taskDrop(t); save(); renderTasks(); } }); });
   scope.querySelectorAll('[data-il]').forEach(node=>{ const act=node.dataset.il;
     if(act==='new') node.onclick=()=>{ inboxLists.push({id:uid('il'),name:'List '+(inboxLists.length+1)}); save(); renderTasks(); };
     else if(act==='rename') node.onchange=()=>{ const l=inboxLists.find(x=>x.id===node.dataset.id); if(l){ l.name=node.value.trim()||'List'; save(); renderTasks(); } };
@@ -3218,10 +3354,11 @@ function periodStripHTML(h,key){ const today=todayKey(); let cells=[];
 function wirePeriodStrip(scope,h,key){
   scope.querySelectorAll('[data-pk]').forEach(b=>{ b.onclick=()=>{ const k=b.dataset.pk; if(h==='day')dayListKey=k; else planKeys[h]=k; renderTasks(); };
     // drop a dragged task onto a strip cell to (re)schedule it to that day/period
+    b._taskDrop=(t)=>{ const k=b.dataset.pk; if(h==='day'){t.horizon='day';t.hkey='';t.due=k;t.dueEnd='';} else assignHorizon(t,h,k); clampRepeat(t); };
     b.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();b.classList.add('drop');} });
     b.addEventListener('dragleave',()=>b.classList.remove('drop'));
     b.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); b.classList.remove('drop');
-      const t=tasks.find(x=>x.id===taskDragId); if(t){ const k=b.dataset.pk; if(h==='day'){t.horizon='day';t.hkey='';t.due=k;t.dueEnd='';} else assignHorizon(t,h,k); clampRepeat(t); save(); renderTasks(); } }); });
+      const t=tasks.find(x=>x.id===taskDragId); if(t){ b._taskDrop(t); save(); renderTasks(); } }); });
   scope.querySelectorAll('[data-ps]').forEach(b=>b.onclick=()=>{ const v=b.dataset.ps;
     if(h==='day') dayListKey = v==='now'?todayKey():addDays(key,(+v)*7);
     else planKeys[h] = v==='now'?currentPeriodKey(h):periodShift(h,key,+v);
@@ -3230,9 +3367,9 @@ function wirePeriodStrip(scope,h,key){
 function renderDayList(body){ const key=dayListKey||todayKey();
   const list=topLevel(applyFilter(tasks.filter(t=>t.due===key||(t.due&&t.dueEnd&&t.due<=key&&t.dueEnd>=key)),taskFilter).sort(taskSort));
   let out=`<div class="view-ctl">${layoutToggle()}</div>`+periodStripHTML('day',key);
-  out+= list.length?list.map(taskCard).join(''):'<div class="empty-t">Nothing on this day — capture a task below.</div>';
+  out+= list.length?renderTaskList(list,'day|'+key):'<div class="empty-t">Nothing on this day — capture a task below.</div>';
   out+=`<div class="qadd qadd-bottom"><input id="qaddInput" placeholder="Add a task for ${esc(prettyDate(key))}…" maxlength="200"><button id="qaddBtn">+</button></div>`;
-  body.innerHTML=out; wireTasks(body); wireTaskDrag(body); wireLayoutToggle(body); wirePeriodStrip(body,'day',key);
+  body.innerHTML=out; wireTasks(body); wireTaskGestures(body); wireLayoutToggle(body); wirePeriodStrip(body,'day',key);
   const qi=$('qaddInput'),qb=$('qaddBtn');
   const add=(reopen)=>{const v=qi.value.trim();if(!v)return;const t=smartTask(v, x=>{x.horizon='day'; x.hkey=''; x.due=key;}); tasks.push(t); if(reopen)_pendingAddReopen='qadd'; qi.value='';save();renderTasks();};
   qb.onclick=()=>add(false); qi.onkeydown=e=>{if(e.key==='Enter')add(true);}; consumeReopen('qadd',qi); }
@@ -3254,16 +3391,17 @@ function carouselSchedule(t,g,key){ if(g==='day'){ t.horizon='day'; t.hkey=''; t
 function renderCarousel(g,host){ const body=host||$('taskBody'); const cur = g==='day'?todayKey():currentPeriodKey(g);
   const cols=carouselWindow(g).map(k=>{ const items=topLevel(applyFilter(tasksInHorizon(g==='day'?'day':g,k),taskFilter).sort(taskSort)); const L=carouselLabel(g,k);
     return `<div class="ccol ${k===cur?'cur':''}" data-key="${k}" data-addkey="car|${g}|${k}"><div class="ccol-h"><span class="t">${esc(L.main)}</span>${L.sub?`<span class="s">${esc(L.sub)}</span>`:''}</div>
-      <div class="ccol-body">${items.map(taskCard).join('')}</div></div>`; }).join('');
+      <div class="ccol-body">${renderTaskList(items,'car|'+g+'|'+k)}</div></div>`; }).join('');
   const cv=colsVisible();
   const visSel=`<div class="cz-vis" title="Columns visible at once">${[1,3,5,7,0].map(n=>`<button data-cv="${n}" class="${cv===n?'on':''}">${n||'All'}</button>`).join('')}</div>`;
   body.innerHTML=`<div class="view-ctl">${layoutToggle()}${visSel}<div class="cz-pager"><button data-cz="-1" title="Earlier">‹</button><button data-cz="now">Today</button><button data-cz="1" title="Later">›</button></div></div><div class="cols${cv?' fit':''}"${cv?` style="--cn:${cv}"`:''}>${cols}</div>`;
-  wireTasks(body); wireTaskDrag(body); wireLayoutToggle(body);
+  wireTasks(body); wireTaskGestures(body); wireLayoutToggle(body);
   body.querySelectorAll('[data-cz]').forEach(b=>b.onclick=()=>{ const v=b.dataset.cz; if(v==='now'){colOffset[g]=0;colsScrollGoCur=true;} else colOffset[g]=(colOffset[g]||0)+(+v)*CAROUSEL_CFG[g].step; renderTasks(); });
   body.querySelectorAll('[data-cv]').forEach(b=>b.onclick=()=>{ settings.colsVisible=+b.dataset.cv; colsScrollGoCur=true; save(); renderTasks(); });
   body.querySelectorAll('.ccol').forEach(col=>{ const key=col.dataset.key;
     const inp=col.querySelector('.ccol-add input'), btn=col.querySelector('.ccol-add button');
     col._addTask=(v)=>{ if(!v)return; const t=smartTask(v, x=>carouselSchedule(x,g,key)); tasks.push(t); save(); renderTasks(); };
+    col._taskDrop=(t)=>carouselSchedule(t,g,key);
     const add=()=>col._addTask(inp.value.trim());
     if(btn)btn.onclick=add; if(inp)inp.onkeydown=e=>{if(e.key==='Enter')add();};
     col.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();col.classList.add('drop');} });
@@ -3280,9 +3418,9 @@ function renderPeriodView(body,hview){ const h=hview||taskView, key=curKey(h);
   else head=`<div class="period-nav"><div class="lbl">Life goals — no calendar, just direction</div></div>`;
   const list=topLevel(applyFilter(tasksInHorizon(h,key),taskFilter).sort(taskSort));
   let out=head;
-  out+= list.length?list.map(taskCard).join(''):`<div class="empty-t">Nothing planned for this ${h} yet.</div>`;
+  out+= list.length?renderTaskList(list,'per|'+h+'|'+key):`<div class="empty-t">Nothing planned for this ${h} yet.</div>`;
   out+=`<div class="qadd qadd-bottom"><input id="qaddInput" placeholder="Add a ${h} goal…" maxlength="200"><button id="qaddBtn">+</button></div>`;
-  body.innerHTML=out; wireTasks(body); wireTaskDrag(body); wireLayoutToggle(body); if(h!=='life')wirePeriodStrip(body,h,key);
+  body.innerHTML=out; wireTasks(body); wireTaskGestures(body); wireLayoutToggle(body); if(h!=='life')wirePeriodStrip(body,h,key);
   const qi=$('qaddInput'),qb=$('qaddBtn');
   const add=(reopen)=>{const v=qi.value.trim();if(!v)return;const t=newTask(v,'');assignHorizon(t,h,key);tasks.push(t);if(reopen)_pendingAddReopen='qadd';qi.value='';save();renderTasks();};
   qb.onclick=()=>add(false); qi.onkeydown=e=>{if(e.key==='Enter')add(true);}; consumeReopen('qadd',qi);
@@ -3309,7 +3447,7 @@ function horizonHTML(){
     const items=topLevel(applyFilter(tasksInHorizon(h,key),taskFilter).sort(taskSort));
     const all=topLevel(tasksInHorizon(h,key)); const totN=all.length, doneN=all.filter(isTaskDone).length;
     const id=h||'inbox'; const collapsed=collapsedHorizons.has(id);
-    const body=items.length?items.map(taskCard).join(''):'<div class="empty-t" style="padding:6px 0">— drop a task here —</div>';
+    const body=items.length?renderTaskList(items,'hzs|'+id):'<div class="empty-t" style="padding:6px 0">— drop a task here —</div>';
     return `<div class="hz-sec ${collapsed?'collapsed':''}" data-h="${h}" data-key="${key}" data-id="${id}">
       <div class="hz-head" data-act="toggle"><span class="cv">▾</span><span class="hdot" style="background:${HZ_DOT[h]}"></span>
         <span class="ht">${esc(horizonLabel(h,key))}</span><span class="hn">${doneN}/${totN}</span></div>
@@ -3319,7 +3457,7 @@ function horizonHTML(){
   }).join('');
 }
 function wireHorizon(scope){
-  wireTasks(scope); wireTaskDrag(scope);
+  wireTasks(scope); wireTaskGestures(scope);
   scope.querySelectorAll('.hz-head').forEach(hd=>hd.onclick=e=>{ const sec=hd.closest('.hz-sec'); const id=sec.dataset.id;
     if(collapsedHorizons.has(id))collapsedHorizons.delete(id);else collapsedHorizons.add(id); sec.classList.toggle('collapsed'); });
   scope.querySelectorAll('.hz-sec').forEach(sec=>{ const h=sec.dataset.h, key=sec.dataset.key;
@@ -3327,6 +3465,7 @@ function wireHorizon(scope){
     const rk='hzs|'+(h||'inbox');
     const add=(reopen)=>{const v=inp.value.trim();if(!v)return;const t=newTask(v,'');assignHorizon(t,h,h==='day'?key:key);tasks.push(t);if(reopen)_pendingAddReopen=rk;save();renderTasks();};
     if(btn)btn.onclick=()=>add(false); if(inp){inp.onkeydown=e=>{if(e.key==='Enter')add(true);}; consumeReopen(rk,inp);}
+    sec._taskDrop=(t)=>{ assignHorizon(t,h,key); };
     sec.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();sec.classList.add('drop');} });
     sec.addEventListener('dragleave',()=>sec.classList.remove('drop'));
     sec.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); sec.classList.remove('drop');
@@ -3338,13 +3477,14 @@ function horizonColsHTML(){ const today=todayKey();
   const secs=[['','','Inbox'],['day',today,'Today'],['week',currentPeriodKey('week'),'This week'],['month',currentPeriodKey('month'),'This month'],['quarter',currentPeriodKey('quarter'),'This quarter'],['year',currentPeriodKey('year'),'This year']];
   const cols=secs.map(([h,key,lbl])=>{ const items=topLevel(applyFilter(tasksInHorizon(h,key),taskFilter).sort(taskSort));
     return `<div class="ccol" data-hz="${h}" data-key="${key}" data-addkey="hzc|${h}|${key}"><div class="ccol-h"><span class="t" style="color:${HZ_DOT[h]}">${lbl}</span><span class="s">${esc(horizonLabel(h,key))}</span></div>
-      <div class="ccol-body">${items.map(taskCard).join('')}</div></div>`; }).join('');
+      <div class="ccol-body">${renderTaskList(items,'hzc|'+h+'|'+key)}</div></div>`; }).join('');
   return `<div class="view-ctl">${layoutToggle()}</div><div class="cols">${cols}</div>`;
 }
-function wireHorizonCols(scope){ wireTasks(scope); wireTaskDrag(scope); wireLayoutToggle(scope);
+function wireHorizonCols(scope){ wireTasks(scope); wireTaskGestures(scope); wireLayoutToggle(scope);
   scope.querySelectorAll('.ccol').forEach(col=>{ const h=col.dataset.hz, key=col.dataset.key;
     const inp=col.querySelector('.ccol-add input'), btn=col.querySelector('.ccol-add button');
     col._addTask=(v)=>{ if(!v)return; const t=newTask(v,''); assignHorizon(t,h,key); clampRepeat(t); tasks.push(t); save(); renderTasks(); };
+    col._taskDrop=(t)=>{ assignHorizon(t,h,key); clampRepeat(t); };
     const add=()=>col._addTask(inp.value.trim());
     if(btn)btn.onclick=add; if(inp)inp.onkeydown=e=>{if(e.key==='Enter')add();};
     col.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();col.classList.add('drop');} });
@@ -3373,12 +3513,12 @@ function boardsHTML(){
     <button class="bd-del" data-bd="delboard" title="Delete board">🗑</button></div>`;
   const cols=b.lists.map(l=>{ const items=tasksInList(b.id,l.id);
     return `<div class="ccol bd-list" data-list="${l.id}" data-addkey="bd|${b.id}|${l.id}"><div class="ccol-h bd-listh"><input class="bd-listname" data-bd="renamelist" data-id="${l.id}" value="${esc(l.name)}" maxlength="40"><button class="bd-listdel" data-bd="dellist" data-id="${l.id}" title="Delete list">×</button></div>
-      <div class="ccol-body">${items.map(taskCard).join('')}</div></div>`; }).join('');
+      <div class="ccol-body">${renderTaskList(items,'bd|'+b.id+'|'+l.id)}</div></div>`; }).join('');
   const addList=`<div class="ccol bd-addlist"><button data-bd="addlist">＋ Add list</button></div>`;
   const wrap = b.layout==='list' ? `<div class="bd-liststack">${cols}${addList}</div>` : `<div class="cols">${cols}${addList}</div>`;
   return bar+head+wrap;
 }
-function wireBoards(scope){ wireTasks(scope); wireTaskDrag(scope);
+function wireBoards(scope){ wireTasks(scope); wireTaskGestures(scope);
   const b=boardById(currentBoardId);
   scope.querySelectorAll('[data-bd]').forEach(node=>{ const act=node.dataset.bd;
     if(act==='new') node.onclick=()=>{ const nb={id:uid('b'),name:'Board '+(boards.length+1),lists:[{id:uid('l'),name:'To do'},{id:uid('l'),name:'Doing'},{id:uid('l'),name:'Done'}],layout:'columns',created:Date.now()}; boards.push(nb); currentBoardId=nb.id; save(); renderTasks(); };
@@ -3394,6 +3534,7 @@ function wireBoards(scope){ wireTasks(scope); wireTaskDrag(scope);
   scope.querySelectorAll('.bd-list').forEach(col=>{ const lid=col.dataset.list;
     const inp=col.querySelector('.ccol-add input'), btn=col.querySelector('.ccol-add button');
     col._addTask=(v)=>{ if(!v||!b)return; const t=smartTask(v, x=>{x.boardId=b.id;x.listId=lid;}); tasks.push(t); save(); renderTasks(); notionMaybeCreate(t); };
+    col._taskDrop=(t)=>{ if(b){ t.boardId=b.id; t.listId=lid; notionMaybeCreate(t); } };
     const add=()=>col._addTask(inp.value.trim());
     if(btn)btn.onclick=add; if(inp)inp.onkeydown=e=>{if(e.key==='Enter')add();};
     col.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();col.classList.add('drop');} });
