@@ -3590,13 +3590,13 @@ function carouselLabel(g,k){ const today=todayKey();
   return {main:k,sub:''}; }
 function carouselSchedule(t,g,key){ if(g==='day'){ t.horizon='day'; t.hkey=''; t.due=key; t.dueEnd=''; } else assignHorizon(t,g,key); clampRepeat(t); }
 function renderCarousel(g,host){ const body=host||$('taskBody'); const cur = g==='day'?todayKey():currentPeriodKey(g);
-  const cols=carouselWindow(g).map(k=>{ const items=topLevel(applyFilter(tasksInHorizon(g==='day'?'day':g,k),taskFilter).sort(taskSort)); const L=carouselLabel(g,k);
+  const cols=carouselWindow(g).map(k=>{ const items=sortTasks(topLevel(applyFilter(tasksInHorizon(g==='day'?'day':g,k),taskFilter))); const L=carouselLabel(g,k);
     return `<div class="ccol ${k===cur?'cur':''}" data-key="${k}" data-addkey="car|${g}|${k}"><div class="ccol-h"><span class="t">${esc(L.main)}</span>${L.sub?`<span class="s">${esc(L.sub)}</span>`:''}</div>
       <div class="ccol-body">${renderTaskList(items,'car|'+g+'|'+k)}</div></div>`; }).join('');
   const cv=colsVisible();
   const visSel=`<div class="cz-vis" title="Columns visible at once">${[1,3,5,7,0].map(n=>`<button data-cv="${n}" class="${cv===n?'on':''}">${n||'All'}</button>`).join('')}</div>`;
-  body.innerHTML=`<div class="view-ctl">${layoutToggle()}${visSel}<div class="cz-pager"><button data-cz="-1" title="Earlier">‹</button><button data-cz="now">Today</button><button data-cz="1" title="Later">›</button></div></div><div class="cols${cv?' fit':''}"${cv?` style="--cn:${cv}"`:''}>${cols}</div>`;
-  wireTasks(body); wireTaskGestures(body); wireLayoutToggle(body);
+  body.innerHTML=`<div class="view-ctl">${layoutToggle()}${groupSortBar(false)}${visSel}<div class="cz-pager"><button data-cz="-1" title="Earlier">‹</button><button data-cz="now">Today</button><button data-cz="1" title="Later">›</button></div></div><div class="cols${cv?' fit':''}"${cv?` style="--cn:${cv}"`:''}>${cols}</div>`;
+  wireTasks(body); wireTaskGestures(body); wireLayoutToggle(body); wireGroupSort(body);
   body.querySelectorAll('[data-cz]').forEach(b=>b.onclick=()=>{ const v=b.dataset.cz; if(v==='now'){colOffset[g]=0;colsScrollGoCur=true;} else colOffset[g]=(colOffset[g]||0)+(+v)*CAROUSEL_CFG[g].step; renderTasks(); });
   body.querySelectorAll('[data-cv]').forEach(b=>b.onclick=()=>{ settings.colsVisible=+b.dataset.cv; colsScrollGoCur=true; save(); renderTasks(); });
   body.querySelectorAll('.ccol').forEach(col=>{ const key=col.dataset.key;
@@ -3615,13 +3615,13 @@ function renderCarousel(g,host){ const body=host||$('taskBody'); const cur = g==
 /* ---- period list views (Week / Month / Quarter / Year / Life) ---- */
 function renderPeriodView(body,hview){ const h=hview||taskView, key=curKey(h);
   let head;
-  if(h!=='life') head=`<div class="view-ctl">${layoutToggle()}<div class="period-lbl">${esc(horizonLabel(h,key))}</div></div>`+periodStripHTML(h,key);
-  else head=`<div class="period-nav"><div class="lbl">Life goals — no calendar, just direction</div></div>`;
-  const list=topLevel(applyFilter(tasksInHorizon(h,key),taskFilter).sort(taskSort));
+  if(h!=='life') head=`<div class="view-ctl">${layoutToggle()}${groupSortBar(false)}<div class="period-lbl">${esc(horizonLabel(h,key))}</div></div>`+periodStripHTML(h,key);
+  else head=`<div class="view-ctl">${groupSortBar(false)}<div class="period-lbl">Life goals — no calendar, just direction</div></div>`;
+  const list=sortTasks(topLevel(applyFilter(tasksInHorizon(h,key),taskFilter)));
   let out=head;
   out+= list.length?renderTaskList(list,'per|'+h+'|'+key):`<div class="empty-t">Nothing planned for this ${h} yet.</div>`;
   out+=`<div class="qadd qadd-bottom"><input id="qaddInput" placeholder="Add a ${h} goal…" maxlength="200"><button id="qaddBtn">+</button></div>`;
-  body.innerHTML=out; wireTasks(body); wireTaskGestures(body); wireLayoutToggle(body); if(h!=='life')wirePeriodStrip(body,h,key);
+  body.innerHTML=out; wireTasks(body); wireTaskGestures(body); wireLayoutToggle(body); wireGroupSort(body); if(h!=='life')wirePeriodStrip(body,h,key);
   const qi=$('qaddInput'),qb=$('qaddBtn');
   const add=(reopen)=>{const v=qi.value.trim();if(!v)return;const t=newTask(v,'');assignHorizon(t,h,key);tasks.push(t);if(reopen)_pendingAddReopen='qadd';qi.value='';save();renderTasks();};
   qb.onclick=()=>add(false); qi.onkeydown=e=>{if(e.key==='Enter')add(true);}; consumeReopen('qadd',qi);
@@ -3644,8 +3644,8 @@ function horizonSections(){ const today=todayKey();
   return [['year',currentPeriodKey('year')],['quarter',currentPeriodKey('quarter')],
           ['month',currentPeriodKey('month')],['week',currentPeriodKey('week')],['day',today],['','']]; }
 function horizonHTML(){
-  return `<div class="view-ctl">${layoutToggle()}</div>`+horizonSections().map(([h,key])=>{
-    const items=topLevel(applyFilter(tasksInHorizon(h,key),taskFilter).sort(taskSort));
+  return `<div class="view-ctl">${layoutToggle()}${groupSortBar(false)}</div>`+horizonSections().map(([h,key])=>{
+    const items=sortTasks(topLevel(applyFilter(tasksInHorizon(h,key),taskFilter)));
     const all=topLevel(tasksInHorizon(h,key)); const totN=all.length, doneN=all.filter(isTaskDone).length;
     const id=h||'inbox'; const collapsed=collapsedHorizons.has(id);
     const body=items.length?renderTaskList(items,'hzs|'+id):'<div class="empty-t" style="padding:6px 0">— drop a task here —</div>';
@@ -3658,7 +3658,7 @@ function horizonHTML(){
   }).join('');
 }
 function wireHorizon(scope){
-  wireTasks(scope); wireTaskGestures(scope); wireLayoutToggle(scope);
+  wireTasks(scope); wireTaskGestures(scope); wireLayoutToggle(scope); wireGroupSort(scope);
   scope.querySelectorAll('.hz-head').forEach(hd=>hd.onclick=e=>{ const sec=hd.closest('.hz-sec'); const id=sec.dataset.id;
     if(collapsedHorizons.has(id))collapsedHorizons.delete(id);else collapsedHorizons.add(id); sec.classList.toggle('collapsed'); });
   scope.querySelectorAll('.hz-sec').forEach(sec=>{ const h=sec.dataset.h, key=sec.dataset.key;
@@ -3676,12 +3676,12 @@ function wireHorizon(scope){
 /* ---- Snapshot view, columns layout: Inbox · Today · Week · Month · Quarter · Year side-by-side ---- */
 function horizonColsHTML(){ const today=todayKey();
   const secs=[['','','Inbox'],['day',today,'Today'],['week',currentPeriodKey('week'),'This week'],['month',currentPeriodKey('month'),'This month'],['quarter',currentPeriodKey('quarter'),'This quarter'],['year',currentPeriodKey('year'),'This year']];
-  const cols=secs.map(([h,key,lbl])=>{ const items=topLevel(applyFilter(tasksInHorizon(h,key),taskFilter).sort(taskSort));
+  const cols=secs.map(([h,key,lbl])=>{ const items=sortTasks(topLevel(applyFilter(tasksInHorizon(h,key),taskFilter)));
     return `<div class="ccol" data-hz="${h}" data-key="${key}" data-addkey="hzc|${h}|${key}"><div class="ccol-h"><span class="t" style="color:${HZ_DOT[h]}">${lbl}</span><span class="s">${esc(horizonLabel(h,key))}</span></div>
       <div class="ccol-body">${renderTaskList(items,'hzc|'+h+'|'+key)}</div></div>`; }).join('');
-  const ctl=layoutToggle(); return `${ctl?`<div class="view-ctl">${ctl}</div>`:''}<div class="cols">${cols}</div>`;
+  return `<div class="view-ctl">${layoutToggle()}${groupSortBar(false)}</div><div class="cols">${cols}</div>`;
 }
-function wireHorizonCols(scope){ wireTasks(scope); wireTaskGestures(scope); wireLayoutToggle(scope);
+function wireHorizonCols(scope){ wireTasks(scope); wireTaskGestures(scope); wireLayoutToggle(scope); wireGroupSort(scope);
   scope.querySelectorAll('.ccol').forEach(col=>{ const h=col.dataset.hz, key=col.dataset.key;
     const inp=col.querySelector('.ccol-add input'), btn=col.querySelector('.ccol-add button');
     col._addTask=(v)=>{ if(!v)return; const t=newTask(v,''); assignHorizon(t,h,key); clampRepeat(t); tasks.push(t); save(); renderTasks(); };
@@ -3701,7 +3701,7 @@ function wireHorizonCols(scope){ wireTasks(scope); wireTaskGestures(scope); wire
    Each board toggles between column (kanban) and list layout.
    ==================================================================== */
 function boardById(id){ return boards.find(b=>b.id===id)||null; }
-function tasksInList(boardId,listId){ return topLevel(applyFilter(tasks.filter(t=>t.boardId===boardId && t.listId===listId),taskFilter).sort(taskSort)); }
+function tasksInList(boardId,listId){ return sortTasks(topLevel(applyFilter(tasks.filter(t=>t.boardId===boardId && t.listId===listId),taskFilter))); }
 function boardsHTML(){
   if(!boards.length) return `<div class="bd-bar"><span class="bd-empty">No boards yet.</span><button class="bd-new" data-bd="new">＋ New board</button></div>
     <div class="empty-t">Boards are kanban projects — make one, add lists, then drop tasks into them. A task can be on a board and still have a date.</div>`;
@@ -3711,6 +3711,7 @@ function boardsHTML(){
   const bar=`<div class="bd-bar">${tabs}<button class="bd-new" data-bd="new">＋ New board</button></div>`;
   const head=`<div class="bd-head"><input class="bd-title" data-bd="rename" value="${esc(b.name)}" maxlength="60">
     <div class="lay-toggle"><button data-bdlay="columns" class="${b.layout!=='list'?'on':''}">▦ Columns</button><button data-bdlay="list" class="${b.layout==='list'?'on':''}">☰ List</button></div>
+    ${groupSortBar(false)}
     <button class="bd-del" data-bd="delboard" title="Delete board">🗑</button></div>`;
   const cols=b.lists.map(l=>{ const items=tasksInList(b.id,l.id);
     return `<div class="ccol bd-list" data-list="${l.id}" data-addkey="bd|${b.id}|${l.id}"><div class="ccol-h bd-listh"><input class="bd-listname" data-bd="renamelist" data-id="${l.id}" value="${esc(l.name)}" maxlength="40"><button class="bd-listdel" data-bd="dellist" data-id="${l.id}" title="Delete list">×</button></div>
@@ -3719,7 +3720,7 @@ function boardsHTML(){
   const wrap = b.layout==='list' ? `<div class="bd-liststack">${cols}${addList}</div>` : `<div class="cols">${cols}${addList}</div>`;
   return bar+head+wrap;
 }
-function wireBoards(scope){ wireTasks(scope); wireTaskGestures(scope);
+function wireBoards(scope){ wireTasks(scope); wireTaskGestures(scope); wireGroupSort(scope);
   const b=boardById(currentBoardId);
   scope.querySelectorAll('[data-bd]').forEach(node=>{ const act=node.dataset.bd;
     if(act==='new') node.onclick=()=>{ const nb={id:uid('b'),name:'Board '+(boards.length+1),lists:[{id:uid('l'),name:'To do'},{id:uid('l'),name:'Doing'},{id:uid('l'),name:'Done'}],layout:'columns',created:Date.now()}; boards.push(nb); currentBoardId=nb.id; save(); renderTasks(); };
