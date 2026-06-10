@@ -516,7 +516,7 @@
   .wk-adrow{border-top:1px solid var(--stroke-soft);border-bottom:1px solid var(--stroke);min-height:30px}
   .wk-adcell{border-left:1px solid var(--stroke-soft);padding:3px;display:flex;flex-direction:column;gap:4px;min-width:0;max-height:120px;overflow-y:auto}
   .wk-adcell.drop{background:var(--glass-2)}
-  .wk-adchip{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink);background:var(--track-bg);border-left:3px solid var(--bc,var(--violet));border-radius:5px;padding:4px 6px;cursor:grab;white-space:nowrap;overflow:hidden;min-width:0}
+  .wk-adchip{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink);background:var(--track-bg);border-left:3px solid var(--bc,var(--violet));border-radius:5px;padding:4px 6px;cursor:grab;white-space:nowrap;overflow:hidden;min-width:0;flex:0 0 auto}
   .wk-adchip.done{opacity:.55}.wk-adchip.done .cn{text-decoration:line-through}
   .wk-adchip .cb{width:13px;height:13px;border-radius:4px;border:1.5px solid var(--faint);background:none;flex:none;display:grid;place-items:center;cursor:pointer;padding:0}
   .wk-adchip .cb.on{background:var(--ok);border-color:var(--ok)}
@@ -2835,9 +2835,9 @@ function wireGenericKanban(body){ wireTasks(body); wireTaskGestures(body); wireG
 const SMART_VIEWS=['all','today','next7','inbox'];
 function smartViewMode(){ return settings.smartMode==='kanban'?'kanban':'list'; }
 function smartPool(view){ const today=todayKey();
-  if(view==='today') return tasks.filter(t=> (t.due && t.due<=today) || (t.due && t.dueEnd && t.due<=today && t.dueEnd>=today) );
+  if(view==='today') return tasks.filter(t=> (t.due===today) || (t.due && t.dueEnd && t.due<=today && t.dueEnd>=today) );  // today only (overdue lives in All)
   if(view==='next7')  return tasks.filter(t=> t.due && t.due>=today && t.due<=addDays(today,7) );
-  if(view==='inbox')  return tasks.filter(t=> !t.due && !t.horizon && !t.boardId );
+  if(view==='inbox')  return tasks.filter(t=> !t.boardId );   // not yet organized into a list/project — a holding area (may be dated)
   return tasks.slice();   // all
 }
 function viewModeToggle(){ const m=smartViewMode();
@@ -2852,10 +2852,11 @@ function renderSmartList(view){ const body=$('taskBody'); const mode=smartViewMo
   const toolbar=`<div class="view-ctl sl-ctl">${viewModeToggle()}${groupSortBar()}</div>`;
   const cols=kanbanGroups(gb);
   if(mode==='kanban'){
-    const colsHTML=cols.map(c=>{ const items=sortTasks(pool.filter(c.match)); const activeN=items.filter(t=>!isTaskDone(t)).length;
+    const colsHTML=cols.map(c=>{ const items=sortTasks(pool.filter(c.match)); if(!items.length)return'';   // hide empty buckets (no stray "Later"/etc.)
+      const activeN=items.filter(t=>!isTaskDone(t)).length;
       return `<div class="kcol" data-gk="${esc(c.key)}"><h4><span class="gk-dot" style="background:${c.color}"></span> ${esc(c.label)} <span class="n">${activeN}</span></h4>
-        <div class="ccol-body">${items.length?renderTaskList(items,'sk|'+view+'|'+c.key):'<div class="empty-t" style="padding:8px 0">—</div>'}</div></div>`; }).join('');
-    body.innerHTML=toolbar+`<div class="kanban">${colsHTML}</div>`;
+        <div class="ccol-body">${renderTaskList(items,'sk|'+view+'|'+c.key)}</div></div>`; }).join('');
+    body.innerHTML=toolbar+`<div class="kanban">${colsHTML||'<div class="empty-t">Nothing here yet.</div>'}</div>`;
   } else {
     let listHTML;
     if(gb==='none'){ const items=sortTasks(pool); listHTML=items.length?renderTaskList(items,'sk|'+view):'<div class="empty-t">Nothing here yet.</div>'; }
