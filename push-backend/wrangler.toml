@@ -1,0 +1,10 @@
+name = "focus-den-push"
+main = "push-worker.js"
+compatibility_date = "2024-09-01"
+
+# Cron: run every minute. The worker sends any push whose fire time has arrived.
+[triggers]
+crons = ["* * * * *"]
+
+# All config is set as SECRETS (wrangler secret put …), not here, so nothing
+# private is committed: RTDB_URL, RTDB_KEY, VAPID_PUBLIC, VAPID_PRIVATE_JWK, VAPID_SUBJECT.

@@ -1620,6 +1620,45 @@ const CLOUD={
 const cloudOn=()=>CLOUD.url.startsWith('http')&&CLOUD.key.length>3;
 const cloudRef=()=>`${CLOUD.url.replace(/\/+$/,'')}/focusden/${encodeURIComponent(CLOUD.key)}.json`;
 const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.random().toString(36).slice(2,8);localStorage.setItem('fd_device',d);}return d;}catch(e){return 'dev'+Math.random().toString(36).slice(2,6);}})();
+/* ---- Web Push: focus/break-end notification when the app is fully CLOSED (backstop for the
+   in-app local ones). Paste the VAPID public key from push-backend/generate-vapid.mjs below;
+   until then push stays off and only the local notifications fire. Pairs with the Cloudflare
+   cron worker (push-backend/) which sends the push when an alarm's time arrives. ---- */
+const PUSH_VAPID_PUBLIC='';   // base64url 65-byte P-256 point — must equal the worker's VAPID_PUBLIC
+const pushRef=()=>`${CLOUD.url.replace(/\/+$/,'')}/push/${encodeURIComponent(CLOUD.key)}/${encodeURIComponent(DEVICE)}.json`;
+let pushSub=null;             // this device's PushSubscription (as JSON) once subscribed
+function urlB64ToU8(s){ s=String(s).replace(/-/g,'+').replace(/_/g,'/'); const pad='='.repeat((4-s.length%4)%4); const raw=atob(s+pad); const o=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++)o[i]=raw.charCodeAt(i); return o; }
+/* Subscribe this installed PWA to push once permission is granted. No-ops on the web build,
+   inside the Notion iframe, without a VAPID key, or where unsupported — local notifs still work. */
+async function ensurePushSub(){
+  try{
+    if(!PUSH_VAPID_PUBLIC || window.self!==window.top) return null;
+    if(settings.notify!==true) return null;
+    if(!('Notification'in window)||Notification.permission!=='granted') return null;
+    if(!('serviceWorker'in navigator)||!('PushManager'in window)) return null;
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlB64ToU8(PUSH_VAPID_PUBLIC)});
+    pushSub=sub.toJSON();
+    pushAlarmSync();                                  // mirror any already-running timer at once
+    return pushSub;
+  }catch(e){ return null; }
+}
+/* Mirror the running pomodoro phase's end into the RTDB /push alarm (server backstop), or clear
+   it. Debounced, fire-and-forget. The live app overwrites/clears this before each boundary, so a
+   closed app is the only one that actually receives a server push (no duplicate with the local). */
+let _pushAlarmT=null;
+function pushAlarmSync(){ if(_pushAlarmT)return; _pushAlarmT=setTimeout(()=>{ _pushAlarmT=null; _pushAlarmFlush(); },600); }
+function _pushAlarmFlush(){
+  if(!cloudOn()||!PUSH_VAPID_PUBLIC) return;
+  const want=!!(pushSub && settings.notify===true && active && mode==='pomo' && endStamp && endStamp>Date.now());
+  try{
+    if(want){
+      const e=phase==='focus'?{title:'Focus block done ✅',body:'Time for a break.'}:{title:'Break over ☕',body:'Back to focus.'};
+      fetch(pushRef(),{method:'PUT',body:JSON.stringify({fireAt:Math.round(endStamp),title:e.title,body:e.body,tag:'fd-timer',sub:pushSub,savedAt:Date.now()})}).catch(()=>{});
+    } else { fetch(pushRef(),{method:'DELETE'}).catch(()=>{}); }
+  }catch(e){}
+}
 /* resolve sync config: URL params (?fdurl=&fdkey= — reliable inside the Notion iframe) override saved → baked defaults */
 (function loadCloudCfg(){
   try{ const p=new URLSearchParams(location.search); const u=p.get('fdurl'), k=p.get('fdkey');
@@ -1866,7 +1905,7 @@ function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_
    All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
 function timerSnap(){ return { active, mode, phase, subjectId:(typeof $==='function'&&$('activeSubject')?$('activeSubject').value:''),
   currentTask, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, savedAt:Date.now() }; }
-function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} }
+function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); }
 
 /* ====================================================================
    UNIFIED TASK MODEL  — a single `tasks` array is the source of truth.
@@ -2077,7 +2116,7 @@ function tickFn(){
   while(active && mode==='pomo' && endStamp && endStamp<=Date.now() && guard++<2000){ completePhase(); crossed++; }
   catchingUp=false;
   if(active && mode==='pomo' && endStamp) remaining=Math.max(0,(endStamp-Date.now())/1000);  // reflect the in-progress phase's true remaining at once
-  if(crossed>0) signalPhaseChange();   // one chime + flash + notification for the phase we landed in
+  if(crossed>0){ signalPhaseChange(); saveTimer(); }   // one chime/flash/notification + reconcile the server-push alarm (also clears it on terminal completion)
   renderClock();
 }
 /* Single end-of-phase signal (sound, screen flash, system notification) reflecting where we
@@ -4670,11 +4709,11 @@ $('settingsBtn').onclick=()=>{$('setFocus').value=settings.focus;$('setSessions'
 /* reflect the real state: "on" only when enabled AND the OS still grants permission */
 function refreshNotifyToggle(){ const ok=('Notification' in window)&&Notification.permission==='granted'&&settings.notify===true; $('setNotify').classList.toggle('on',ok); }
 $('setNotify').onclick=async ()=>{
-  if(settings.notify===true){ settings.notify=false; refreshNotifyToggle(); save(); return; }   // turn off
+  if(settings.notify===true){ settings.notify=false; refreshNotifyToggle(); save(); pushAlarmSync(); return; }   // turn off (also clears the server alarm)
   if(!('Notification' in window)){ alert('This browser doesn’t support notifications.'); return; }
   let perm=Notification.permission;
   if(perm!=='granted'){ try{ perm=await Notification.requestPermission(); }catch(e){} }
-  if(perm==='granted'){ settings.notify=true; refreshNotifyToggle(); save(); fdNotify('Notifications on ✅','You’ll get a heads-up when a focus block or break ends.'); }
+  if(perm==='granted'){ settings.notify=true; refreshNotifyToggle(); save(); ensurePushSub(); fdNotify('Notifications on ✅','You’ll get a heads-up when a focus block or break ends.'); }
   else { settings.notify=false; refreshNotifyToggle(); alert('Notifications are blocked. Allow them for Focus Den in your browser/OS settings, then toggle this again.'); }
 };
 $('railSettings').onclick=()=>$('settingsBtn').click();   // settings reachable from the rail on every tab (timer can be hidden)
@@ -4968,6 +5007,7 @@ async function boot(){
   refreshDplus(); renderSubjectSelect();
   // resume a live focus session that an iOS-Safari tab-reload would otherwise lose (stopwatch + pomodoro, running)
   if(!restoreTimer()){ running=null; setMode('pomo'); }
+  ensurePushSub();   // re-establish the push subscription after a reload (no-op until a VAPID key is set)
   document.querySelectorAll('#taskViews [data-v]').forEach(x=>x.classList.toggle('on',x.dataset.v===taskView)); // reflect the restored view
   renderSubjects(); refreshStats(); renderCalendar();
   // two-way cloud convergence: pull other-device / Notion-sync edits periodically and on refocus

@@ -91,3 +91,30 @@ async function staleWhileRevalidate(req) {
 self.addEventListener('message', (event) => {
   if (event.data === 'skipWaiting') self.skipWaiting();
 });
+
+/* Web Push (focus/break-end notification when the app is fully closed). The push
+   payload is JSON {title, body, tag} sent by the Cloudflare cron worker. */
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; }
+  catch (e) { try { data = { body: event.data && event.data.text() }; } catch (_) { data = {}; } }
+  const title = data.title || 'Focus Den';
+  const opts = {
+    body: data.body || '',
+    icon: 'icon-192.png', badge: 'icon-192.png',
+    tag: data.tag || 'fd-timer', renotify: true,
+    data: { url: './' }
+  };
+  event.waitUntil(self.registration.showNotification(title, opts));
+});
+
+// Tapping the banner focuses an open Focus Den window or opens one.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || './';
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const w of wins) { if ('focus' in w) { try { await w.focus(); return; } catch (e) {} } }
+    if (self.clients.openWindow) await self.clients.openWindow(url);
+  })());
+});
