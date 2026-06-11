@@ -337,7 +337,7 @@
   .vm-cal.on{color:var(--accent-ink);background:var(--accent);border-color:transparent;font-weight:600}
   .tk-split{display:flex;gap:18px;align-items:flex-start}
   .tk-split-list{flex:1 1 0;min-width:0}
-  .tk-split-cal{flex:0 0 50%;min-width:0;position:sticky;top:8px}
+  .tk-split-cal{flex:0 0 60%;min-width:0;position:sticky;top:8px}
   @media(max-width:880px){ .tk-split{flex-direction:column} .tk-split-cal{flex:none;width:100%;position:static} }
   /* smart-list (All/Today/Next 7/Inbox) — list mode grouped sections */
   .sl-list{display:flex;flex-direction:column;gap:14px}
@@ -3194,11 +3194,14 @@ function viewModeToggle(){ const m=smartViewMode();
     .map(([v,l])=>`<button data-vm="${v}" class="${m===v?'on':''}">${l}</button>`).join('')+`</div>`; }
 function smartQuickAdd(view){ const ph = view==='inbox'?'Add to inbox…' : view==='today'?'Add a task for today…' : view==='next7'?'Add a task…' : 'Add a task…';
   return `<div class="qadd qadd-bottom sl-qa"><input class="sl-add" placeholder="${ph}" maxlength="200"><button class="sl-addbtn">+</button></div>`; }
-function renderSmartList(view){ const body=$('taskBody'); const mode=smartViewMode();
+function renderSmartList(view){ const body=$('taskBody');
+  const showCal = !!settings.showCal;   // TickTick-style "show with calendar" split
+  const mode = showCal ? 'list' : smartViewMode();   // the calendar split always pairs with the list view (never kanban/timeline)
   if(!settings.groupBy) settings.groupBy='date';                     // date-first feel for smart lists
   const gb=settings.groupBy||'date';
   const pool=topLevel(applyFilter(smartPool(view),taskFilter));
-  const showCal = mode!=='timeline' && !!settings.showCal;   // TickTick-style "show with calendar" split
+  // with the calendar peek open, auto-collapse the sub-page nav so the list+calendar get the full width
+  if(showCal) $('tab-tasks').classList.add('nav-collapsed');
   const toolbar='';   // Filter·Sort·Group + view mode now live in the persistent header (.tv-head)
   // All & Inbox use the roomy coarse buckets (Overdue/Today/Next 7/Later/No date); Today & Next7 keep per-day
   const cols=(gb==='date'&&(view==='all'||view==='inbox'))?smartDateGroups():kanbanGroups(gb);
@@ -3236,7 +3239,10 @@ function renderSmartList(view){ const body=$('taskBody'); const mode=smartViewMo
     if(mode==='kanban'){ node._addTask=(v)=>{ if(!v)return; const t=smartTask(v); desc.drop(t); clampRepeat(t); tasks.push(t); save(); renderTasks(); };
       node.dataset.addkey='ka|'+view+'|'+desc.key; installHoverAdd(node.querySelector('.ccol-body'), node._addTask, node.dataset.addkey); } });
 }
-function wireViewMode(scope){ scope.querySelectorAll('[data-vm]').forEach(b=>b.onclick=()=>{ settings.smartMode=b.dataset.vm; save(); renderTasks(); }); }
+function setSmartMode(m){ settings.smartMode=m;
+  if(m!=='list'){ settings.showCal=false; $('tab-tasks').classList.remove('nav-collapsed'); }   // calendar peek only rides along with the list view
+  save(); renderTasks(); }
+function wireViewMode(scope){ scope.querySelectorAll('[data-vm]').forEach(b=>b.onclick=()=>setSmartMode(b.dataset.vm)); }
 function wireSmartAdd(scope,view){ const inp=scope.querySelector('.sl-add'), btn=scope.querySelector('.sl-addbtn'); if(!inp)return; const today=todayKey();
   const add=()=>{ const v=inp.value.trim(); if(!v)return;
     const t=smartTask(v, x=>{ if(view==='today'){ x.due=today; x.horizon='day'; x.hkey=''; } else if(view==='next7'){ x.due=addDays(today,1); x.horizon='day'; x.hkey=''; } });
@@ -4620,7 +4626,7 @@ function syncTvViewMenu(){
   $('tvSizeGroup').style.display=(mode==='kanban')?'':'none';   // card size only matters for the kanban
   const ks=settings.kanbanSize||'small';
   $('tvSizePick').querySelectorAll('[data-ks]').forEach(b=>b.classList.toggle('on',b.dataset.ks===ks));
-  $('tvCalGroup').style.display=(mode==='timeline')?'none':'';   // calendar split doesn't apply to timeline
+  $('tvCalGroup').style.display='';   // reachable from any mode — invoking it switches the tasks to list view
   $('tvCalToggle').classList.toggle('on',!!settings.showCal);
 }
 function openTvView(){ const m=$('tvViewMenu'),b=$('tvViewBtn'); closeTaskFilter(); syncTvViewMenu(); b.classList.add('open');
@@ -4628,9 +4634,12 @@ function openTvView(){ const m=$('tvViewMenu'),b=$('tvViewBtn'); closeTaskFilter
   m.style.left=Math.max(8,Math.min(r.right-w, innerWidth-8-w))+'px'; m.style.top=(r.bottom+8)+'px'; m.style.visibility=''; }
 function closeTvView(){ const m=$('tvViewMenu'); if(m)m.classList.remove('open'); const b=$('tvViewBtn'); if(b)b.classList.remove('open'); }
 $('tvViewBtn').onclick=e=>{ e.stopPropagation(); $('tvViewMenu').classList.contains('open')?closeTvView():openTvView(); };
-$('tvViewModePick').querySelectorAll('[data-vm]').forEach(b=>b.onclick=()=>{ settings.smartMode=b.dataset.vm; save(); syncTvViewMenu(); renderTasks(); });
+$('tvViewModePick').querySelectorAll('[data-vm]').forEach(b=>b.onclick=()=>{ setSmartMode(b.dataset.vm); syncTvViewMenu(); });
 $('tvSizePick').querySelectorAll('[data-ks]').forEach(b=>b.onclick=()=>{ settings.kanbanSize=b.dataset.ks; save(); syncTvViewMenu(); renderTasks(); });
-$('tvCalToggle').onclick=()=>{ settings.showCal=!settings.showCal; save(); syncTvViewMenu(); renderTasks(); };
+$('tvCalToggle').onclick=()=>{ settings.showCal=!settings.showCal;
+  if(settings.showCal) settings.smartMode='list';   // invoking the calendar drops the tasks into list view
+  else $('tab-tasks').classList.remove('nav-collapsed');   // closing it brings the sub-page nav back
+  save(); syncTvViewMenu(); renderTasks(); };
 document.addEventListener('mousedown',e=>{ const m=$('tvViewMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#tvViewBtn')||m.contains(e.target))return; closeTvView(); });
 window.addEventListener('resize',closeTvView);
 
