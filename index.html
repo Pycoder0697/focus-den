@@ -150,7 +150,7 @@
   .railtab.active{background:var(--glass-2);color:var(--amber)}
   .railtab.active::before{content:"";position:absolute;left:-8px;top:11px;bottom:11px;width:3px;border-radius:0 3px 3px 0;background:var(--amber)}
   .rail-tip{position:absolute;left:50px;top:50%;transform:translateY(-50%);white-space:nowrap;
-    background:var(--ink);color:var(--bg);font-size:11.5px;font-weight:600;padding:5px 9px;border-radius:7px;
+    background:var(--ink);color:var(--body-bg);font-size:11.5px;font-weight:600;padding:5px 9px;border-radius:7px;
     opacity:0;pointer-events:none;transition:.15s;z-index:60}
   .railtab:hover .rail-tip{opacity:1}
   .rail-spacer{flex:1 1 auto}
@@ -337,7 +337,8 @@
   .vm-cal.on{color:var(--accent-ink);background:var(--accent);border-color:transparent;font-weight:600}
   .tk-split{display:flex;gap:18px;align-items:flex-start}
   .tk-split-list{flex:1 1 0;min-width:0}
-  .tk-split-cal{flex:0 0 clamp(440px,54%,820px);min-width:0;position:sticky;top:8px}
+  .tk-split-cal{flex:0 0 clamp(620px,76%,1360px);min-width:0;position:sticky;top:8px}
+  .tk-split-list{max-width:380px}
   @media(max-width:880px){ .tk-split{flex-direction:column} .tk-split-cal{flex:none;width:100%;position:static} }
   /* smart-list (All/Today/Next 7/Inbox) — list mode grouped sections */
   .sl-list{display:flex;flex-direction:column;gap:14px}
@@ -1047,37 +1048,37 @@
   .cv2-dow .cv2-wkh{color:var(--violet)}
   .cv2-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
   .cv2-grid.cv2-grid8{grid-template-columns:repeat(7,1fr) .82fr}
-  .cv2-wcell{min-height:88px;border:1px solid var(--stroke-soft);border-radius:10px;padding:5px;background:var(--glass);
-    display:flex;flex-direction:column;gap:3px;overflow:hidden;position:relative;border-left:2px solid var(--violet)}
+  .cv2-wcell{min-height:120px;border:1px solid var(--stroke-soft);border-radius:10px;padding:6px;background:var(--glass);
+    display:flex;flex-direction:column;gap:4px;overflow:hidden;position:relative;border-left:2px solid var(--violet)}
   .cv2-wcell.drop{outline:2px dashed var(--accent);outline-offset:-2px}
   .cv2-wn{color:var(--violet)}
-  .cv2-grid[data-wide="1"] .cv2-wcell{min-height:104px}
-  .cv2-cell{min-height:88px;max-height:168px;border:1px solid var(--stroke-soft);border-radius:10px;padding:5px;background:var(--track-bg);
-    display:flex;flex-direction:column;gap:3px;overflow-y:auto;position:relative}
+  .cv2-grid[data-wide="1"] .cv2-wcell{min-height:150px}
+  .cv2-cell{min-height:120px;max-height:300px;border:1px solid var(--stroke-soft);border-radius:10px;padding:6px;background:var(--track-bg);
+    display:flex;flex-direction:column;gap:4px;overflow-y:auto;position:relative}
   .cv2-cell.other{opacity:.42}
   .cv2-cell.today{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
   .cv2-cell.drop{outline:2px dashed var(--accent);outline-offset:-2px}
-  .cv2-dn{display:flex;align-items:center;font-size:11.5px;color:var(--faint);font-weight:700;min-height:18px}
+  .cv2-dn{display:flex;align-items:center;font-size:13px;color:var(--faint);font-weight:700;min-height:20px}
   .cv2-cell.today .cv2-dn{color:var(--accent)}
   .cv2-add{margin-left:auto;width:18px;height:18px;border-radius:6px;border:none;background:var(--glass-2);color:var(--ink);
     cursor:pointer;font-size:13px;line-height:1;display:none;place-items:center;flex:none}
   .cv2-cell:hover .cv2-add,.cv2-wcell:hover .cv2-add{display:grid}
-  .cv2-chip{display:flex;align-items:center;gap:5px;font-size:11px;background:var(--card-bg);border:1px solid var(--stroke-soft);
-    border-radius:6px;padding:3px 5px;cursor:default;min-width:0}
+  .cv2-chip{display:flex;align-items:flex-start;gap:6px;font-size:12.5px;background:var(--card-bg);border:1px solid var(--stroke-soft);
+    border-radius:7px;padding:4px 7px;cursor:default;min-width:0}
   .cv2-chip.tkdrag{opacity:.4}
   .cv2-chip .cdot{width:7px;height:7px;border-radius:50%;flex:none}
-  .cv2-chip .cv2-cb{width:14px;height:14px;border-radius:4px;border:1.5px solid var(--stroke);background:var(--field-bg);
+  .cv2-chip .cv2-cb{width:16px;height:16px;border-radius:5px;border:1.5px solid var(--stroke);background:var(--field-bg);
     cursor:pointer;flex:none;display:grid;place-items:center;padding:0;color:#0c3a24}
-  .cv2-chip .cv2-cb svg{width:9px;height:9px}
+  .cv2-chip .cv2-cb svg{width:10px;height:10px}
   .cv2-chip .cv2-cb.on{background:linear-gradient(135deg,var(--ok),#46c98a);border-color:transparent}
-  .cv2-chip .cn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+  .cv2-chip .cn{flex:1;min-width:0;overflow:hidden;cursor:pointer;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
   .cv2-chip.done .cn{text-decoration:line-through;color:var(--faint)}
-  .cv2-chip .cv2-cm{background:none;border:none;color:var(--faint);cursor:pointer;font-size:14px;line-height:1;padding:0 1px;flex:none;font-weight:700;visibility:hidden}
-  .cv2-chip:hover .cv2-cm{visibility:visible}
+  .cv2-chip .cv2-cm{background:none;border:none;color:var(--faint);cursor:pointer;font-size:14px;line-height:1;padding:0 1px;flex:none;font-weight:700;display:none}
+  .cv2-chip:hover .cv2-cm{display:block}
   .cv2-more{font-size:10px;color:var(--faint);cursor:default;padding-left:2px}
   .cv2-newinp{font-family:inherit;font-size:11px;color:var(--ink);background:var(--field-bg);border:1px solid var(--accent);
     border-radius:6px;padding:4px 6px;outline:none;width:100%}
-  .cv2-grid[data-wide="1"] .cv2-cell{min-height:104px}
+  .cv2-grid[data-wide="1"] .cv2-cell{min-height:150px}
 </style>
 </head>
 <body>
@@ -1087,15 +1088,15 @@
   <!-- VERTICAL NAV RAIL -->
   <nav class="rail">
     <div class="rail-logo" title="Focus Den">F</div>
-    <button class="railtab active" data-tab="subjects" title="Subjects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5A1.5 1.5 0 0 0 20 18.5z"/></svg><span class="rail-tip">Subjects</span></button>
-    <button class="railtab" data-tab="tasks" title="Tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6l1 1 2-2"/><path d="M4 12l1 1 2-2"/><circle cx="5" cy="18" r="1.2"/></svg><span class="rail-tip">Tasks</span></button>
-    <button class="railtab" data-tab="calendar" title="Calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg><span class="rail-tip">Calendar</span></button>
-    <button class="railtab" data-tab="horizon" title="Horizon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M6 12h12M9 18h6"/></svg><span class="rail-tip">Horizon</span></button>
-    <button class="railtab" data-tab="countdown" title="Countdown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12M7 3c0 5 4 6 5 9 1-3 5-4 5-9M7 21c0-5 4-6 5-9 1 3 5 4 5 9"/></svg><span class="rail-tip">Countdown</span></button>
-    <button class="railtab" data-tab="habits" title="Habits"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg><span class="rail-tip">Habits</span></button>
-    <button class="railtab" data-tab="stats" title="Stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="rail-tip">Stats</span></button>
-    <button class="railtab" data-tab="log" title="Log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="rail-tip">Log</span></button>
-    <button class="railtab" data-tab="music" title="Music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg><span class="rail-tip">Music</span></button>
+    <button class="railtab active" data-tab="subjects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5A1.5 1.5 0 0 0 20 18.5z"/></svg><span class="rail-tip">Subjects</span></button>
+    <button class="railtab" data-tab="tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6l1 1 2-2"/><path d="M4 12l1 1 2-2"/><circle cx="5" cy="18" r="1.2"/></svg><span class="rail-tip">Tasks</span></button>
+    <button class="railtab" data-tab="calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg><span class="rail-tip">Calendar</span></button>
+    <button class="railtab" data-tab="horizon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M6 12h12M9 18h6"/></svg><span class="rail-tip">Horizon</span></button>
+    <button class="railtab" data-tab="countdown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12M7 3c0 5 4 6 5 9 1-3 5-4 5-9M7 21c0-5 4-6 5-9 1 3 5 4 5 9"/></svg><span class="rail-tip">Countdown</span></button>
+    <button class="railtab" data-tab="habits"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg><span class="rail-tip">Habits</span></button>
+    <button class="railtab" data-tab="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="rail-tip">Stats</span></button>
+    <button class="railtab" data-tab="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="rail-tip">Log</span></button>
+    <button class="railtab" data-tab="music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg><span class="rail-tip">Music</span></button>
     <div class="rail-spacer"></div>
     <div class="rail-bottom">
       <span class="rail-sync" id="syncBadge" style="display:none" title="Cloud sync on">☁</span>
@@ -4111,10 +4112,10 @@ function renderHabitsTab(){ const body=$('hbBody'); if(!body)return; applyTaskWi
   if((settings.habitView||'list')==='calendar'){ body.innerHTML=habitCalHTML(live); }
   else { body.innerHTML=habitListHTML(live); }
   wireHabits(body); }
-function habitListHTML(live){ const today=todayKey(), wk=weekKeyOf(today);
-  const head=`<div class="hb-striphead"><span></span>${[...Array(7)].map((_,i)=>{ const d=addDays(wk,i); return `<span class="${d===today?'now':''}">${DOW1[i]}<b>${+d.slice(8,10)}</b></span>`; }).join('')}</div>`;
+function habitListHTML(live){ const today=todayKey(); const start=addDays(today,-6); const DLET=['S','M','T','W','T','F','S']; // trailing 7 days, today rightmost (TickTick-style)
+  const head=`<div class="hb-striphead"><span></span>${[...Array(7)].map((_,i)=>{ const d=addDays(start,i); const wd=new Date(d+'T00:00:00').getDay(); return `<span class="${d===today?'now':''}">${DLET[wd]}<b>${+d.slice(8,10)}</b></span>`; }).join('')}</div>`;
   const rows=live.map(h=>{
-    const strip=[...Array(7)].map((_,i)=>{ const d=addDays(wk,i); const due=habitDueOn(h,d),done=habitDoneOn(h,d),future=d>today;
+    const strip=[...Array(7)].map((_,i)=>{ const d=addDays(start,i); const due=habitDueOn(h,d),done=habitDoneOn(h,d),future=d>today;
       return `<button class="hb-cell ${done?'done':''} ${due?'':'off'} ${d===today?'today':''}" ${(!due||future)?'disabled':''} data-hb-day="${h.id}|${d}" style="--hc:${h.color||'var(--accent)'}">${done?'<span class="hb-tick">✓</span>':''}</button>`; }).join('');
     const todayDue=habitDueOn(h,today), todayDone=habitDoneOn(h,today);
     return `<div class="hb-row" data-id="${h.id}">
