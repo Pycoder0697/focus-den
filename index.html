@@ -447,6 +447,22 @@
   .view-filter button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
   .hz-subnav{max-width:100%;overflow-x:auto}
   .hz-pane{min-height:40px}
+  .view-ctl.cz-bar{justify-content:flex-end}
+  /* Countdown page (TickTick-style cards) */
+  .cd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+  .cd-card{position:relative;background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:16px;padding:22px 18px 18px;text-align:center;cursor:pointer;transition:.15s}
+  .cd-card:hover{border-color:var(--accent);box-shadow:var(--shadow)}
+  .cd-more{position:absolute;top:8px;right:8px;width:26px;height:26px;border:none;border-radius:7px;background:transparent;color:var(--faint);font-size:16px;line-height:1;cursor:pointer;opacity:0;transition:.15s}
+  .cd-card:hover .cd-more{opacity:1}
+  .cd-more:hover{background:var(--glass-2);color:var(--ink)}
+  .cd-emoji{font-size:26px;line-height:1;margin-bottom:8px}
+  .cd-name{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cd-num{font-size:42px;font-weight:800;letter-spacing:-.02em;color:var(--accent);line-height:1}
+  .cd-num.past{color:var(--faint)}
+  .cd-num.today{color:var(--ok);font-size:34px}
+  .cd-sub{font-size:11.5px;color:var(--faint);margin-top:10px}
+  .cd-empty{text-align:center;color:var(--faint);font-size:14px;padding:48px 0;line-height:2}
+  .cd-emptyadd{font-family:inherit;font-size:13px;color:var(--accent-ink);background:var(--accent);border:none;border-radius:999px;padding:9px 18px;cursor:pointer;font-weight:600}
 
   /* classier checkboxes (shared) — clean TickTick-style squares */
   .check,.tk-check,.cl .c{position:relative;background:var(--field-bg);border:2px solid var(--faint);box-shadow:none;
@@ -1014,6 +1030,8 @@
     <button class="railtab active" data-tab="subjects" title="Subjects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5A1.5 1.5 0 0 0 20 18.5z"/></svg><span class="rail-tip">Subjects</span></button>
     <button class="railtab" data-tab="tasks" title="Tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6l1 1 2-2"/><path d="M4 12l1 1 2-2"/><circle cx="5" cy="18" r="1.2"/></svg><span class="rail-tip">Tasks</span></button>
     <button class="railtab" data-tab="calendar" title="Calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg><span class="rail-tip">Calendar</span></button>
+    <button class="railtab" data-tab="horizon" title="Horizon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M6 12h12M9 18h6"/></svg><span class="rail-tip">Horizon</span></button>
+    <button class="railtab" data-tab="countdown" title="Countdown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12M7 3c0 5 4 6 5 9 1-3 5-4 5-9M7 21c0-5 4-6 5-9 1 3 5 4 5 9"/></svg><span class="rail-tip">Countdown</span></button>
     <button class="railtab" data-tab="stats" title="Stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="rail-tip">Stats</span></button>
     <button class="railtab" data-tab="log" title="Log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="rail-tip">Log</span></button>
     <button class="railtab" data-tab="music" title="Music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg><span class="rail-tip">Music</span></button>
@@ -1094,7 +1112,6 @@
           <button data-v="next7">Next 7 days</button>
           <button data-v="inbox">⮈ Inbox</button>
           <button data-v="boards">▤ Boards</button>
-          <button data-v="horizon">≣ Horizon</button>
           <button data-v="matrix">▥ Matrix</button>
           <button data-v="dashboard">◎ Dashboard</button>
         </div>
@@ -1114,6 +1131,29 @@
     <!-- CALENDAR -->
     <div class="tabview" id="tab-calendar">
       <div id="calBody"></div>
+    </div>
+
+    <!-- HORIZON (own page) -->
+    <div class="tabview" id="tab-horizon">
+      <div class="tv-head">
+        <div class="tv-title">Horizon</div>
+        <div class="tv-actions">
+          <button id="hzSortBtn" class="tv-iconbtn" title="Filter · Sort"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 20l-3-3M7 20l3-3"/><path d="M12 6h9M12 12h6M12 18h3"/></svg><span class="tv-dot" id="hzFilterDot"></span></button>
+          <button id="hzViewBtn" class="tv-iconbtn" title="Layout &amp; panes"><svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+        </div>
+      </div>
+      <div id="hzBody"></div>
+    </div>
+
+    <!-- COUNTDOWN (TickTick-style) -->
+    <div class="tabview" id="tab-countdown">
+      <div class="tv-head">
+        <div class="tv-title">Countdown</div>
+        <div class="tv-actions">
+          <button id="cdAddBtn" class="tv-iconbtn" title="New countdown"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        </div>
+      </div>
+      <div id="cdBody"></div>
     </div>
 
     <!-- STATS -->
@@ -1220,6 +1260,37 @@
   </div>
 </div>
 
+<!-- HORIZON LAYOUT POPOVER (the ⋯ on the Horizon page) -->
+<div id="hzViewMenu" class="pref-menu">
+  <div class="pref-group">
+    <div class="pref-h">Layout</div>
+    <div class="view-filter pref-seg" id="hzLayoutPick">
+      <button data-hzlay="columns">Columns</button>
+      <button data-hzlay="list">List</button>
+    </div>
+  </div>
+  <div class="pref-group" id="hzPanesGroup">
+    <div class="pref-h">Panes shown</div>
+    <div class="view-filter pref-seg" id="hzPanesPick">
+      <button data-cv="1">1</button>
+      <button data-cv="3">3</button>
+      <button data-cv="5">5</button>
+      <button data-cv="7">7</button>
+      <button data-cv="0">All</button>
+    </div>
+  </div>
+</div>
+
+<!-- COUNTDOWN EDIT MODAL -->
+<div class="overlay" id="ovCountdown"><div class="modal">
+  <h2 id="cdEditTitle">New countdown</h2>
+  <div class="field"><label>Emoji</label><input id="cdEmoji" maxlength="4" placeholder="🎯" style="max-width:90px;text-align:center;font-size:20px"></div>
+  <div class="field"><label>Name</label><input id="cdName" maxlength="80" placeholder="e.g. Prelims"></div>
+  <div class="field"><label>Date</label><input id="cdDate" type="date"></div>
+  <div id="cdEditActions" style="display:none;gap:8px;margin-top:4px"><button class="minor" id="cdDelete" style="color:var(--rose)">🗑 Delete</button></div>
+  <button class="save" id="cdSave">Save</button>
+</div></div>
+
 <!-- floating restore pill — shown only when the timer sidebar is hidden -->
 <button class="timer-restore" id="timerRestore" title="Show the timer"><span class="tr-ic">⏱</span><span id="timerRestoreTime">Timer</span></button>
 
@@ -1270,7 +1341,7 @@
   <p style="font-size:11px;color:var(--faint);margin:-2px 0 6px;line-height:1.5">Pull rows from specific Notion databases into specific board lists — they live only in that list, never in your inbox/planner. Needs a one-time Cloudflare Worker (holds your Notion token securely); the Worker URL goes above. See <b>notion-proxy-worker.js</b> in the repo for the 5-min setup.</p>
   <button class="save" id="saveSettings">Save</button>
   <button class="danger" id="resetAll">Reset all data</button>
-  <p style="text-align:center;font-size:10px;color:var(--faint);margin:10px 0 0;opacity:.7">Focus Den v2.8.0</p>
+  <p style="text-align:center;font-size:10px;color:var(--faint);margin:10px 0 0;opacity:.7">Focus Den v2.9.0</p>
 </div></div>
 
 <!-- PAUSE MODAL -->
@@ -1381,7 +1452,7 @@ const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.ran
 })();
 function applyCloudCfg(url,key){ CLOUD.url=(url||'').trim(); CLOUD.key=(key||'').trim();
   try{ if(cloudOn()) store.set('fd_cloud',JSON.stringify({url:CLOUD.url,key:CLOUD.key})); else { try{localStorage.removeItem('fd_cloud');}catch(_){} delete mem['fd_cloud']; } }catch(e){} }
-function snapshot(){return {settings,subjects,sessions,dayoff,tasks,distractions,boards,inboxLists,notionSources,_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local
+function snapshot(){return {settings,subjects,sessions,dayoff,tasks,distractions,boards,inboxLists,notionSources,countdowns,_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local
 async function cloudLoad(){ if(!cloudOn())return null; try{const r=await fetch(cloudRef(),{cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;} }
 let _cloudT=null, _lastLocalWrite=0, _lastSeenRemote=0;
 function cloudSave(){ if(!cloudOn())return; setSync('saving'); clearTimeout(_cloudT);
@@ -1402,13 +1473,15 @@ function applyRemote(cloud){
   if(Array.isArray(cloud.boards)) boards=cloud.boards;
   if(Array.isArray(cloud.inboxLists)) inboxLists=cloud.inboxLists;
   if(Array.isArray(cloud.notionSources)) notionSources=cloud.notionSources;
+  if(Array.isArray(cloud.countdowns)) countdowns=cloud.countdowns;
   normalizeData();
   store.set('fd_settings',JSON.stringify(settings));store.set('fd_subjects',JSON.stringify(subjects));
   store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
   store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
   store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
-  store.set('fd_notionsrc',JSON.stringify(notionSources));
+  store.set('fd_notionsrc',JSON.stringify(notionSources));store.set('fd_countdowns',JSON.stringify(countdowns));
   applyTheme(); refreshDplus(); renderSubjectSelect&&renderSubjectSelect(); refreshTaskSurfaces&&refreshTaskSurfaces(); refreshStats&&refreshStats(); renderCalendar&&renderCalendar();
+  if($('tab-countdown')&&$('tab-countdown').classList.contains('show')) renderCountdownTab();
 }
 async function pollCloud(){ if(!cloudOn())return; if(_cloudT)return; // don't pull mid-save
   const ae=document.activeElement; if(ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName))return; // don't clobber active typing
@@ -1543,7 +1616,7 @@ const todayKey=()=>dateKey(Date.now());
 
 /* ---------- state ---------- */
 const PALETTE=['#f5a623','#ff7a33','#2f9bff','#e0218a','#ff6b4a','#4f8cff','#c026d3','#5fc24a','#3fb36b','#a78bfa','#5fd3c4'];
-const FD_VERSION='2.8.0';
+const FD_VERSION='2.9.0';
 const DEF={focus:50,short:10,long:30,sessions:4,rounds:4,goal:240,autostart:false,examDate:'',urgentDays:3,theme:'dark'};
 let settings=Object.assign({...DEF}, JSON.parse(store.get('fd_settings')||'{}'));
 let subjects=JSON.parse(store.get('fd_subjects')||'null');
@@ -1557,6 +1630,7 @@ let tasks=JSON.parse(store.get('fd_tasks')||'[]'); // {id,name,due,priority,subj
 let distractions=JSON.parse(store.get('fd_distract')||'[]'); // {id,ts,note}
 let boards=JSON.parse(store.get('fd_boards')||'[]'); // {id,name,lists:[{id,name}],layout:'columns'|'list',created}
 let inboxLists=JSON.parse(store.get('fd_inboxlists')||'[]'); // {id,name} — named lists inside the Inbox
+let countdowns=JSON.parse(store.get('fd_countdowns')||'[]'); // {id,name,emoji,date(YYYY-MM-DD),created} — TickTick-style countdown cards
 let notionSources=JSON.parse(store.get('fd_notionsrc')||'[]'); // {id,name,dbId,boardId,listId,enabled,lastSync,lastErr,count} — each Notion DB pinned to ONE board list
 let running=JSON.parse(store.get('fd_running')||'null'); // {subjectId,start,mode}
 let roundCount=0;
@@ -1564,7 +1638,7 @@ function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_
   store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
   store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
   store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
-  store.set('fd_notionsrc',JSON.stringify(notionSources));
+  store.set('fd_notionsrc',JSON.stringify(notionSources));store.set('fd_countdowns',JSON.stringify(countdowns));
   store.set('fd_running',JSON.stringify(running));cloudSave();}
 /* device-local live-timer snapshot so an active session survives an iOS-Safari tab reload.
    All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
@@ -2699,7 +2773,9 @@ function taskSort(a,b){ const ad=isTaskDone(a),bd=isTaskDone(b); if(ad!==bd)retu
 const CHK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>';
 function tasksForSubject(id){ return tasks.filter(t=>t.subjectId===id); }
 /* re-render whichever task surfaces are on screen (keeps both tabs in step) */
-function refreshTaskSurfaces(){ renderSubjects(); if($('tab-tasks')&&$('tab-tasks').classList.contains('show')) renderTasks(); }
+function refreshTaskSurfaces(){ renderSubjects();
+  if($('tab-tasks')&&$('tab-tasks').classList.contains('show')) renderTasks();
+  else if($('tab-horizon')&&$('tab-horizon').classList.contains('show')) renderHorizonTab(); }
 
 function taskCard(t,depth){ depth=depth||0; const today=todayKey();
   const done=isTaskDone(t);
@@ -2977,10 +3053,7 @@ function updateTvHead(view){
   const t=$('tvTitle'); if(t)t.textContent=viewTitle(view);
   const smart=SMART_VIEWS.includes(view);
   const vb=$('tvViewBtn'); if(vb)vb.style.display=smart?'':'none';   // list/kanban/timeline + calendar + size live here, smart-lists only
-  const showGroup=smart, showSort=smart||view==='matrix'||view==='dashboard';
-  const gr=$('filterGroupRow'); if(gr)gr.style.display=showGroup?'':'none';
-  const sr=$('filterSortRow'); if(sr)sr.style.display=showSort?'':'none';
-  const dv=$('filterDivider'); if(dv)dv.style.display=(showGroup||showSort)?'':'none';
+  // group/sort row visibility is set when the popover opens (openTaskFilter), per the active page
 }
 function smartPool(view){ const today=todayKey();
   if(view==='today') return tasks.filter(t=> (t.due===today) || (t.due && t.dueEnd && t.due<=today && t.dueEnd>=today) );  // today only (overdue lives in All)
@@ -3648,20 +3721,21 @@ function syncTimerRestore(){ if(!settings.timerCollapsed)return; const rt=$('tim
 $('timerCollapse').onclick=()=>{ settings.timerCollapsed=true; save(); applyTimerCollapsed(); };
 $('timerRestore').onclick=()=>{ settings.timerCollapsed=false; save(); applyTimerCollapsed(); };
 
-function renderTasks(){ const body=$('taskBody'); if(!body)return; const today=todayKey(); applyTaskWidth();
+function renderTasks(){
+  if($('tab-horizon')&&$('tab-horizon').classList.contains('show')){ renderHorizonTab(); return; }   // Horizon is its own page now; horizon sub-renders re-route here
+  const body=$('taskBody'); if(!body)return; const today=todayKey(); applyTaskWidth();
   taskView=migrateView(taskView); updateTvHead(taskView);
   if(SMART_VIEWS.includes(taskView)){ renderSmartList(taskView); return; }   // All · Today · Next 7 days · Inbox
   if(taskView==='boards'){ body.innerHTML=boardsHTML(); wireBoards(body); return; }
   if(taskView==='matrix'){ body.innerHTML=matrixHTML(); wireMatrix(body); return; }
   if(taskView==='dashboard'){ body.innerHTML=dashboardHTML(); wireDashboard(body); return; }
-  if(taskView==='horizon'){ renderHorizon(body); return; }
   if(CAROUSEL_VIEWS.includes(taskView) && taskLayout()==='columns'){ renderCarousel(taskView); return; }
   if(taskView==='day'){ renderDayList(body); return; }   // Days list view = day strip + selected day's tasks
   if(taskView==='week'||taskView==='month'||taskView==='quarter'||taskView==='year'||taskView==='life'){ renderPeriodView(body); return; }
   renderSmartList('all');   // fallback
 }
 /* obsolete view ids → new homes (Agenda board, standalone Kanban/Timeline pages are now All + a view mode) */
-function migrateView(v){ return ({board:'all',kanban:'all',timeline:'all',calendar:'all',day:'all'})[v]||v; }
+function migrateView(v){ return ({board:'all',kanban:'all',timeline:'all',calendar:'all',day:'all',horizon:'all'})[v]||v; }
 /* ---- Inbox: multiple named lists, each with its own quick-add ---- */
 function inboxHTML(){ const all=topLevel(applyFilter(tasksInHorizon(''),taskFilter).sort(taskSort));
   const def=inboxLists[0].id; const multi=inboxLists.length>1;
@@ -3714,7 +3788,7 @@ function wirePeriodStrip(scope,h,key){
 /* Days list view: day strip + the chosen day's tasks */
 function renderDayList(body){ const key=dayListKey||todayKey();
   const list=topLevel(applyFilter(tasks.filter(t=>t.due===key||(t.due&&t.dueEnd&&t.due<=key&&t.dueEnd>=key)),taskFilter).sort(taskSort));
-  let out=`<div class="view-ctl">${layoutToggle()}</div>`+periodStripHTML('day',key);
+  let out=periodStripHTML('day',key);
   out+= list.length?renderTaskList(list,'day|'+key):'<div class="empty-t">Nothing on this day — capture a task below.</div>';
   out+=`<div class="qadd qadd-bottom"><input id="qaddInput" placeholder="Add a task for ${esc(prettyDate(key))}…" maxlength="200"><button id="qaddBtn">+</button></div>`;
   body.innerHTML=out; wireTasks(body); wireTaskGestures(body); wireLayoutToggle(body); wirePeriodStrip(body,'day',key);
@@ -3741,9 +3815,8 @@ function renderCarousel(g,host){ const body=host||$('taskBody'); const cur = g==
     return `<div class="ccol ${k===cur?'cur':''}" data-key="${k}" data-addkey="car|${g}|${k}"><div class="ccol-h"><span class="t">${esc(L.main)}</span>${L.sub?`<span class="s">${esc(L.sub)}</span>`:''}</div>
       <div class="ccol-body">${renderTaskList(items,'car|'+g+'|'+k)}</div></div>`; }).join('');
   const cv=colsVisible();
-  const visSel=`<div class="cz-vis" title="Columns visible at once">${[1,3,5,7,0].map(n=>`<button data-cv="${n}" class="${cv===n?'on':''}">${n||'All'}</button>`).join('')}</div>`;
-  body.innerHTML=`<div class="view-ctl">${layoutToggle()}${groupSortBar(false)}${visSel}<div class="cz-pager"><button data-cz="-1" title="Earlier">‹</button><button data-cz="now">Today</button><button data-cz="1" title="Later">›</button></div></div><div class="cols${cv?' fit':''}"${cv?` style="--cn:${cv}"`:''}>${cols}</div>`;
-  wireTasks(body); wireTaskGestures(body); wireLayoutToggle(body); wireGroupSort(body);
+  body.innerHTML=`<div class="view-ctl cz-bar"><div class="cz-pager"><button data-cz="-1" title="Earlier">‹</button><button data-cz="now">Today</button><button data-cz="1" title="Later">›</button></div></div><div class="cols${cv?' fit':''}"${cv?` style="--cn:${cv}"`:''}>${cols}</div>`;
+  wireTasks(body); wireTaskGestures(body);
   body.querySelectorAll('[data-cz]').forEach(b=>b.onclick=()=>{ const v=b.dataset.cz; if(v==='now'){colOffset[g]=0;colsScrollGoCur=true;} else colOffset[g]=(colOffset[g]||0)+(+v)*CAROUSEL_CFG[g].step; renderTasks(); });
   body.querySelectorAll('[data-cv]').forEach(b=>b.onclick=()=>{ settings.colsVisible=+b.dataset.cv; colsScrollGoCur=true; save(); renderTasks(); });
   body.querySelectorAll('.ccol').forEach(col=>{ const key=col.dataset.key;
@@ -3762,8 +3835,8 @@ function renderCarousel(g,host){ const body=host||$('taskBody'); const cur = g==
 /* ---- period list views (Week / Month / Quarter / Year / Life) ---- */
 function renderPeriodView(body,hview){ const h=hview||taskView, key=curKey(h);
   let head;
-  if(h!=='life') head=`<div class="view-ctl">${layoutToggle()}${groupSortBar(false)}<div class="period-lbl">${esc(horizonLabel(h,key))}</div></div>`+periodStripHTML(h,key);
-  else head=`<div class="view-ctl">${groupSortBar(false)}<div class="period-lbl">Life goals — no calendar, just direction</div></div>`;
+  if(h!=='life') head=`<div class="view-ctl"><div class="period-lbl">${esc(horizonLabel(h,key))}</div></div>`+periodStripHTML(h,key);
+  else head=`<div class="view-ctl"><div class="period-lbl">Life goals — no calendar, just direction</div></div>`;
   const list=sortTasks(topLevel(applyFilter(tasksInHorizon(h,key),taskFilter)));
   let out=head;
   out+= list.length?renderTaskList(list,'per|'+h+'|'+key):`<div class="empty-t">Nothing planned for this ${h} yet.</div>`;
@@ -3776,6 +3849,8 @@ function renderPeriodView(body,hview){ const h=hview||taskView, key=curKey(h);
 
 /* ---- Horizon tab: a sub-nav (Snapshot + Day/Week/Month/Quarter/Year), each pane rendered in-place ---- */
 const HZ_PANES=[['snapshot','Snapshot'],['day','Day'],['week','Week'],['month','Month'],['quarter','Quarter'],['year','Year']];
+/* Horizon is its own top-level page (#tab-horizon) — its header (filter·sort, layout·panes) lives in .tv-head */
+function renderHorizonTab(){ const b=$('hzBody'); if(!b)return; applyTaskWidth(); renderHorizon(b); }
 function renderHorizon(body){
   const nav=HZ_PANES.map(([v,l])=>`<button data-hzp="${v}" class="${horizonPane===v?'on':''}">${esc(l)}</button>`).join('');
   body.innerHTML=`<div class="view-filter hz-subnav">${nav}</div><div id="hzPane" class="hz-pane"></div>`;
@@ -3791,7 +3866,7 @@ function horizonSections(){ const today=todayKey();
   return [['year',currentPeriodKey('year')],['quarter',currentPeriodKey('quarter')],
           ['month',currentPeriodKey('month')],['week',currentPeriodKey('week')],['day',today],['','']]; }
 function horizonHTML(){
-  return `<div class="view-ctl">${layoutToggle()}${groupSortBar(false)}</div>`+horizonSections().map(([h,key])=>{
+  return horizonSections().map(([h,key])=>{
     const items=sortTasks(topLevel(applyFilter(tasksInHorizon(h,key),taskFilter)));
     const all=topLevel(tasksInHorizon(h,key)); const totN=all.length, doneN=all.filter(isTaskDone).length;
     const id=h||'inbox'; const collapsed=collapsedHorizons.has(id);
@@ -3826,7 +3901,7 @@ function horizonColsHTML(){ const today=todayKey();
   const cols=secs.map(([h,key,lbl])=>{ const items=sortTasks(topLevel(applyFilter(tasksInHorizon(h,key),taskFilter)));
     return `<div class="ccol" data-hz="${h}" data-key="${key}" data-addkey="hzc|${h}|${key}"><div class="ccol-h"><span class="t" style="color:${HZ_DOT[h]}">${lbl}</span><span class="s">${esc(horizonLabel(h,key))}</span></div>
       <div class="ccol-body">${renderTaskList(items,'hzc|'+h+'|'+key)}</div></div>`; }).join('');
-  return `<div class="view-ctl">${layoutToggle()}${groupSortBar(false)}</div><div class="cols">${cols}</div>`;
+  return `<div class="cols">${cols}</div>`;
 }
 function wireHorizonCols(scope){ wireTasks(scope); wireTaskGestures(scope); wireLayoutToggle(scope); wireGroupSort(scope);
   scope.querySelectorAll('.ccol').forEach(col=>{ const h=col.dataset.hz, key=col.dataset.key;
@@ -3841,6 +3916,51 @@ function wireHorizonCols(scope){ wireTasks(scope); wireTaskGestures(scope); wire
       const t=tasks.find(x=>x.id===taskDragId); if(t){ assignHorizon(t,h,key); clampRepeat(t); save(); renderTasks(); } }); });
   enableHoverAdd(scope); keepColsScroll(scope);
 }
+
+/* ====================================================================
+   COUNTDOWN  — TickTick-style cards counting days to/from a date.
+   A standalone page; `countdowns=[{id,name,emoji,date,created}]`.
+   ==================================================================== */
+function cdDays(date){ return daysBetween(todayKey(),date); }   // >0 future, 0 today, <0 past
+function cdDateLabel(date){ const [y,m,d]=date.split('-'); return `${m}/${d}/${y}`; }
+function renderCountdownTab(){ const body=$('cdBody'); if(!body)return;
+  if(!countdowns.length){ body.innerHTML=`<div class="cd-empty">No countdowns yet.<br><button class="cd-emptyadd" id="cdEmptyAdd">＋ Add a countdown</button></div>`;
+    const ea=$('cdEmptyAdd'); if(ea)ea.onclick=()=>openCountdownEdit(null); return; }
+  const cards=countdowns.slice().sort((a,b)=>Math.abs(cdDays(a.date))-Math.abs(cdDays(b.date))).map(c=>{
+    const d=cdDays(c.date), n=Math.abs(d), past=d<0;
+    const big = d===0?'Today':n;
+    const sub = d===0?('On '+cdDateLabel(c.date)) : (past?'Days since ':'Days until ')+cdDateLabel(c.date);
+    return `<div class="cd-card" data-id="${c.id}">
+      <button class="cd-more" data-cdmore="${c.id}" title="More">⋯</button>
+      <div class="cd-emoji">${esc(c.emoji||'🎯')}</div>
+      <div class="cd-name">${esc(c.name||'Untitled')}</div>
+      <div class="cd-num ${d===0?'today':past?'past':''}">${esc(String(big))}</div>
+      <div class="cd-sub">${esc(sub)}</div>
+    </div>`; }).join('');
+  body.innerHTML=`<div class="cd-grid">${cards}</div>`;
+  body.querySelectorAll('.cd-card').forEach(card=>{ const id=card.dataset.id;
+    card.onclick=e=>{ if(e.target.closest('[data-cdmore]'))return; openCountdownEdit(countdowns.find(c=>c.id===id)); }; });
+  body.querySelectorAll('[data-cdmore]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const c=countdowns.find(x=>x.id===b.dataset.cdmore); if(!c)return;
+    openCtxMenu(b,{ items:[
+      {ic:'✎',label:'Edit',run:()=>openCountdownEdit(c)},
+      {ic:'🗑',label:'Delete',run:()=>{ countdowns=countdowns.filter(x=>x.id!==c.id); save(); renderCountdownTab(); }}
+    ]}); });
+}
+let _cdEditId=null;
+function openCountdownEdit(c){ _cdEditId=c?c.id:null;
+  $('cdEditTitle').textContent=c?'Edit countdown':'New countdown';
+  $('cdEmoji').value=c?(c.emoji||''):''; $('cdName').value=c?(c.name||''):''; $('cdDate').value=c?(c.date||''):todayKey();
+  $('cdEditActions').style.display=c?'flex':'none';
+  $('ovCountdown').classList.add('show'); setTimeout(()=>$('cdName').focus(),0); }
+function saveCountdown(){ const name=$('cdName').value.trim(), date=$('cdDate').value, emoji=$('cdEmoji').value.trim();
+  if(!date){ $('cdDate').focus(); return; }
+  if(_cdEditId){ const c=countdowns.find(x=>x.id===_cdEditId); if(c){ c.name=name; c.date=date; c.emoji=emoji; } }
+  else countdowns.push({id:uid('cd'),name,date,emoji,created:Date.now()});
+  save(); $('ovCountdown').classList.remove('show'); renderCountdownTab(); }
+$('cdSave').onclick=saveCountdown;
+$('cdName').addEventListener('keydown',e=>{ if(e.key==='Enter')saveCountdown(); });
+$('cdDelete').onclick=()=>{ if(!_cdEditId)return; countdowns=countdowns.filter(x=>x.id!==_cdEditId); save(); $('ovCountdown').classList.remove('show'); renderCountdownTab(); };
+$('cdAddBtn').onclick=()=>openCountdownEdit(null);
 
 /* ====================================================================
    BOARDS  — user-created kanban projects, each with custom lists.
@@ -3988,6 +4108,8 @@ function switchTab(name){
   $('tab-'+name).classList.add('show');
   if(name==='stats')refreshStats();
   if(name==='calendar'){ const cb=$('calBody'); cb.innerHTML=calendarHTML(); wireCalendar(cb); }
+  if(name==='horizon')renderHorizonTab();
+  if(name==='countdown')renderCountdownTab();
   if(name==='log')renderCalendar();
   // re-opening Tasks in single-column mode should land back on today / the current period, not wherever a stray scroll left us
   if(name==='tasks'){ if(colsVisible()===1)colsScrollGoCur=true; renderTasks(); }
@@ -4082,7 +4204,7 @@ $('saveSettings').onclick=()=>{const c=(v,a,b,d)=>{v=parseInt(v);return isNaN(v)
   scheduleNotionPoll(); };   // (re)start or stop the near-realtime pull loop to match the new proxy setting
 $('resetAll').onclick=()=>askConfirm('Erase ALL data — subjects, sessions, to-dos, day-offs? Cannot be undone.',()=>{
   localStorage.clear?.();['fd_settings','fd_subjects','fd_sessions','fd_dayoff','fd_tasks','fd_distract','fd_boards','fd_inboxlists','fd_notionsrc','fd_running','fd_bg','fd_device','fd_cloud'].forEach(k=>{try{localStorage.removeItem(k);}catch(e){}delete mem[k];});location.reload();});
-[ 'ovSettings','ovLog','ovConfirm','ovTodo','ovPause','ovDistract','ovNotion' ].forEach(id=>$(id).onclick=e=>{if(e.target===$(id))$(id).classList.remove('show');});
+[ 'ovSettings','ovLog','ovConfirm','ovTodo','ovPause','ovDistract','ovNotion','ovCountdown' ].forEach(id=>$(id).onclick=e=>{if(e.target===$(id))$(id).classList.remove('show');});
 
 /* ---------- theme (light / dark) ---------- */
 function applyTheme(){ const t=(settings.theme==='light')?'light':'dark';
@@ -4135,8 +4257,8 @@ function renderFilterMenu(){
   dt.querySelectorAll('[data-date]').forEach(b=>b.onclick=()=>tog(filterDates,b.dataset.date));
 }
 function afterFilterChange(){ persistFilters(); renderFilterMenu(); updateFilterBadge(); refreshTaskSurfaces(); }
-function updateFilterBadge(){ const n=filterSubjects.size+filterPriorities.size+filterBoards.size+filterLists.size+filterDates.size; const btn=$('tvSortBtn'); if(!btn)return;
-  btn.classList.toggle('active',n>0); }
+function updateFilterBadge(){ const n=filterSubjects.size+filterPriorities.size+filterBoards.size+filterLists.size+filterDates.size;
+  ['tvSortBtn','hzSortBtn'].forEach(id=>{ const btn=$(id); if(btn)btn.classList.toggle('active',n>0); }); }
 /* Group-by / Sort-by selects live at the top of the same popover (one TickTick-style symbol) */
 function renderGroupSortControls(){
   const gs=$('tvGroupSel'); if(gs){ gs.innerHTML=GROUP_OPTS.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join(''); gs.value=settings.groupBy||'date';
@@ -4151,15 +4273,41 @@ function loadFilters(){ try{ const f=JSON.parse(store.get('fd_filters')||'null')
   filterSubjects=new Set(f.subjects||[]); filterPriorities=new Set((f.priorities||[]).map(Number));
   filterBoards=new Set(f.boards||[]); filterLists=new Set(f.lists||[]); filterDates=new Set(f.dates||[]);
   filterMatchAll=f.all!==false; }catch(e){} }
-function openTaskFilter(){ const m=$('taskFilterMenu'),b=$('tvSortBtn'); closeTvView(); renderFilterMenu(); renderGroupSortControls(); b.classList.add('open');
+let _filterAnchor='tvSortBtn';   // which header button the Filter·Sort·Group popover hangs from (Tasks vs Horizon)
+function tvSortFlags(){ const smart=SMART_VIEWS.includes(taskView); return {group:smart, sort:smart||taskView==='matrix'||taskView==='dashboard'}; }
+function openTaskFilter(anchorId,flags){ anchorId=anchorId||'tvSortBtn'; _filterAnchor=anchorId;
+  flags=flags||tvSortFlags();
+  const m=$('taskFilterMenu'),b=$(anchorId); closeTvView(); closeHzView&&closeHzView();
+  $('filterGroupRow').style.display=flags.group?'':'none'; $('filterSortRow').style.display=flags.sort?'':'none';
+  $('filterDivider').style.display=(flags.group||flags.sort)?'':'none';
+  renderFilterMenu(); renderGroupSortControls(); b.classList.add('open');
   m.style.visibility='hidden'; m.classList.add('open'); const r=b.getBoundingClientRect(), w=m.offsetWidth||248;
   m.style.left=Math.max(8,Math.min(r.right-w, innerWidth-8-w))+'px'; m.style.top=(r.bottom+8)+'px'; m.style.visibility=''; }
-function closeTaskFilter(){ $('taskFilterMenu').classList.remove('open'); const b=$('tvSortBtn'); if(b)b.classList.remove('open'); }
-$('tvSortBtn').onclick=e=>{ e.stopPropagation(); $('taskFilterMenu').classList.contains('open')?closeTaskFilter():openTaskFilter(); };
+function closeTaskFilter(){ $('taskFilterMenu').classList.remove('open'); const b=$(_filterAnchor); if(b)b.classList.remove('open'); }
+$('tvSortBtn').onclick=e=>{ e.stopPropagation(); ($('taskFilterMenu').classList.contains('open')&&_filterAnchor==='tvSortBtn')?closeTaskFilter():openTaskFilter('tvSortBtn'); };
+$('hzSortBtn').onclick=e=>{ e.stopPropagation(); ($('taskFilterMenu').classList.contains('open')&&_filterAnchor==='hzSortBtn')?closeTaskFilter():openTaskFilter('hzSortBtn',{group:false,sort:true}); };
 $('filterMatch').querySelectorAll('[data-match]').forEach(b=>b.onclick=()=>{ filterMatchAll=(b.dataset.match==='all'); afterFilterChange(); });
 $('filterClear').onclick=()=>{ filterSubjects.clear(); filterPriorities.clear(); filterBoards.clear(); filterLists.clear(); filterDates.clear(); afterFilterChange(); };
-document.addEventListener('mousedown',e=>{ const m=$('taskFilterMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#tvSortBtn')||m.contains(e.target))return; closeTaskFilter(); });
+document.addEventListener('mousedown',e=>{ const m=$('taskFilterMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#'+_filterAnchor)||m.contains(e.target))return; closeTaskFilter(); });
 window.addEventListener('resize',closeTaskFilter);
+
+/* ---------- Horizon header ⋯ : layout (Columns/List) + panes shown ---------- */
+function syncHzViewMenu(){
+  const lay=taskLayout();
+  $('hzLayoutPick').querySelectorAll('[data-hzlay]').forEach(b=>b.classList.toggle('on',b.dataset.hzlay===lay));
+  const cv=settings.colsVisible; const cur=(cv===1||cv===3||cv===5||cv===7)?String(cv):'0';
+  $('hzPanesPick').querySelectorAll('[data-cv]').forEach(b=>b.classList.toggle('on',b.dataset.cv===cur));
+  $('hzPanesGroup').style.display=(lay==='columns')?'':'none';   // panes only apply to the columns layout
+}
+function openHzView(){ const m=$('hzViewMenu'),b=$('hzViewBtn'); closeTaskFilter(); syncHzViewMenu(); b.classList.add('open');
+  m.style.visibility='hidden'; m.classList.add('open'); const r=b.getBoundingClientRect(), w=m.offsetWidth||236;
+  m.style.left=Math.max(8,Math.min(r.right-w, innerWidth-8-w))+'px'; m.style.top=(r.bottom+8)+'px'; m.style.visibility=''; }
+function closeHzView(){ const m=$('hzViewMenu'); if(m)m.classList.remove('open'); const b=$('hzViewBtn'); if(b)b.classList.remove('open'); }
+$('hzViewBtn').onclick=e=>{ e.stopPropagation(); $('hzViewMenu').classList.contains('open')?closeHzView():openHzView(); };
+$('hzLayoutPick').querySelectorAll('[data-hzlay]').forEach(b=>b.onclick=()=>{ settings.taskLayout=b.dataset.hzlay; save(); syncHzViewMenu(); renderHorizonTab(); });
+$('hzPanesPick').querySelectorAll('[data-cv]').forEach(b=>b.onclick=()=>{ settings.colsVisible=+b.dataset.cv; colsScrollGoCur=true; save(); syncHzViewMenu(); renderHorizonTab(); });
+document.addEventListener('mousedown',e=>{ const m=$('hzViewMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#hzViewBtn')||m.contains(e.target))return; closeHzView(); });
+window.addEventListener('resize',closeHzView);
 
 /* ---------- view & layout popover (the ⋯ button): view mode · card size · show-calendar ---------- */
 function syncTvViewMenu(){

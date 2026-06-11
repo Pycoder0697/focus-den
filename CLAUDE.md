@@ -27,7 +27,9 @@ One file only: `index.html`
 - `subjects` — subject list (colour, name, id — no todos)
 - `sessions` — stopwatch/pomodoro session log
 - `settings` — user preferences (examDate, urgentDays, theme, focus/short/long mins, etc.)
-- `taskView` — current Tasks tab view: day/week/month/quarter/year/life/horizon/inbox/boards/board/calendar/dashboard/matrix/timeline (no more "tomorrow"; "board" = the date-kanban "Agenda", "boards" = user kanban boards, "calendar" = TimeStripe-style month grid)
+- **Top-level pages** (nav rail `.railtab` data-tab): subjects · tasks · calendar · **horizon** · **countdown** · stats · log · music. Horizon and Countdown are their OWN pages (not Tasks sub-views). `switchTab(name)` shows `#tab-<name>`; horizon→`renderHorizonTab()`, countdown→`renderCountdownTab()`.
+- **Persistent task header** (`.tv-head`): every Tasks view (and the Horizon page) shows a view name + a TickTick-style Filter·Sort·Group icon (`#tvSortBtn`/`#hzSortBtn` → shared `#taskFilterMenu` popover via `openTaskFilter(anchorId,{group,sort})`) + a ⋯ view-options icon. Tasks' ⋯ (`#tvViewMenu`) = list/kanban/timeline + kanban card size (`settings.kanbanSize` small/medium/big, default small) + show-calendar. Horizon's ⋯ (`#hzViewMenu`) = Columns/List layout + panes-shown (`settings.colsVisible`).
+- `taskView` — current Tasks tab view: inbox/boards/matrix/dashboard + smart lists all/today/next7 (day/week/month/quarter/year/life/horizon are reachable only inside the Horizon page now; `migrateView` maps stale board/kanban/timeline/calendar/day/horizon → 'all'). Horizon-only sub-renders (`renderCarousel`/`renderDayList`/`renderPeriodView`/`horizonHTML`) call `renderTasks()`, which re-routes to `renderHorizonTab()` while the Horizon page is active.
 - `settings.taskLayout` — 'columns' (TimeStripe-style scrollable period columns, default) or 'list'; toggled per time/horizon view. `colOffset` holds the per-view carousel page offset.
 - **Full-width takeover**: `isWideView()` decides which views span the whole app (`.wrap.tasks-wide` hides the timer column). Wide = calendar + agenda/dashboard/matrix/timeline always, and day/week/month/quarter/year/horizon/boards in *columns* layout. Inbox & life stay in-panel. `applyTaskWidth()` toggles the class (called in `renderTasks` and on tab switch).
 - **Context menus** (`openCtxMenu`): TimeStripe-style ⋯ menu with viewport-clamped flyout submenus (two layers: `#ctxMenu` root + `#ctxSub` flyout, so they never clip in the Notion iframe). `buildTaskMenu(t,re)` / `buildSubjectMenu(s)` define the items; top color-dot row sets task priority / subject colour. `calCursor` = month shown in calendar.
@@ -37,6 +39,7 @@ One file only: `index.html`
 - **Play buttons are mode-aware**: a task ▶ runs `startTaskTimer` (→ `startTaskStopwatch`/`startTaskPomodoro`); a subject ▶ runs `startSubjectTimer` (→ `quickStopwatch`/`startSubjectPomodoro`), each following the current timer `mode`. Menus offer both modes explicitly.
 - **TimeStripe free-add**: clicking empty space in a column body (`.ccol-body`) focuses that column's Add input (global pointerdown listener).
 - **Task sound** has two voices via `_taskVia`: a bright snap on ＋/Add button-click, a deeper tock on Enter.
+- `countdowns` — TickTick-style Countdown page cards: `[{id,name,emoji,date(YYYY-MM-DD),created}]`. Rides cloud sync (snapshot/applyRemote/save). `cdDays(date)` = `daysBetween(today,date)` (>0 future "Days until", <0 past "Days since", 0 "Today"). `renderCountdownTab()` renders the card grid; `+` (`#cdAddBtn`) and per-card ⋯ (Edit/Delete only — no style/notes/archive) drive `openCountdownEdit(c)` / `#ovCountdown` modal.
 - `CLOUD` — Firebase config object
 
 ## Key functions
