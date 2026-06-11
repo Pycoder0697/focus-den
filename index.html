@@ -337,8 +337,7 @@
   .vm-cal.on{color:var(--accent-ink);background:var(--accent);border-color:transparent;font-weight:600}
   .tk-split{display:flex;gap:18px;align-items:flex-start}
   .tk-split-list{flex:1 1 0;min-width:0}
-  .tk-split-cal{flex:0 0 clamp(620px,76%,1360px);min-width:0;position:sticky;top:8px}
-  .tk-split-list{max-width:380px}
+  .tk-split-cal{flex:0 0 50%;min-width:0;position:sticky;top:8px}
   @media(max-width:880px){ .tk-split{flex-direction:column} .tk-split-cal{flex:none;width:100%;position:static} }
   /* smart-list (All/Today/Next 7/Inbox) — list mode grouped sections */
   .sl-list{display:flex;flex-direction:column;gap:14px}
@@ -506,6 +505,30 @@
   .hb-cd.miss{background:transparent;box-shadow:inset 0 0 0 1px var(--rose);color:var(--rose)}
   .hb-cd.today{box-shadow:0 0 0 2px var(--accent)}
   .hb-cd:disabled{cursor:default}
+  /* List view split: 7-day strips on the left, clicked habit's month calendar alongside on the right */
+  .hb-split{display:flex;gap:24px;align-items:flex-start}
+  .hb-split-list{flex:1 1 0;min-width:0}
+  .hb-split-detail{flex:0 0 clamp(360px,40%,560px);min-width:0;position:sticky;top:8px}
+  .hb-row{cursor:pointer;border-radius:10px}
+  .hb-row.sel{background:var(--glass)}
+  .hb-meta,.hb-row .hb-emoji{cursor:pointer}
+  .hb-detail{background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:16px;padding:18px}
+  .hb-detail-empty{color:var(--faint);font-size:13px;text-align:center;padding:48px 18px}
+  .hb-detail-h{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .hb-detail-h .hb-emoji{font-size:22px}
+  .hb-detail-h .hb-name{flex:1;min-width:0;font-size:18px;font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hb-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+  .hb-stat{background:var(--glass);border:1px solid var(--stroke-soft);border-radius:12px;padding:11px 13px}
+  .hb-stat-l{font-size:11px;color:var(--faint);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hb-stat-v{font-size:22px;font-weight:700;color:var(--ink)}
+  .hb-stat-v span{font-size:12px;font-weight:500;color:var(--faint)}
+  .hb-detail-mh{display:flex;align-items:center;justify-content:center;gap:20px;margin-bottom:12px;font-size:13.5px;font-weight:600;color:var(--ink)}
+  .hb-detail-mh button{background:var(--glass-2);border:1px solid var(--stroke);color:var(--ink);border-radius:8px;width:28px;height:28px;cursor:pointer;font-size:14px;line-height:1}
+  .hb-detail-mh button:hover{background:rgba(255,255,255,.16)}
+  .hb-cddow.big{font-size:11px;gap:5px;margin-bottom:5px}
+  .hb-cdgrid.big{gap:5px}
+  .hb-cdgrid.big .hb-cd{font-size:12.5px;border-radius:8px}
+  @media(max-width:880px){ .hb-split{flex-direction:column} .hb-split-detail{flex:none;width:100%;position:static} }
   /* habit check rows embedded in Today / Next 7 / Horizon */
   .hb-sec .sl-body{display:flex;flex-direction:column;gap:1px}
   .hb-trow{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:9px}
@@ -3197,7 +3220,7 @@ function renderSmartList(view){ const body=$('taskBody'); const mode=smartViewMo
       listHTML=secs||'<div class="empty-t">Nothing here yet.</div>'; }
     main=smartQuickAdd(view)+`<div class="sl-list">${habitSec}${listHTML}</div>`;
   }
-  if(showCal) body.innerHTML=toolbar+`<div class="tk-split"><div class="tk-split-list">${main}</div><div class="tk-split-cal">${calMonthHTML(monthKey(todayKey()))}</div></div>`;
+  if(showCal) body.innerHTML=toolbar+`<div class="tk-split"><div class="tk-split-list">${main}</div><div class="tk-split-cal">${calMonthHTML(monthKey(todayKey()),{side:true})}</div></div>`;
   else body.innerHTML=toolbar+main;
   wireTasks(body); wireTaskGestures(body); wireGroupSort(body); wireViewMode(body); wireSmartAdd(body,view); wireHabits(body);
   body.querySelectorAll('[data-calsplit]').forEach(b=>b.onclick=()=>{settings.showCal=!settings.showCal;save();renderTasks();});
@@ -3642,14 +3665,16 @@ function wireCalendar(scope){
   wireMiniMonths(scope); }
 
 /* ---- Month sub-view (classic grid + horizon cards) ---- */
-function calMonthHTML(cur){ const today=todayKey(); const [y,mo]=cur.split('-').map(Number);
+function calMonthHTML(cur,opts){ opts=opts||{}; const side=!!opts.side; const today=todayKey(); const [y,mo]=cur.split('-').map(Number);
   // Monday-first grid so each row maps cleanly to one Monday-anchored week horizon (the app's week model, matches TimeStripe)
   const first=`${cur}-01`; const start=addDays(first,-((new Date(first+'T00:00:00').getDay()+6)%7));
-  const hz=[['year',String(y),y+' goals'],['month',cur,MONTHS[mo-1]]].map(([h,key,lbl])=>{
+  const qn=Math.floor((mo-1)/3)+1, qkey=y+'-Q'+qn;
+  // Side/split view drops the broad-horizon goal cards (and the week column) so the calendar pane stays compact
+  const hz=side?'':[['year',String(y),y+' goals'],['quarter',qkey,'Q'+qn+' '+y],['month',cur,MONTHS[mo-1]]].map(([h,key,lbl])=>{
     const items=topLevel(applyFilter(tasksInHorizon(h,key),taskFilter).sort(taskSort));
     const chips=items.length?items.map(calChip).join(''):'<div class="cv2-empty">—</div>';
     return `<div class="cv2-hzcard" data-hz="${h}" data-key="${key}"><h6>${esc(lbl)}</h6><div class="cv2-hzlist">${chips}</div><button class="cv2-hzadd" data-addhz="${h}" data-addkey="${key}">＋ Add</button></div>`; }).join('');
-  const dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<span>${d}</span>`).join('')+'<span class="cv2-wkh">Wk</span>';
+  const dow=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<span>${d}</span>`).join('')+(side?'':'<span class="cv2-wkh">Wk</span>');
   const dayCell=k=>{ const inMo=(+k.slice(5,7))===mo;
     const items=topLevel(applyFilter(tasksInHorizon('day',k),taskFilter).sort(taskSort));
     const shown=items.slice(0,99).map(calChip).join('');
@@ -3659,6 +3684,7 @@ function calMonthHTML(cur){ const today=todayKey(); const [y,mo]=cur.split('-').
   let cells='';
   for(let r=0;r<6;r++){
     for(let c=0;c<7;c++) cells+=dayCell(addDays(start,r*7+c));
+    if(side) continue;   // no weekly-goal column in the compact side view
     const wk=weekKeyOf(addDays(start,r*7));
     const witems=topLevel(applyFilter(tasksInHorizon('week',wk),taskFilter).sort(taskSort));
     const wshown=witems.slice(0,99).map(calChip).join('');
@@ -3666,7 +3692,7 @@ function calMonthHTML(cur){ const today=todayKey(); const [y,mo]=cur.split('-').
     cells+=`<div class="cv2-wcell" data-week="${wk}">
       <div class="cv2-dn cv2-wn">W${weekNum(wk)}<button class="cv2-add" data-addweek="${wk}" title="Add weekly goal">＋</button></div>${wshown}${wmore}</div>`;
   }
-  return `<div class="cv2-hz">${hz}</div><div class="cv2-dow cv2-dow8">${dow}</div><div class="cv2-grid cv2-grid8" data-wide="1">${cells}</div>`; }
+  return (side?'':`<div class="cv2-hz">${hz}</div>`)+`<div class="cv2-dow ${side?'':'cv2-dow8'}">${dow}</div><div class="cv2-grid ${side?'':'cv2-grid8'}" data-wide="1">${cells}</div>`; }
 function calAddInput(holder,assign){ if(holder.querySelector('.cv2-newinp'))return;
   const inp=document.createElement('input'); inp.className='cv2-newinp'; inp.placeholder='Task…'; inp.maxLength=200; holder.appendChild(inp); inp.focus();
   let committed=false;
@@ -4102,15 +4128,22 @@ function habitFreqLabel(h){ if(h.freq==='daily')return'Every day';
 function habitGoalLabel(h){ return (h.goal||1)>1 ? `${h.goal}${h.unit?' '+h.unit:'×'}/day` : (h.unit?`1 ${h.unit}/day`:''); }
 function habitSubLabel(h){ return [habitFreqLabel(h),habitGoalLabel(h)].filter(Boolean).join(' · '); }
 function monthDoneCount(h,cur){ let n=0; if(h.log) for(const k in h.log){ if(k.slice(0,7)===cur && h.log[k]>=(h.goal||1)) n++; } return n; }
+function totalCheckins(h){ let n=0; if(h.log) for(const k in h.log){ if(h.log[k]>=(h.goal||1)) n++; } return n; }
+function monthRate(h,cur){ const [y,mo]=cur.split('-').map(Number); const dim=new Date(y,mo,0).getDate(); const today=todayKey(); let due=0,done=0;
+  for(let d=1;d<=dim;d++){ const k=cur+'-'+String(d).padStart(2,'0'); if(k>today)break; if(habitDueOn(h,k)){ due++; if(habitDoneOn(h,k))done++; } }
+  return due?Math.round(done/due*100):0; }
 
 /* ---- the Habits page (List + Calendar views, switched in the ⋯) ---- */
 let habitCalCursor=null;
+let habitSelId=null;   // habit whose month-calendar detail is open alongside the list (TickTick-style)
 function renderHabitsTab(){ const body=$('hbBody'); if(!body)return; applyTaskWidth();
   const live=habits.filter(h=>!h.archived);
   if(!live.length){ body.innerHTML=`<div class="cd-empty">No habits yet.<br><button class="cd-emptyadd" id="hbEmptyAdd">＋ Add a habit</button></div>`;
     const ea=$('hbEmptyAdd'); if(ea)ea.onclick=()=>openHabitEdit(null); return; }
   if((settings.habitView||'list')==='calendar'){ body.innerHTML=habitCalHTML(live); }
-  else { body.innerHTML=habitListHTML(live); }
+  else { // List view: 7-day strips on the left, the selected habit's month calendar alongside on the right (click a habit to open it)
+    const sel=live.find(h=>h.id===habitSelId)||live[0]; habitSelId=sel?sel.id:null;
+    body.innerHTML=`<div class="hb-split"><div class="hb-split-list">${habitListHTML(live)}</div><div class="hb-split-detail">${habitDetailHTML(sel)}</div></div>`; }
   wireHabits(body); }
 function habitListHTML(live){ const today=todayKey(); const start=addDays(today,-6); const DLET=['S','M','T','W','T','F','S']; // trailing 7 days, today rightmost (TickTick-style)
   const head=`<div class="hb-striphead"><span></span>${[...Array(7)].map((_,i)=>{ const d=addDays(start,i); const wd=new Date(d+'T00:00:00').getDay(); return `<span class="${d===today?'now':''}">${DLET[wd]}<b>${+d.slice(8,10)}</b></span>`; }).join('')}</div>`;
@@ -4118,7 +4151,7 @@ function habitListHTML(live){ const today=todayKey(); const start=addDays(today,
     const strip=[...Array(7)].map((_,i)=>{ const d=addDays(start,i); const due=habitDueOn(h,d),done=habitDoneOn(h,d),future=d>today;
       return `<button class="hb-cell ${done?'done':''} ${due?'':'off'} ${d===today?'today':''}" ${(!due||future)?'disabled':''} data-hb-day="${h.id}|${d}" style="--hc:${h.color||'var(--accent)'}">${done?'<span class="hb-tick">✓</span>':''}</button>`; }).join('');
     const todayDue=habitDueOn(h,today), todayDone=habitDoneOn(h,today);
-    return `<div class="hb-row" data-id="${h.id}">
+    return `<div class="hb-row ${h.id===habitSelId?'sel':''}" data-id="${h.id}">
       <button class="hb-check ${todayDone?'on':''}" data-hb-toggle="${h.id}" style="--hc:${h.color||'var(--accent)'}" ${todayDue?'':'disabled'} title="${todayDue?'Check in for today':'Not scheduled today'}">${CHK}</button>
       <div class="hb-emoji">${esc(h.emoji||'✅')}</div>
       <div class="hb-meta"><div class="hb-name">${esc(h.name)}</div><div class="hb-sub">${esc(habitSubLabel(h))} · 🔥 ${habitStreak(h)}</div></div>
@@ -4138,7 +4171,28 @@ function habitMonthCard(h,cur){ const today=todayKey(); const [y,mo]=cur.split('
     cells+=`<button class="hb-cd ${inMo?'':'out'} ${done?'done':''} ${miss?'miss':''} ${k===today?'today':''}" data-hb-day="${h.id}|${k}" ${(!inMo||k>today||!due)?'disabled':''} style="--hc:${h.color||'var(--accent)'}">${inMo?+k.slice(8,10):''}</button>`; }
   return `<div class="hb-card"><div class="hb-card-h"><span class="hb-emoji">${esc(h.emoji||'✅')}</span><span class="hb-name">${esc(h.name)}</span><span class="hb-cnt">🔥 ${habitStreak(h)} · ${monthDoneCount(h,cur)} done</span><button class="hb-more" data-hbmore="${h.id}">⋯</button></div>
     <div class="hb-cddow">${dow}</div><div class="hb-cdgrid">${cells}</div></div>`; }
+/* ---- the detail panel shown alongside the list when a habit is clicked: stats + that habit's full month calendar (TickTick-style) ---- */
+function habitDetailHTML(h){ if(!h) return `<div class="hb-detail hb-detail-empty">Pick a habit to see its calendar.</div>`;
+  const cur=monthKey(habitCalCursor||todayKey()); const [y,mo]=cur.split('-').map(Number); const today=todayKey();
+  const stats=[['✅','Monthly check-ins',monthDoneCount(h,cur),'Days'],['⚡','Total check-ins',totalCheckins(h),'Days'],
+    ['📊','Monthly rate',monthRate(h,cur),'%'],['🔥','Current streak',habitStreak(h),'Days']]
+    .map(([ic,l,v,u])=>`<div class="hb-stat"><div class="hb-stat-l">${ic} ${l}</div><div class="hb-stat-v">${v} <span>${u}</span></div></div>`).join('');
+  const first=`${cur}-01`; const start=addDays(first,-((new Date(first+'T00:00:00').getDay()+6)%7));
+  const dow=DOW1.map(d=>`<span>${d}</span>`).join('');
+  let cells='';
+  for(let i=0;i<42;i++){ const k=addDays(start,i); const inMo=(+k.slice(5,7))===mo; const due=habitDueOn(h,k),done=habitDoneOn(h,k),miss=inMo&&due&&!done&&k<today;
+    cells+=`<button class="hb-cd ${inMo?'':'out'} ${done?'done':''} ${miss?'miss':''} ${k===today?'today':''}" data-hb-day="${h.id}|${k}" ${(!inMo||k>today||!due)?'disabled':''} style="--hc:${h.color||'var(--accent)'}">${inMo?+k.slice(8,10):''}</button>`; }
+  return `<div class="hb-detail">
+    <div class="hb-detail-h"><span class="hb-emoji">${esc(h.emoji||'✅')}</span><span class="hb-name">${esc(h.name)}</span><button class="hb-more" data-hbmore="${h.id}">⋯</button></div>
+    <div class="hb-stats">${stats}</div>
+    <div class="hb-detail-mh"><button data-hbm="-1" title="Earlier">‹</button><span>${MONTHS[mo-1]} ${y}</span><button data-hbm="1" title="Later">›</button></div>
+    <div class="hb-cddow big">${dow}</div><div class="hb-cdgrid big">${cells}</div>
+  </div>`; }
 function wireHabits(scope){
+  // click a habit's name/emoji to open its month-calendar detail alongside the list
+  scope.querySelectorAll('.hb-row').forEach(r=>{ const meta=r.querySelector('.hb-meta'), em=r.querySelector('.hb-emoji');
+    const open=()=>{ habitSelId=r.dataset.id; renderHabitsTab(); };
+    if(meta)meta.onclick=open; if(em)em.onclick=open; });
   scope.querySelectorAll('[data-hb-toggle]').forEach(b=>b.onclick=()=>{ const h=habits.find(x=>x.id===b.dataset.hbToggle); if(!h)return; toggleHabit(h,todayKey()); afterHabitChange(); });
   scope.querySelectorAll('[data-hb-day]').forEach(b=>b.onclick=()=>{ const [id,k]=b.dataset.hbDay.split('|'); const h=habits.find(x=>x.id===id); if(!h)return; toggleHabit(h,k); afterHabitChange(); });
   scope.querySelectorAll('[data-hbmore]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); const h=habits.find(x=>x.id===b.dataset.hbmore); if(!h)return;
@@ -4147,8 +4201,9 @@ function wireHabits(scope){
       {ic:'📦',label:'Archive',run:()=>{ h.archived=true; save(); afterHabitChange(); }},
       {ic:'🗑',label:'Delete',run:()=>{ habits=habits.filter(x=>x.id!==h.id); save(); afterHabitChange(); }}
     ]}); });
-  scope.querySelectorAll('[data-hbm]').forEach(b=>b.onclick=()=>{ const v=b.dataset.hbm; const base=monthKey(habitCalCursor||todayKey());
-    if(v==='now') habitCalCursor=todayKey(); else { const [y,m]=base.split('-').map(Number); const d=new Date(y,m-1+(+v),1); habitCalCursor=d.toISOString().slice(0,10); }
+  scope.querySelectorAll('[data-hbm]').forEach(b=>b.onclick=()=>{ const v=b.dataset.hbm;
+    if(v==='now') habitCalCursor=todayKey();
+    else { let [y,m]=monthKey(habitCalCursor||todayKey()).split('-').map(Number); m+=(+v); while(m<1){m+=12;y--;} while(m>12){m-=12;y++;} habitCalCursor=y+'-'+String(m).padStart(2,'0')+'-01'; }   // string math avoids the toISOString() IST date shift
     renderHabitsTab(); }); }
 /* re-render every surface a habit check-in could touch */
 function afterHabitChange(){ save();
