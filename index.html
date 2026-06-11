@@ -6,7 +6,15 @@
 <title>Focus Den — Study Tracker</title>
 <!-- Favicon: the amber "F" logo (italic serif on a rounded amber square), inline SVG so it stays single-file -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjMwIiBoZWlnaHQ9IjMwIiByeD0iOC41IiBmaWxsPSIjZjU5MTJlIi8+PHRleHQgeD0iMTYiIHk9IjIzLjUiIGZvbnQtZmFtaWx5PSJHZW9yZ2lhLCdUaW1lcyBOZXcgUm9tYW4nLHNlcmlmIiBmb250LXN0eWxlPSJpdGFsaWMiIGZvbnQtd2VpZ2h0PSI3MDAiIGZvbnQtc2l6ZT0iMjIiIGZpbGw9IiMzYTE4MTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkY8L3RleHQ+PC9zdmc+Cg==">
-<link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjMwIiBoZWlnaHQ9IjMwIiByeD0iOC41IiBmaWxsPSIjZjU5MTJlIi8+PHRleHQgeD0iMTYiIHk9IjIzLjUiIGZvbnQtZmFtaWx5PSJHZW9yZ2lhLCdUaW1lcyBOZXcgUm9tYW4nLHNlcmlmIiBmb250LXN0eWxlPSJpdGFsaWMiIGZvbnQtd2VpZ2h0PSI3MDAiIGZvbnQtc2l6ZT0iMjIiIGZpbGw9IiMzYTE4MTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkY8L3RleHQ+PC9zdmc+Cg==">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+<!-- PWA: installable Mac/iOS app. Manifest + service worker (sw.js) give it a home-screen icon and offline support. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#13141a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Focus Den">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -4927,6 +4935,29 @@ console.log('%cFocus Den '+FD_VERSION,'color:#f5a623;font-weight:700','— type 
 /* re-render when the day rolls over so repeating tasks reset on schedule */
 let _dayKey=todayKey();
 setInterval(()=>{ const nk=todayKey(); if(nk!==_dayKey){ _dayKey=nk; renderSubjects(); refreshStats(); renderCalendar(); refreshDplus(); } },60000);
+</script>
+
+<!-- PWA service worker. Registered only for the standalone app (not the Notion embed),
+     so a sandboxed iframe never tries to install it. The worker is network-first, so
+     updates pushed to GitHub Pages appear automatically — no cache-version bump needed. -->
+<script>
+(function(){
+  if(!('serviceWorker' in navigator)) return;
+  if(window.self !== window.top) return; // skip inside the Notion iframe
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js', { updateViaCache:'none' }).then(function(reg){
+      // Poll for a new worker on focus + hourly, so an open app picks up pushes.
+      var check = function(){ reg.update().catch(function(){}); };
+      document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') check(); });
+      setInterval(check, 60*60*1000);
+    }).catch(function(){});
+    // When a new worker takes control, reload once to run the freshest build.
+    var reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function(){
+      if(reloaded) return; reloaded = true; window.location.reload();
+    });
+  });
+})();
 </script>
 </body>
 </html>
