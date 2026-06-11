@@ -589,10 +589,9 @@
   .tk-check:active,.check:active,.cl .c:active{transform:scale(.85)}
   /* priority reads as the checkbox ring colour (done still wins with green) */
   .tk-check.pri1:not(.on),.tk-check.pri2:not(.on),.tk-check.pri3:not(.on){border-color:var(--prc)}
-  /* ⋯ is a desktop hover affordance; touch uses long-press */
-  .tk-menu{opacity:0;transition:opacity .15s}
+  /* ⋯ stays persistently visible (dimmed) so it never disappears; brightens on hover. Kept compact so it barely eats into the task name. */
+  .tk-menu{opacity:.4;transition:opacity .15s;padding:2px 1px;letter-spacing:0}
   .tk-main:hover .tk-menu,.tk-menu:focus{opacity:1}
-  @media(hover:none){ .tk-menu{display:none} }
 
   /* eisenhower matrix */
   .ei-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:12px}
@@ -1055,7 +1054,7 @@
   .ctx-item.danger .ci{color:var(--rose)}
 
   /* ===== shared "more" buttons on cards ===== */
-  .tk-menu{font-size:17px;font-weight:700;letter-spacing:1px;line-height:1}
+  .tk-menu{font-size:15px;font-weight:700;letter-spacing:0;line-height:1}
   .subj-menu{background:none;border:none;color:var(--faint);cursor:pointer;font-size:17px;font-weight:700;letter-spacing:1px;padding:6px;line-height:1;flex:none}
   .subj-menu:hover{color:var(--amber)}
   .subj-name[contenteditable="true"]{outline:none;border-bottom:1px solid var(--accent);cursor:text}
@@ -3897,6 +3896,7 @@ $('timerRestore').onclick=()=>{ settings.timerCollapsed=false; save(); applyTime
 
 function renderTasks(){
   if($('tab-horizon')&&$('tab-horizon').classList.contains('show')){ renderHorizonTab(); return; }   // Horizon is its own page now; horizon sub-renders re-route here
+  if($('tab-calendar')&&$('tab-calendar').classList.contains('show')){ const cb=$('calBody'); if(cb){ cb.innerHTML=calendarHTML(); wireCalendar(cb); } return; }   // Calendar is its own page; its wire-handlers call renderTasks() to refresh — re-route here so view switch / pager / drag actually update
   const body=$('taskBody'); if(!body)return; const today=todayKey(); applyTaskWidth();
   taskView=migrateView(taskView); updateTvHead(taskView);
   if(SMART_VIEWS.includes(taskView)){ renderSmartList(taskView); return; }   // All · Today · Next 7 days · Inbox
