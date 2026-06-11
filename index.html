@@ -912,6 +912,8 @@
   .log-actions button{flex:1;font-family:inherit;font-size:13px;color:var(--ink);background:var(--glass-2);border:1px solid var(--stroke);border-radius:11px;padding:10px;cursor:pointer;transition:.2s;white-space:nowrap}
   .log-actions button:hover{background:rgba(255,255,255,.16)}
   .log-actions button.primary{background:var(--amber);color:#3a1810;border-color:transparent;font-weight:600}
+  .log-split{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:16px;align-items:start}
+  @media(max-width:880px){.log-split{grid-template-columns:1fr}}
   .cal-card{padding:18px}
   .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
   .cal-month{font-family:'Fraunces',serif;font-style:italic;font-size:19px}
@@ -926,7 +928,8 @@
   .cal-day.today{outline:1.5px solid var(--ink)}
   .cal-day.selected{box-shadow:0 0 0 2px var(--amber)}
   .cal-day .off{position:absolute;top:3px;right:5px;font-size:9px;color:var(--rose)}
-  .tl-card{padding:18px;margin-top:16px}
+  .tl-card{padding:18px}
+  @media(max-width:880px){.tl-card{margin-top:0}}
   .tl-date{font-family:'Fraunces',serif;font-style:italic;font-weight:400;font-size:18px;margin-bottom:14px}
   .timeline{display:flex;flex-direction:column;max-height:340px;overflow-y:auto}
   .tl-item{display:grid;grid-template-columns:74px 16px 1fr auto;align-items:flex-start;gap:8px;padding-bottom:14px;position:relative}
@@ -1165,17 +1168,6 @@
   <!-- TIMER -->
   <section class="card timer-card">
     <button class="timer-collapse" id="timerCollapse" title="Hide the timer — give tasks the full width">«</button>
-    <div class="snd-wrap">
-      <button class="snd-btn" id="sndBtn" title="Ambient sound">🔊</button>
-      <div class="snd-pop" id="ambient">
-        <button data-s="rain" title="Rain">🌧</button>
-        <button data-s="waves" title="Ocean waves">🌊</button>
-        <button data-s="bonfire" title="Bonfire">🔥</button>
-        <button data-s="crickets" title="Crickets">🦗</button>
-        <button data-s="tick" title="Clock ticking">⏰</button>
-        <button data-s="off" class="on" title="Mute">🔇</button>
-      </div>
-    </div>
     <div class="subj-select"><label>Subject</label><select class="subj" id="activeSubject"></select></div>
     <button class="distract-btn" id="distractBtn" title="Log a distraction">🌀 <span id="distractCount">0</span></button>
     <div class="task-chip" id="taskChip"><span id="taskChipName"></span><button id="taskChipClear" title="Clear">×</button></div>
@@ -1301,15 +1293,17 @@
         <button class="primary" id="addLogBtn">+ Add study log</button>
         <button id="exportBtn">Export .ics</button>
       </div>
-      <div class="card cal-card">
-        <div class="cal-head"><button class="cal-nav" id="calPrev">‹</button><div class="cal-month" id="calMonth">—</div><button class="cal-nav" id="calNext">›</button></div>
-        <div class="hm-dow"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
-        <div class="cal-grid" id="calGrid"></div>
-        <div class="dayoff-row"><span>Mark selected day as Day Off ✈</span><div class="toggle" id="dayoffToggle"></div></div>
-      </div>
-      <div class="card tl-card">
-        <h3 class="tl-date" id="tlDate">—</h3>
-        <div class="timeline" id="timeline"></div>
+      <div class="log-split">
+        <div class="card cal-card">
+          <div class="cal-head"><button class="cal-nav" id="calPrev">‹</button><div class="cal-month" id="calMonth">—</div><button class="cal-nav" id="calNext">›</button></div>
+          <div class="hm-dow"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+          <div class="cal-grid" id="calGrid"></div>
+          <div class="dayoff-row"><span>Mark selected day as Day Off ✈</span><div class="toggle" id="dayoffToggle"></div></div>
+        </div>
+        <div class="card tl-card">
+          <h3 class="tl-date" id="tlDate">—</h3>
+          <div class="timeline" id="timeline"></div>
+        </div>
       </div>
     </div>
 
@@ -1472,6 +1466,15 @@
   <div class="pref-group">
     <div class="pref-h">Sounds</div>
     <div class="pref-row"><span>Task &amp; UI sounds</span><div class="toggle" id="prefSound"></div></div>
+    <div class="pref-h" style="margin-top:4px">White noise</div>
+    <div class="ambient" id="ambient">
+      <button data-s="rain" title="Rain">🌧</button>
+      <button data-s="waves" title="Ocean waves">🌊</button>
+      <button data-s="bonfire" title="Bonfire">🔥</button>
+      <button data-s="crickets" title="Crickets">🦗</button>
+      <button data-s="tick" title="Clock ticking">⏰</button>
+      <button data-s="off" class="on" title="Mute">🔇</button>
+    </div>
   </div>
 </div>
 
@@ -2057,7 +2060,7 @@ function ensureCtx(){ if(!audioCtx)audioCtx=new (window.AudioContext||window.web
 function noiseBuf(ctx){ const b=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate),d=b.getChannelData(0); for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1; return b; }
 function stopAmbient(){ if(_tickInt){clearInterval(_tickInt);_tickInt=null;} ambientNodes.forEach(n=>{try{n.stop&&n.stop();}catch(e){} try{n.disconnect&&n.disconnect();}catch(e){}}); ambientNodes=[]; }
 /* stop ambient sound AND reset its button UI — used when the timer is up / stopped */
-function muteAmbient(){ stopAmbient(); document.querySelectorAll('#ambient button').forEach(x=>x.classList.toggle('on',x.dataset.s==='off')); const sb=$('sndBtn'); if(sb)sb.textContent='🔊'; }
+function muteAmbient(){ stopAmbient(); document.querySelectorAll('#ambient button').forEach(x=>x.classList.toggle('on',x.dataset.s==='off')); }
 function pinkBuf(ctx){ const len=ctx.sampleRate*4,b=ctx.createBuffer(1,len,ctx.sampleRate),d=b.getChannelData(0);
   let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
   for(let i=0;i<len;i++){ const w=Math.random()*2-1;
@@ -2112,8 +2115,6 @@ document.querySelectorAll('#ambient button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#ambient button').forEach(x=>x.classList.toggle('on',x===b));
   stopAmbient(); const s=b.dataset.s;
   if(s==='rain')playRain();else if(s==='waves')playWaves();else if(s==='bonfire')playBonfire();else if(s==='crickets')playCrickets();else if(s==='tick')playTick();
-  $('sndBtn').textContent={rain:'🌧',waves:'🌊',bonfire:'🔥',crickets:'🦗',tick:'⏰'}[s]||'🔊';
-  document.querySelector('.snd-wrap').classList.remove('open');
 });
 
 $('startBtn').onclick=()=>{ if(active)pauseTimer(); else if(workedMs>0)resumeTimer(); else startTimer(); };
@@ -2134,10 +2135,6 @@ $('lenPlus').onclick=()=>adjustLen(5);
 $('skipBtn').onclick=()=>{ if(mode!=='pomo')return; const was=phase;
   if(active){freeze();commit(was==='focus');} else if(workedMs>0){commit(was==='focus');}
   phase=was==='focus'?'short':'focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null; startTimer(); };
-
-/* ambient sound popover */
-$('sndBtn').onclick=e=>{ e.stopPropagation(); $('sndBtn').parentElement.classList.toggle('open'); };
-document.addEventListener('click',e=>{ const w=document.querySelector('.snd-wrap'); if(w&&w.classList.contains('open')&&!w.contains(e.target)) w.classList.remove('open'); });
 
 function renderDots(){const el=$('dots');if(!el)return;el.innerHTML='';const N=settings.sessions||4;
   for(let i=0;i<N;i++){const d=document.createElement('i');if(roundCount>i)d.classList.add('on');el.appendChild(d);}
@@ -2469,8 +2466,8 @@ function renderTimeline(){
   $('tlDate').textContent=new Date(selectedDay+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+(dayoff[selectedDay]?' · Day Off ✈':'');
   tl.innerHTML='';
   if(!items.length && !distr.length){tl.innerHTML='<div class="empty">No study sessions logged on this day.</div>';return;}
-  items.forEach(s=>{const sj=subjById(s.subjectId)||{name:'(deleted subject)',color:'#888'};
-    const tk=s.taskId?tasks.find(x=>x.id===s.taskId):null;
+  items.forEach(s=>{const tk=s.taskId?tasks.find(x=>x.id===s.taskId):null;
+    const sj=subjById(s.subjectId)||(tk&&subjById(tk.subjectId))||{name:'(no subject)',color:'#888'};
     const row=document.createElement('div');row.className='tl-item';
     row.innerHTML=`<div class="tl-time">${istTime(s.start)}</div><div class="tl-dot"><span class="d" style="background:${sj.color}"></span></div>
       <div class="tl-body"><div class="nm"><span style="color:${sj.color}">${esc(sj.name)}</span>${tk?` · <span style="color:var(--faint);font-weight:400">${esc(tk.name)}</span>`:''}</div><div class="meta">${hms(dur(s.start,s.end))} · ${istTime(s.start)} – ${istTime(s.end)}</div></div>
@@ -4038,7 +4035,7 @@ function renderHorizon(body){
 const HZ_DOT={life:'var(--violet)',year:'var(--rose)',quarter:'var(--amber)',month:'var(--teal)',week:'var(--ok)',day:'var(--accent)','':'var(--faint)'};
 function horizonSections(){ const today=todayKey();
   return [['year',currentPeriodKey('year')],['quarter',currentPeriodKey('quarter')],
-          ['month',currentPeriodKey('month')],['week',currentPeriodKey('week')],['day',today],['','']]; }
+          ['month',currentPeriodKey('month')],['week',currentPeriodKey('week')],['day',today]]; }
 function horizonHTML(){
   return horizonSections().map(([h,key])=>{
     const items=sortTasks(topLevel(applyFilter(tasksInHorizon(h,key),taskFilter)));
@@ -4070,9 +4067,9 @@ function wireHorizon(scope){
       const t=tasks.find(x=>x.id===taskDragId); if(t){ assignHorizon(t,h,key); save(); renderTasks(); } });
   });
 }
-/* ---- Snapshot view, columns layout: Inbox · Today · Week · Month · Quarter · Year side-by-side ---- */
+/* ---- Snapshot view, columns layout: Today · Week · Month · Quarter · Year side-by-side ---- */
 function horizonColsHTML(){ const today=todayKey();
-  const secs=[['','','Inbox'],['day',today,'Today'],['week',currentPeriodKey('week'),'This week'],['month',currentPeriodKey('month'),'This month'],['quarter',currentPeriodKey('quarter'),'This quarter'],['year',currentPeriodKey('year'),'This year']];
+  const secs=[['day',today,'Today'],['week',currentPeriodKey('week'),'This week'],['month',currentPeriodKey('month'),'This month'],['quarter',currentPeriodKey('quarter'),'This quarter'],['year',currentPeriodKey('year'),'This year']];
   const cols=secs.map(([h,key,lbl])=>{ const items=sortTasks(topLevel(applyFilter(tasksInHorizon(h,key),taskFilter)));
     const hsec = h==='day' ? habitTodaySectionHTML() : '';
     return `<div class="ccol" data-hz="${h}" data-key="${key}" data-addkey="hzc|${h}|${key}"><div class="ccol-h"><span class="t" style="color:${HZ_DOT[h]}">${lbl}</span><span class="s">${esc(horizonLabel(h,key))}</span></div>
