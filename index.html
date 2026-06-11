@@ -278,6 +278,8 @@
   .tk-done-head{display:flex;align-items:center;gap:6px;width:100%;font-family:inherit;font-size:12px;color:var(--faint);
     background:none;border:none;padding:8px 4px 6px;cursor:pointer;text-align:left}
   .tk-done-head:hover{color:var(--ink)} .tk-done-head .cv{font-size:10px;opacity:.7;margin-left:auto}
+  .tk-note{padding:0 12px 9px 42px;margin-top:-4px;font-size:12.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .tk.done .tk-note{opacity:.6}
   .tk-tags{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 9px 42px;margin-top:-4px}
   .tk-chip{font-size:11px;color:var(--muted);background:var(--track-bg);padding:3px 9px;border-radius:999px;white-space:nowrap;flex:none}
   .tk-chip.over{color:#ffc2c2;background:rgba(255,90,90,.22)}
@@ -962,11 +964,12 @@
   .modal h2{font-family:'Fraunces',serif;font-style:italic;font-weight:400;font-size:24px;margin-bottom:18px}
   .field{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--stroke-soft)}
   .field label{font-size:14px}
-  .field input,.field select{font-family:inherit;font-size:15px;color:var(--ink);background:var(--field-bg);border:1px solid var(--stroke);border-radius:10px;padding:8px 10px;outline:none}
+  .field input,.field select,.field textarea{font-family:inherit;font-size:15px;color:var(--ink);background:var(--field-bg);border:1px solid var(--stroke);border-radius:10px;padding:8px 10px;outline:none}
+  .field textarea{width:100%;resize:vertical;min-height:58px;line-height:1.45}
   .field input[type=number]{width:74px;text-align:center}
   .field input[type=date],.field input[type=time]{width:150px}
   .field select{min-width:150px}
-  .field input:focus,.field select:focus{border-color:var(--amber)}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--amber)}
   .modal .save{margin-top:20px;width:100%;background:var(--amber);color:#3a1810;border:none;padding:13px;border-radius:12px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer}
   .modal .danger{margin-top:10px;width:100%;background:transparent;color:var(--rose);border:1px solid var(--stroke-soft);padding:11px;border-radius:12px;font-family:inherit;font-size:13.5px;cursor:pointer}
   .footnote{font-size:11px;color:var(--faint);text-align:center;grid-column:1/-1;margin-top:8px}
@@ -1556,6 +1559,7 @@
 <div class="overlay" id="ovTodo"><div class="modal">
   <h2 id="todoTitle">Task</h2>
   <div class="field"><label>Task</label><input id="tdName" maxlength="200"></div>
+  <div class="field" style="flex-direction:column;align-items:stretch;gap:6px"><label>Note</label><textarea id="tdDesc" rows="3" placeholder="Add a description…"></textarea></div>
   <div class="field"><label>When</label><button type="button" class="tk-when" id="tdWhen" style="flex:0 1 auto;max-width:210px">No date</button></div>
   <div class="field"><label>Subject</label><select id="tdSubject"></select></div>
   <div class="field"><label>Parent goal</label><select id="tdParent"></select></div>
@@ -1679,48 +1683,58 @@ const _notionRecent=new Map();        // pageId → ts of last local push (a rac
 /* shadow-diff: the last name/done/due we know Notion has, per synced task. Every save() diffs the
    live tasks against this and pushes whatever changed — so ANY mutation site (date picker, drag-drop,
    calendar, timeline, matrix…) reflects back into Notion without each having to call notionPushTask. */
-const _notionShadow=new Map();        // pageId → {name,done,due,dueEnd}
-const notionFields=t=>({name:t.name||'',done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||''});
+const _notionShadow=new Map();        // pageId → {name,done,due,dueEnd,desc}
+const notionFields=t=>({name:t.name||'',done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||''});
 function notionMarkSynced(t){ if(t&&t.notionPageId) _notionShadow.set(t.notionPageId,notionFields(t)); } // baseline matches Notion ⇒ no echo-push
 function notionFlushChanges(){ if(!notionOn()) return;
   for(const t of tasks){ if(!t.notionSourceId||!t.notionPageId) continue;
     const cur=notionFields(t), prev=_notionShadow.get(t.notionPageId);
     if(!prev){ _notionShadow.set(t.notionPageId,cur); continue; } // first sight (freshly imported) — establish baseline, don't push
-    if(prev.name!==cur.name||prev.done!==cur.done||prev.due!==cur.due||prev.dueEnd!==cur.dueEnd){
+    if(prev.name!==cur.name||prev.done!==cur.done||prev.due!==cur.due||prev.dueEnd!==cur.dueEnd||prev.desc!==cur.desc){
       _notionShadow.set(t.notionPageId,cur); notionPushTask(t); } } }
+/* Notion rich_text values cap each text object at 2000 chars — chunk a long description so it never truncates */
+function notionRichText(s){ s=String(s||''); if(!s) return []; const out=[]; for(let i=0;i<s.length;i+=2000) out.push({text:{content:s.slice(i,i+2000)}}); return out; }
 /* pull one source's rows from the proxy and reconcile them into its board list (no save() here — caller batches) */
 async function notionSyncOne(src){
   if(!notionOn()) return {error:'No proxy URL set'};
   if(!src.dbId) return {error:'No database ID'};
   if(!src.boardId||!src.listId) return {error:'Not pinned to a list'};
   let data;
-  try{ const r=await fetch(notionProxy()+'?db='+encodeURIComponent(src.dbId),{cache:'no-store',headers:notionHeaders()});
+  // field-mapping overrides ride along so the Worker reads/returns the user's chosen date/description property (empty = disabled)
+  let url=notionProxy()+'?db='+encodeURIComponent(src.dbId); const m=src.map||{};
+  if(m.dateProp!==undefined) url+='&date='+encodeURIComponent(m.dateProp||'');
+  if(m.descProp!==undefined) url+='&desc='+encodeURIComponent(m.descProp||'');
+  try{ const r=await fetch(url,{cache:'no-store',headers:notionHeaders()});
        data=await r.json().catch(()=>null);
        if(!r.ok) return {error:(data&&data.error)||('HTTP '+r.status)}; }
   catch(e){ return {error:'Network / proxy unreachable'}; }
   if(!data||data.ok===false) return {error:(data&&data.error)||'Bad response'};
-  if(data.schema) src.schema=data.schema;   // {titleProp, doneProp:{name,type,doneValue,undoneValue}, dateProp} — needed to write edits back to Notion
+  if(data.schema) src.schema=data.schema;   // {titleProp, doneProp:{…}, dateProp, descProp} (overrides already applied) — needed to write edits back
+  if(Array.isArray(data.fields)) src.fields=data.fields;   // property catalog for the field-mapping config UI
   const rows=Array.isArray(data.results)?data.results:[];
   const mine=tasks.filter(t=>t.notionSourceId===src.id);
   const byPage=new Map(mine.filter(t=>t.notionPageId).map(t=>[t.notionPageId,t])); // pending creates (no pageId yet) aren't matchable
   const hasDate=!!(src.schema&&src.schema.dateProp);   // only sync dates when the DB actually has a Date property
+  const hasDesc=!!(src.schema&&src.schema.descProp);   // only sync descriptions when a text property is mapped
   const seen=new Set(); let changed=false;
   rows.forEach(row=>{ const pid=row.id||row.pageId; if(!pid)return; seen.add(pid);
     const name=(row.title||'').trim()||'(untitled)'; const done=!!row.done;
     const rDue=hasDate?(row.due||''):'', rEnd=hasDate?(row.dueEnd||''):'';
+    const rDesc=hasDesc?(row.desc||''):'';
     const rProps=Array.isArray(row.props)?row.props:[];
     let t=byPage.get(pid);
     if(!t){ if(_notionCreating>0) return;             // an unmatched row may be our own in-flight create — import it next cycle instead of duplicating
-      t={id:uid('t'),name,subjectId:'',due:rDue,dueEnd:rEnd,priority:0,checklist:[],
+      t={id:uid('t'),name,desc:rDesc,subjectId:'',due:rDue,dueEnd:rEnd,priority:0,checklist:[],
         done,doneOn:done?todayKey():'',repeat:'none',start:'',dur:0,created:Date.now(),order:nextOrder(),
         horizon:(rDue?'day':''),hkey:'',parentId:'',inboxListId:'',notionProps:rProps,
         boardId:src.boardId,listId:src.listId,notionSourceId:src.id,notionPageId:pid,notionUrl:row.url||''};
-      tasks.push(t); changed=true; }                    // NEW rows land in the pinned board list, carrying their Notion due date…
-    else {                                              // …after that, placement is yours — sync mirrors name + done + date both ways…
+      tasks.push(t); changed=true; }                    // NEW rows land in the pinned board list, carrying their Notion due date + description…
+    else {                                              // …after that, placement is yours — sync mirrors name + done + date + description both ways…
       const fresh=_notionInflight.has(pid) || ((_notionRecent.get(pid)||0) > Date.now()-15000);
       if(!fresh){ if(t.name!==name){ t.name=name; changed=true; } if(t.done!==done){ t.done=done; t.doneOn=done?todayKey():''; changed=true; }
         if(hasDate && (t.due!==rDue || (t.dueEnd||'')!==rEnd)){ t.due=rDue; t.dueEnd=rEnd;   // a date edited in Notion pulls back
-          if(rDue){ t.horizon='day'; t.hkey=''; } else if(t.horizon==='day'){ t.horizon=''; } changed=true; } } // …but a just-pushed local edit isn't reverted by a read that raced it
+          if(rDue){ t.horizon='day'; t.hkey=''; } else if(t.horizon==='day'){ t.horizon=''; } changed=true; }
+        if(hasDesc && (t.desc||'')!==rDesc){ t.desc=rDesc; changed=true; } } // …but a just-pushed local edit isn't reverted by a read that raced it
       t.notionProps=rProps; t.notionUrl=row.url||t.notionUrl||''; }
     notionMarkSynced(t); });                            // shadow now matches Notion ⇒ the next save() won't echo-push it back
   // a row removed/archived in Notion disappears from its board list here too — but never drop a pending create (no pageId yet)
@@ -1739,11 +1753,13 @@ function buildNotionProps(schema,vals){ if(!schema) return null; const p={};
     else if(dp.type==='select'&&v) p[dp.name]={select:{name:v}}; }
   if(vals.due!==undefined && schema.dateProp)   // two-way due date — '' / null clears it in Notion
     p[schema.dateProp]= vals.due ? {date:{start:vals.due, ...(vals.dueEnd?{end:vals.dueEnd}:{})}} : {date:null};
+  if(vals.desc!==undefined && schema.descProp)  // two-way description — empty clears the text property
+    p[schema.descProp]={rich_text:notionRichText(vals.desc)};
   return Object.keys(p).length?p:null; }
 /* TWO-WAY: push a synced task's name + done back to Notion. Fire-and-forget; guarded so a racing pull won't revert it */
 async function notionPushTask(t){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
   const src=notionSources.find(s=>s.id===t.notionSourceId); if(!src||!src.schema) return;
-  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||''}); if(!props) return;
+  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||''}); if(!props) return;
   const pid=t.notionPageId; _notionInflight.add(pid); _notionRecent.set(pid,Date.now());
   try{ const r=await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,properties:props})});
        const d=await r.json().catch(()=>null);
@@ -1757,7 +1773,7 @@ function notionSourceForList(boardId,listId){ return notionSources.find(s=>s.ena
 /* WRITE / INSERT: a task that lands in a Notion-synced list becomes a brand-new row in that database */
 async function notionMaybeCreate(t){ if(!t||t.notionSourceId||!notionOn()) return;
   const src=notionSourceForList(t.boardId,t.listId); if(!src||!src.schema) return;
-  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||''}); if(!props) return;
+  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||''}); if(!props) return;
   t.notionSourceId=src.id; t.notionPageId='';            // claim immediately so a racing pull won't duplicate it
   _notionCreating++;
   try{ const r=await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({create:src.dbId,properties:props})});
@@ -1861,6 +1877,7 @@ function normalizeData(){
     if(typeof t.parentId!=='string') t.parentId='';  // goal tree link
     if(typeof t.boardId!=='string') t.boardId='';    // board membership (independent of schedule)
     if(typeof t.listId!=='string') t.listId='';
+    if(typeof t.desc!=='string') t.desc='';            // free-text task description / notes (TickTick-style, syncs to a Notion text prop)
     if(typeof t.notionSourceId!=='string') t.notionSourceId=''; // set ⇒ this task mirrors a Notion DB row (lives only in its board list)
     if(typeof t.notionPageId!=='string') t.notionPageId='';
     if(!Array.isArray(t.notionProps)) t.notionProps=[]; // up-to-4 read-only Notion data points (TickTick-style)
@@ -2293,7 +2310,7 @@ function openTodo(defaultSubjectId,task){ _tdCtx={task};
   _tdDraft = task ? {horizon:schedHorizon(task), due:task.due||'', dueEnd:task.dueEnd||'', hkey:task.hkey||'', repeat:task.repeat||'none', start:task.start||'', dur:task.dur||0}
                   : {horizon:'', due:'', dueEnd:'', hkey:'', repeat:'none', start:'', dur:0};
   $('todoTitle').textContent=task?'Edit task':'New task';
-  $('tdName').value=task?task.name:''; $('tdPri').value=task?(task.priority||0):0;
+  $('tdName').value=task?task.name:''; $('tdDesc').value=task?(task.desc||''):''; $('tdPri').value=task?(task.priority||0):0;
   $('tdStart').value=_tdDraft.start||''; $('tdDur').value=_tdDraft.dur||'';
   $('tdActions').style.display=task?'flex':'none';   // Delete/Duplicate only when editing an existing task
   tdRenderSched();
@@ -2308,7 +2325,7 @@ $('tdDur').onchange=e=>{ _tdDraft.dur=parseInt(e.target.value)||0; };
 $('tdSave').onclick=()=>{ if(!_tdCtx||!_tdDraft)return; const {task}=_tdCtx;
   const name=$('tdName').value.trim(); if(!name)return;
   const target = task || newTask(name,'');
-  Object.assign(target,{ name, subjectId:$('tdSubject').value||'', priority:parseInt($('tdPri').value)||0,
+  Object.assign(target,{ name, desc:$('tdDesc').value.replace(/\s+$/,''), subjectId:$('tdSubject').value||'', priority:parseInt($('tdPri').value)||0,
     horizon:_tdDraft.horizon||'', due:_tdDraft.due||'', dueEnd:_tdDraft.dueEnd||'', hkey:_tdDraft.hkey||'',
     repeat:_tdDraft.repeat||'none', parentId:$('tdParent').value||'' });
   if(target.horizon==='day' && !target.due) target.due=todayKey();
@@ -2586,7 +2603,7 @@ function addDays(key,n){ const [y,m,d]=key.split('-').map(Number); const dt=new 
 function daysBetween(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
 function prettyDate(key){ const [y,m,d]=key.split('-').map(Number); return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]; }
 const PRI_COL=['transparent','#5fc24a','#f5a623','#ff5a5a'];
-function newTask(name,due){ taskSound(); return {id:uid('t'),name,due:due||'',dueEnd:'',priority:0,subjectId:'',checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
+function newTask(name,due){ taskSound(); return {id:uid('t'),name,desc:'',due:due||'',dueEnd:'',priority:0,subjectId:'',checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
 
 /* ---- TeuxDeux-style smart entry: parse priority, date & repeat from free text ---- */
 const SMART_WD={sunday:0,sun:0,monday:1,mon:1,tuesday:2,tues:2,tue:2,wednesday:3,weds:3,wed:3,thursday:4,thurs:4,thur:4,thu:4,friday:5,fri:5,saturday:6,sat:6};
@@ -2990,6 +3007,7 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
       <span class="tk-name" title="Open task">${esc(t.name)}</span>
       <button class="tk-ic tk-menu" data-act="menu" title="More options">⋯</button>
     </div>
+    ${t.desc?`<div class="tk-note" data-act="open" title="${esc(t.desc)}">${esc(t.desc.split('\n')[0].slice(0,140))}</div>`:''}
     ${tags?`<div class="tk-tags">${tags}</div>`:''}
     ${subs}
   </div>`; }
@@ -3030,6 +3048,7 @@ let _gho=null;                                                              // f
 function wireTaskGestures(scope, re){ re=re||refreshTaskSurfaces;
   scope.querySelectorAll('.tk').forEach(card=>{ const t=tasks.find(x=>x.id===card.dataset.id); if(!t)return;
     const main=card.querySelector(':scope > .tk-main'); if(!main)return;
+    const note=card.querySelector(':scope > .tk-note'); if(note) note.onclick=e=>{ e.stopPropagation(); openTodo(null,t); }; // note preview → open detail
     const nested=!!card.parentElement.closest('.tk-children');
     card.addEventListener('contextmenu',e=>{ if(e.target.closest('input,textarea,select'))return;
       e.preventDefault(); openCtxMenu(card.querySelector('.tk-menu')||main, buildTaskMenu(t,re)); });
@@ -4591,6 +4610,17 @@ function renderNotionList(){ const wrap=$('notionList'); if(!wrap)return;
   wrap.innerHTML=notionSources.map(s=>{
     const sub=s.lastErr?`<span style="color:var(--rose)">⚠ ${esc(s.lastErr)}</span>`
       :(s.lastSync?`${s.count||0} row${s.count===1?'':'s'} · synced ${new Date(s.lastSync).toLocaleTimeString()}`:'never synced');
+    const fields=Array.isArray(s.fields)?s.fields:[];
+    const txtF=fields.filter(f=>f.type==='rich_text'), dateF=fields.filter(f=>f.type==='date');
+    const curDesc=(s.schema&&s.schema.descProp)||'', curDate=(s.schema&&s.schema.dateProp)||'';
+    const propOpts=(list,selName)=>['<option value="">— None —</option>'].concat(
+      list.map(f=>`<option value="${esc(f.name)}" ${f.name===selName?'selected':''}>${esc(f.name)}</option>`)).join('');
+    const mapUI = fields.length ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:6px">
+        <span style="font-size:12px;color:var(--muted);min-width:64px">Description</span>
+        <select data-ns="descprop" title="Which Notion text property is the task description" style="flex:1;min-width:90px">${propOpts(txtF,curDesc)}</select>
+        <span style="font-size:12px;color:var(--muted)">Date</span>
+        <select data-ns="dateprop" title="Which Notion date property is the due date" style="flex:1;min-width:90px">${propOpts(dateF,curDate)}</select>
+      </div>` : '';
     return `<div class="ns-row" data-id="${s.id}" style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:6px">
       <div style="display:flex;gap:6px;align-items:center">
         <input data-ns="name" value="${esc(s.name)}" placeholder="Label" maxlength="40" style="flex:1;min-width:0">
@@ -4604,6 +4634,7 @@ function renderNotionList(){ const wrap=$('notionList'); if(!wrap)return;
         <span style="font-size:13px;color:var(--muted)">›</span>
         <select data-ns="list" style="flex:1;min-width:90px">${notionListOpts(s.boardId,s.listId)}</select>
       </div>
+      ${mapUI}
       <div style="font-size:11px;color:var(--faint)">${sub}</div>
     </div>`; }).join('');
   wrap.querySelectorAll('.ns-row').forEach(row=>{ const s=notionSources.find(x=>x.id===row.dataset.id); if(!s)return;
@@ -4614,6 +4645,8 @@ function renderNotionList(){ const wrap=$('notionList'); if(!wrap)return;
     row.querySelector('[data-ns="db"]').onchange=e=>{ s.dbId=e.target.value.trim(); save(); };
     bsel.onchange=()=>{ s.boardId=bsel.value; lsel.innerHTML=notionListOpts(s.boardId,''); s.listId=lsel.value||''; save(); };
     lsel.onchange=()=>{ s.listId=lsel.value; save(); };
+    const dpSel=row.querySelector('[data-ns="descprop"]'); if(dpSel) dpSel.onchange=()=>{ s.map=s.map||{}; s.map.descProp=dpSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
+    const dtSel=row.querySelector('[data-ns="dateprop"]'); if(dtSel) dtSel.onchange=()=>{ s.map=s.map||{}; s.map.dateProp=dtSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
     row.querySelector('[data-ns="sync"]').onclick=()=>{ s.boardId=bsel.value; s.listId=lsel.value; save(); notionSyncAll({report:true}); };
     row.querySelector('[data-ns="del"]').onclick=()=>askConfirm('Remove this database? Its synced cards leave the board (your hand-made tasks are untouched).',
       ()=>{ tasks=tasks.filter(t=>t.notionSourceId!==s.id); notionSources=notionSources.filter(x=>x.id!==s.id); save(); renderNotionList(); refreshTaskSurfaces&&refreshTaskSurfaces(); }); });

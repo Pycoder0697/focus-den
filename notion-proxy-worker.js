@@ -7,12 +7,16 @@
  *   integration token must never ship inside the public index.html.
  *   This tiny Worker holds the token server-side and exposes two endpoints:
  *
- *     READ   GET  /?db=<databaseId>
- *            → { ok:true, results:[ {id,title,done,due,dueEnd,props,url}, … ],
+ *     READ   GET  /?db=<databaseId>[&date=<prop>][&desc=<prop>]
+ *            → { ok:true, results:[ {id,title,done,due,dueEnd,desc,props,url}, … ],
  *                schema:{ titleProp, doneProp:{name,type,doneValue,undoneValue},
- *                         dateProp } }
+ *                         dateProp, descProp },
+ *                fields:[ {name,type}, … ] }
  *              `props` = up to 4 extra display-only properties [{name,value}],
- *              TickTick-style — title/done/date are excluded (already mapped).
+ *              TickTick-style — title/done/date/description are excluded (mapped).
+ *              `fields` = the database's full property catalog (for the app's
+ *              field-mapping config). `date`/`desc` query params override which
+ *              property maps to the due date / description (empty = disable).
  *
  *     WRITE  POST /   one of:
  *              { page:"<id>", properties:{…} }   → update a row (done/rename)
@@ -71,6 +75,11 @@
  *   due   : first Date property — start→due, end→dueEnd. TWO-WAY: rescheduling
  *           a synced task in Focus Den writes this date back to Notion, and a
  *           date edited in Notion pulls back. (Date-only; times are truncated.)
+ *   desc  : a rich_text property named like a description (Description, Notes,
+ *           Details, Summary, …) — TWO-WAY: a task's description edited in Focus
+ *           Den writes back here, and a Notion edit pulls back. Auto-detection is
+ *           name-matched only (never a random text column); the app's field-
+ *           mapping config can override it to any text property (or none).
  *   props : every other property (Text/Number/Select/Multi-Select/Status/Date/
  *           Person/Checkbox/URL/…), up to 4, surfaced read-only on the task —
  *           exactly like TickTick shows up to 4 Notion data points per task.
@@ -78,6 +87,7 @@
 
 const NOTION_VERSION = '2022-06-28';
 const DONE_WORDS = ['done', 'complete', 'completed', 'closed', 'archived'];
+const DESC_WORDS = /^(description|desc|notes?|details?|summary|content|comments?|body|memo)$/i;
 
 export default {
   async fetch(request, env) {
@@ -133,14 +143,20 @@ export default {
 
       // ---- READ: query a database ----
       if (request.method !== 'GET') return json({ ok: false, error: 'Use GET or POST' }, 405);
-      const db = new URL(request.url).searchParams.get('db');
+      const params = new URL(request.url).searchParams;
+      const db = params.get('db');
       if (!db) return json({ ok: false, error: 'Missing ?db=<databaseId>' }, 400);
 
-      // 1) learn the schema (which prop is title / done, and the on/off values)
+      // 1) learn the schema (which prop is title / done / date / description, and the on/off values)
       const metaR = await notion(`databases/${db}`);
       const meta = await metaR.json();
       if (!metaR.ok) return json({ ok: false, error: meta.message || `Notion HTTP ${metaR.status}` }, metaR.status === 404 ? 400 : 502);
       const schema = detectSchema(meta);
+      // optional field-mapping overrides from Focus Den's config (empty value = disable that field)
+      if (params.has('date')) schema.dateProp = params.get('date') || null;
+      if (params.has('desc')) schema.descProp = params.get('desc') || null;
+      // catalog of the database's properties so the app can offer mapping choices
+      const fields = Object.keys(meta.properties || {}).map((name) => ({ name, type: meta.properties[name].type }));
 
       // 2) page through every row
       const results = [];
@@ -156,7 +172,7 @@ export default {
         cursor = data.has_more ? data.next_cursor : null;
       } while (cursor);
 
-      return json({ ok: true, db, schema, results });
+      return json({ ok: true, db, schema, fields, results });
     } catch (e) {
       return json({ ok: false, error: 'Proxy error: ' + ((e && e.message) || e) }, 502);
     }
@@ -202,7 +218,13 @@ function detectSchema(db) {
   let dateProp = null;
   for (const name in props) if (props[name].type === 'date') { dateProp = name; break; }
 
-  return { titleProp, doneProp, dateProp };
+  // a rich_text property named like a description → two-way task description.
+  // Only NAME-MATCHED (never a random text column) so auto-detection can't clobber an unrelated field;
+  // the user can override this to any text property (or none) from Focus Den's field-mapping config.
+  let descProp = null;
+  for (const name in props) if (props[name].type === 'rich_text' && DESC_WORDS.test(name.trim())) { descProp = name; break; }
+
+  return { titleProp, doneProp, dateProp, descProp };
 }
 
 /* Turn a raw Notion page into the small shape Focus Den expects. */
@@ -226,8 +248,12 @@ function mapRow(page, schema) {
     dueEnd = (d.end || '').slice(0, 10);
   }
 
-  // up to 4 extra display-only properties (TickTick shows up to 4 data points) — skip the integrated title/done/date
-  const skip = new Set([schema.titleProp, schema.doneProp && schema.doneProp.name, schema.dateProp].filter(Boolean));
+  let desc = '';                            // two-way task description (a rich_text property)
+  if (schema.descProp && props[schema.descProp] && props[schema.descProp].type === 'rich_text')
+    desc = (props[schema.descProp].rich_text || []).map((t) => t.plain_text).join('');
+
+  // up to 4 extra display-only properties (TickTick shows up to 4 data points) — skip the integrated title/done/date/description
+  const skip = new Set([schema.titleProp, schema.doneProp && schema.doneProp.name, schema.dateProp, schema.descProp].filter(Boolean));
   const extra = [];
   for (const name in props) {
     if (extra.length >= 4) break;
@@ -236,7 +262,7 @@ function mapRow(page, schema) {
     if (value) extra.push({ name, value });
   }
 
-  return { id: page.id, title: title.trim(), done, due, dueEnd, props: extra, url: page.url || '' };
+  return { id: page.id, title: title.trim(), done, due, dueEnd, desc, props: extra, url: page.url || '' };
 }
 
 /* Render a Notion property to a short display string (for the up-to-4 extra props). */
