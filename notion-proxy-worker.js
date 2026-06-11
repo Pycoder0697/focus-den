@@ -8,8 +8,11 @@
  *   This tiny Worker holds the token server-side and exposes two endpoints:
  *
  *     READ   GET  /?db=<databaseId>
- *            → { ok:true, results:[ {id,title,done,due,url}, … ],
- *                schema:{ titleProp, doneProp:{name,type,doneValue,undoneValue} } }
+ *            → { ok:true, results:[ {id,title,done,due,dueEnd,props,url}, … ],
+ *                schema:{ titleProp, doneProp:{name,type,doneValue,undoneValue},
+ *                         dateProp } }
+ *              `props` = up to 4 extra display-only properties [{name,value}],
+ *              TickTick-style — title/done/date are excluded (already mapped).
  *
  *     WRITE  POST /   one of:
  *              { page:"<id>", properties:{…} }   → update a row (done/rename)
@@ -65,7 +68,12 @@
  *   done  : first checkbox property; else a Status/Select — "done" = the option
  *           in the Complete group / named Done·Complete·Closed·Archived, and
  *           "not done" = an option in the To-do group / the first other option.
- *   due   : first Date property's start (read-only reference).
+ *   due   : first Date property — start→due, end→dueEnd. TWO-WAY: rescheduling
+ *           a synced task in Focus Den writes this date back to Notion, and a
+ *           date edited in Notion pulls back. (Date-only; times are truncated.)
+ *   props : every other property (Text/Number/Select/Multi-Select/Status/Date/
+ *           Person/Checkbox/URL/…), up to 4, surfaced read-only on the task —
+ *           exactly like TickTick shows up to 4 Notion data points per task.
  * ==========================================================================*/
 
 const NOTION_VERSION = '2022-06-28';
@@ -190,7 +198,11 @@ function detectSchema(db) {
     break;
   }
 
-  return { titleProp, doneProp };
+  // first Date property → two-way due date
+  let dateProp = null;
+  for (const name in props) if (props[name].type === 'date') { dateProp = name; break; }
+
+  return { titleProp, doneProp, dateProp };
 }
 
 /* Turn a raw Notion page into the small shape Focus Den expects. */
@@ -207,8 +219,42 @@ function mapRow(page, schema) {
     else if (schema.doneProp.type === 'select') done = !!p.select && (p.select.name === schema.doneProp.doneValue || DONE_WORDS.includes((p.select.name || '').toLowerCase()));
   }
 
-  let due = '';
-  for (const k in props) if (props[k].type === 'date' && props[k].date && props[k].date.start) { due = props[k].date.start; break; }
+  let due = '', dueEnd = '';
+  if (schema.dateProp && props[schema.dateProp] && props[schema.dateProp].date) {
+    const d = props[schema.dateProp].date;
+    due = (d.start || '').slice(0, 10);     // Focus Den dates are date-only (YYYY-MM-DD)
+    dueEnd = (d.end || '').slice(0, 10);
+  }
 
-  return { id: page.id, title: title.trim(), done, due, url: page.url || '' };
+  // up to 4 extra display-only properties (TickTick shows up to 4 data points) — skip the integrated title/done/date
+  const skip = new Set([schema.titleProp, schema.doneProp && schema.doneProp.name, schema.dateProp].filter(Boolean));
+  const extra = [];
+  for (const name in props) {
+    if (extra.length >= 4) break;
+    if (skip.has(name)) continue;
+    const value = propText(props[name]);
+    if (value) extra.push({ name, value });
+  }
+
+  return { id: page.id, title: title.trim(), done, due, dueEnd, props: extra, url: page.url || '' };
+}
+
+/* Render a Notion property to a short display string (for the up-to-4 extra props). */
+function propText(p) {
+  if (!p) return '';
+  switch (p.type) {
+    case 'rich_text': return (p.rich_text || []).map((t) => t.plain_text).join('').trim();
+    case 'number': return p.number != null ? String(p.number) : '';
+    case 'select': return p.select ? p.select.name : '';
+    case 'status': return p.status ? p.status.name : '';
+    case 'multi_select': return (p.multi_select || []).map((o) => o.name).join(', ');
+    case 'date': return p.date ? (p.date.start || '').slice(0, 10) + (p.date.end ? ' → ' + p.date.end.slice(0, 10) : '') : '';
+    case 'people': return (p.people || []).map((u) => u.name || '').filter(Boolean).join(', ');
+    case 'checkbox': return p.checkbox ? '✓' : '';
+    case 'url': return p.url || '';
+    case 'email': return p.email || '';
+    case 'phone_number': return p.phone_number || '';
+    case 'formula': return p.formula ? String(p.formula[p.formula.type] != null ? p.formula[p.formula.type] : '') : '';
+    default: return '';
+  }
 }
