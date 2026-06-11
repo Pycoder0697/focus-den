@@ -1,87 +1,87 @@
 /* ============================================================================
- * Focus Den — Notion proxy (Cloudflare Worker)  ·  TWO-WAY sync
+ * Focus Den -- Notion proxy (Cloudflare Worker)  -  TWO-WAY sync
  * ----------------------------------------------------------------------------
  * WHY THIS EXISTS
  *   Focus Den is a static page (GitHub Pages). The browser cannot call
- *   api.notion.com directly — Notion sends no CORS headers, and a secret
+ *   api.notion.com directly -- Notion sends no CORS headers, and a secret
  *   integration token must never ship inside the public index.html.
  *   This tiny Worker holds the token server-side and exposes two endpoints:
  *
  *     READ   GET  /?db=<databaseId>[&date=<prop>][&desc=<prop>]
- *            → { ok:true, results:[ {id,title,done,due,dueEnd,desc,props,url}, … ],
+ *            -> { ok:true, results:[ {id,title,done,due,dueEnd,desc,props,url}, ... ],
  *                schema:{ titleProp, doneProp:{name,type,doneValue,undoneValue},
  *                         dateProp, descProp },
- *                fields:[ {name,type}, … ] }
+ *                fields:[ {name,type}, ... ] }
  *              `props` = up to 4 extra display-only properties [{name,value}],
- *              TickTick-style — title/done/date/description are excluded (mapped).
+ *              TickTick-style -- title/done/date/description are excluded (mapped).
  *              `fields` = the database's full property catalog (for the app's
  *              field-mapping config). `date`/`desc` query params override which
  *              property maps to the due date / description (empty = disable).
  *
  *     WRITE  POST /   one of:
- *              { page:"<id>", properties:{…} }   → update a row (done/rename)
- *              { create:"<dbId>", properties:{…} } → insert a NEW row
- *              { page:"<id>", archived:true }     → archive a row (on delete)
- *            → { ok:true, id }
+ *              { page:"<id>", properties:{...} }   -> update a row (done/rename)
+ *              { create:"<dbId>", properties:{...} } -> insert a NEW row
+ *              { page:"<id>", archived:true }     -> archive a row (on delete)
+ *            -> { ok:true, id }
  *
  *   So in Focus Den: checking a card done / renaming updates the Notion row,
  *   adding a card to a synced list creates a Notion row, deleting a card
- *   archives it — and edits made in Notion pull back. Full two-way sync.
+ *   archives it -- and edits made in Notion pull back. Full two-way sync.
  *
  * ----------------------------------------------------------------------------
  * ONE-TIME SETUP (~5 minutes, free)
  *
  *   1. Create a Notion integration
- *      → https://www.notion.so/my-integrations → New integration
- *      → Capabilities: enable **Read content**, **Update content**, AND
+ *      -> https://www.notion.so/my-integrations -> New integration
+ *      -> Capabilities: enable **Read content**, **Update content**, AND
  *        **Insert content** (Update = edit/archive rows, Insert = create rows).
- *      → Copy the "Internal Integration Secret" (starts `ntn_` or `secret_`).
+ *      -> Copy the "Internal Integration Secret" (starts `ntn_` or `secret_`).
  *
  *   2. Share each database with the integration
- *      → Open the database in Notion → ••• (top-right) → Connections →
+ *      -> Open the database in Notion -> --- (top-right) -> Connections ->
  *        add your integration. (Without this, queries return nothing.)
- *      → The database ID is the 32-char hex in its URL, before `?v=`.
+ *      -> The database ID is the 32-char hex in its URL, before `?v=`.
  *
  *   3. Deploy this Worker
  *      DASHBOARD (easiest):
- *        → dash.cloudflare.com → Workers & Pages → Create → Create Worker
- *        → name it e.g. focus-den-notion → Deploy → "Edit code"
- *        → paste this whole file, Save & Deploy
- *        → Settings → Variables and Secrets → Add → encrypt:
+ *        -> dash.cloudflare.com -> Workers & Pages -> Create -> Create Worker
+ *        -> name it e.g. focus-den-notion -> Deploy -> "Edit code"
+ *        -> paste this whole file, Save & Deploy
+ *        -> Settings -> Variables and Secrets -> Add -> encrypt:
  *              NOTION_TOKEN = <your integration secret>
  *          (optional) ALLOW_ORIGIN = https://pycoder0697.github.io
- *          (optional) SYNC_KEY     = <any long random string>   ← see SECURITY
- *      OR CLI:  `npm i -g wrangler` → `wrangler deploy`
- *               → `wrangler secret put NOTION_TOKEN`  (and SYNC_KEY if used)
+ *          (optional) SYNC_KEY     = <any long random string>   <- see SECURITY
+ *      OR CLI:  `npm i -g wrangler` -> `wrangler deploy`
+ *               -> `wrangler secret put NOTION_TOKEN`  (and SYNC_KEY if used)
  *
- *   4. Copy the Worker URL into Focus Den → Settings → "Notion — proxy URL".
- *      If you set SYNC_KEY, put the same string in "Notion — proxy key".
- *      Then Manage databases → Add → paste the DB id → pick board + list → ⟳.
+ *   4. Copy the Worker URL into Focus Den -> Settings -> "Notion -- proxy URL".
+ *      If you set SYNC_KEY, put the same string in "Notion -- proxy key".
+ *      Then Manage databases -> Add -> paste the DB id -> pick board + list -> (sync).
  *
  * ----------------------------------------------------------------------------
  * SECURITY
- *   Anyone who learns the Worker URL can READ — and now WRITE — the databases
+ *   Anyone who learns the Worker URL can READ -- and now WRITE -- the databases
  *   you've shared with the integration. The Worker only ever queries a database
  *   or patches a page's properties (never deletes), but to lock it to just your
  *   app set SYNC_KEY: every request must then carry a matching `x-sync-key`
- *   header, which Focus Den sends from Settings → "Notion — proxy key". Leave
+ *   header, which Focus Den sends from Settings -> "Notion -- proxy key". Leave
  *   SYNC_KEY unset to keep the Worker open (simplest).
  *
  * MAPPING (auto-detected from the database schema, no per-field config)
  *   title : the Title property.
- *   done  : first checkbox property; else a Status/Select — "done" = the option
- *           in the Complete group / named Done·Complete·Closed·Archived, and
+ *   done  : first checkbox property; else a Status/Select -- "done" = the option
+ *           in the Complete group / named Done-Complete-Closed-Archived, and
  *           "not done" = an option in the To-do group / the first other option.
- *   due   : first Date property — start→due, end→dueEnd. TWO-WAY: rescheduling
+ *   due   : first Date property -- start->due, end->dueEnd. TWO-WAY: rescheduling
  *           a synced task in Focus Den writes this date back to Notion, and a
  *           date edited in Notion pulls back. (Date-only; times are truncated.)
  *   desc  : a rich_text property named like a description (Description, Notes,
- *           Details, Summary, …) — TWO-WAY: a task's description edited in Focus
+ *           Details, Summary, ...) -- TWO-WAY: a task's description edited in Focus
  *           Den writes back here, and a Notion edit pulls back. Auto-detection is
  *           name-matched only (never a random text column); the app's field-
  *           mapping config can override it to any text property (or none).
  *   props : every other property (Text/Number/Select/Multi-Select/Status/Date/
- *           Person/Checkbox/URL/…), up to 4, surfaced read-only on the task —
+ *           Person/Checkbox/URL/...), up to 4, surfaced read-only on the task --
  *           exactly like TickTick shows up to 4 Notion data points per task.
  * ==========================================================================*/
 
@@ -124,14 +124,14 @@ export default {
         if (!body) return json({ ok: false, error: 'POST needs a JSON body' }, 400);
         let r;
         if (body.create) {
-          // INSERT: { create:"<databaseId>", properties:{…} } → new row
+          // INSERT: { create:"<databaseId>", properties:{...} } -> new row
           if (!body.properties) return json({ ok: false, error: 'create needs { create, properties }' }, 400);
           r = await notion('pages', { method: 'POST', body: JSON.stringify({ parent: { database_id: body.create }, properties: body.properties }) });
         } else if (body.page && body.archived !== undefined) {
           // ARCHIVE / restore: { page:"<pageId>", archived:true|false }
           r = await notion(`pages/${body.page}`, { method: 'PATCH', body: JSON.stringify({ archived: !!body.archived }) });
         } else if (body.page && body.properties) {
-          // UPDATE: { page:"<pageId>", properties:{…} }
+          // UPDATE: { page:"<pageId>", properties:{...} }
           r = await notion(`pages/${body.page}`, { method: 'PATCH', body: JSON.stringify({ properties: body.properties }) });
         } else {
           return json({ ok: false, error: 'POST needs {page,properties} | {create,properties} | {page,archived}' }, 400);
@@ -214,11 +214,11 @@ function detectSchema(db) {
     break;
   }
 
-  // first Date property → two-way due date
+  // first Date property -> two-way due date
   let dateProp = null;
   for (const name in props) if (props[name].type === 'date') { dateProp = name; break; }
 
-  // a rich_text property named like a description → two-way task description.
+  // a rich_text property named like a description -> two-way task description.
   // Only NAME-MATCHED (never a random text column) so auto-detection can't clobber an unrelated field;
   // the user can override this to any text property (or none) from Focus Den's field-mapping config.
   let descProp = null;
@@ -252,7 +252,7 @@ function mapRow(page, schema) {
   if (schema.descProp && props[schema.descProp] && props[schema.descProp].type === 'rich_text')
     desc = (props[schema.descProp].rich_text || []).map((t) => t.plain_text).join('');
 
-  // up to 4 extra display-only properties (TickTick shows up to 4 data points) — skip the integrated title/done/date/description
+  // up to 4 extra display-only properties (TickTick shows up to 4 data points) -- skip the integrated title/done/date/description
   const skip = new Set([schema.titleProp, schema.doneProp && schema.doneProp.name, schema.dateProp, schema.descProp].filter(Boolean));
   const extra = [];
   for (const name in props) {
@@ -274,9 +274,9 @@ function propText(p) {
     case 'select': return p.select ? p.select.name : '';
     case 'status': return p.status ? p.status.name : '';
     case 'multi_select': return (p.multi_select || []).map((o) => o.name).join(', ');
-    case 'date': return p.date ? (p.date.start || '').slice(0, 10) + (p.date.end ? ' → ' + p.date.end.slice(0, 10) : '') : '';
+    case 'date': return p.date ? (p.date.start || '').slice(0, 10) + (p.date.end ? ' -> ' + p.date.end.slice(0, 10) : '') : '';
     case 'people': return (p.people || []).map((u) => u.name || '').filter(Boolean).join(', ');
-    case 'checkbox': return p.checkbox ? '✓' : '';
+    case 'checkbox': return p.checkbox ? 'Yes' : '';
     case 'url': return p.url || '';
     case 'email': return p.email || '';
     case 'phone_number': return p.phone_number || '';
