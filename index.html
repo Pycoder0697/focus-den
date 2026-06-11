@@ -149,13 +149,11 @@
   .railtab:hover{background:var(--glass-2);color:var(--ink)}
   .railtab.active{background:var(--glass-2);color:var(--amber)}
   .railtab.active::before{content:"";position:absolute;left:-8px;top:11px;bottom:11px;width:3px;border-radius:0 3px 3px 0;background:var(--amber)}
-  /* Subjects rail icon doubles as a live timer ring (TickTick-style): faint circle when idle, fills as the running session progresses */
-  .rail-ring .rr-track{stroke:var(--stroke);stroke-width:2.1}
-  .rail-ring .rr-prog{stroke:currentColor;stroke-width:2.4;stroke-linecap:round;transition:stroke-dashoffset .25s linear}
-  .rail-ring .rr-dot{fill:currentColor;transition:r .2s}
+  /* Subjects rail icon doubles as a live timer donut (TickTick-style): grey track ring always, accent arc traces as the running session progresses — nothing in the centre */
+  .rail-ring .rr-track{stroke:var(--stroke);stroke-width:2.5;fill:none}
+  .rail-ring .rr-prog{stroke:currentColor;stroke-width:2.5;stroke-linecap:round;fill:none;transition:stroke-dashoffset .25s linear}
   .railtab.timing{color:var(--amber)}
-  .railtab.timing .rr-track{stroke:var(--amber);opacity:.22}
-  .railtab.timing .rr-prog,.railtab.timing .rr-dot{stroke:var(--amber);fill:var(--amber)}
+  .railtab.timing .rr-prog{stroke:var(--amber)}
   .rail-tip{position:absolute;left:50px;top:50%;transform:translateY(-50%);white-space:nowrap;
     background:var(--ink);color:var(--body-bg);font-size:12.7px;font-weight:600;padding:5px 9px;border-radius:7px;
     opacity:0;pointer-events:none;transition:.15s;z-index:60}
@@ -1155,7 +1153,7 @@
   <!-- VERTICAL NAV RAIL -->
   <nav class="rail">
     <div class="rail-logo" title="Focus Den">F</div>
-    <button class="railtab active" data-tab="subjects"><svg class="rail-ring" viewBox="0 0 24 24" fill="none"><circle class="rr-track" cx="12" cy="12" r="9"/><circle class="rr-prog" cx="12" cy="12" r="9" pathLength="100" transform="rotate(-90 12 12)" stroke-dasharray="100" stroke-dashoffset="100"/><circle class="rr-dot" cx="12" cy="3" r="0"/></svg><span class="rail-tip" id="subjRailTip">Subjects</span></button>
+    <button class="railtab active" data-tab="subjects"><svg class="rail-ring" viewBox="0 0 24 24" fill="none"><circle class="rr-track" cx="12" cy="12" r="9"/><circle class="rr-prog" cx="12" cy="12" r="9" pathLength="100" transform="rotate(-90 12 12)" stroke-dasharray="100" stroke-dashoffset="100"/></svg><span class="rail-tip" id="subjRailTip">Subjects</span></button>
     <button class="railtab" data-tab="tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6l1 1 2-2"/><path d="M4 12l1 1 2-2"/><circle cx="5" cy="18" r="1.2"/></svg><span class="rail-tip">Tasks</span></button>
     <button class="railtab" data-tab="calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg><span class="rail-tip">Calendar</span></button>
     <button class="railtab" data-tab="horizon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M6 12h12M9 18h6"/></svg><span class="rail-tip">Horizon</span></button>
@@ -2023,7 +2021,7 @@ function renderClock(){
    Pomo: ring fills with elapsed/total. Stopwatch (no fixed total): sweeps once per minute like a clock hand. */
 function updateRailRing(){
   const tab=document.querySelector('.railtab[data-tab="subjects"]'); if(!tab)return;
-  const prog=tab.querySelector('.rr-prog'), dot=tab.querySelector('.rr-dot'); if(!prog)return;
+  const prog=tab.querySelector('.rr-prog'); if(!prog)return;
   let frac=0, hasProg=false;
   if(active||workedMs>0){
     if(mode==='stopwatch'){
@@ -2037,9 +2035,6 @@ function updateRailRing(){
   }
   tab.classList.toggle('timing', hasProg);
   prog.setAttribute('stroke-dashoffset', (100-frac*100).toFixed(2));
-  if(dot){ if(active){ const a=frac*2*Math.PI;
-      dot.setAttribute('cx',(12+9*Math.sin(a)).toFixed(2)); dot.setAttribute('cy',(12-9*Math.cos(a)).toFixed(2)); dot.setAttribute('r','1.9'); }
-    else dot.setAttribute('r','0'); }
   const tip=$('subjRailTip'); if(tip) tip.textContent=hasProg?('Subjects · '+($('clock')?$('clock').textContent:'')):'Subjects';
 }
 /* project when the whole pomodoro plan (all sessions + breaks) will finish */
