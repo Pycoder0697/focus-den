@@ -149,6 +149,13 @@
   .railtab:hover{background:var(--glass-2);color:var(--ink)}
   .railtab.active{background:var(--glass-2);color:var(--amber)}
   .railtab.active::before{content:"";position:absolute;left:-8px;top:11px;bottom:11px;width:3px;border-radius:0 3px 3px 0;background:var(--amber)}
+  /* Subjects rail icon doubles as a live timer ring (TickTick-style): faint circle when idle, fills as the running session progresses */
+  .rail-ring .rr-track{stroke:var(--stroke);stroke-width:2.1}
+  .rail-ring .rr-prog{stroke:currentColor;stroke-width:2.4;stroke-linecap:round;transition:stroke-dashoffset .25s linear}
+  .rail-ring .rr-dot{fill:currentColor;transition:r .2s}
+  .railtab.timing{color:var(--amber)}
+  .railtab.timing .rr-track{stroke:var(--amber);opacity:.22}
+  .railtab.timing .rr-prog,.railtab.timing .rr-dot{stroke:var(--amber);fill:var(--amber)}
   .rail-tip{position:absolute;left:50px;top:50%;transform:translateY(-50%);white-space:nowrap;
     background:var(--ink);color:var(--body-bg);font-size:12.7px;font-weight:600;padding:5px 9px;border-radius:7px;
     opacity:0;pointer-events:none;transition:.15s;z-index:60}
@@ -1148,7 +1155,7 @@
   <!-- VERTICAL NAV RAIL -->
   <nav class="rail">
     <div class="rail-logo" title="Focus Den">F</div>
-    <button class="railtab active" data-tab="subjects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5A1.5 1.5 0 0 0 20 18.5z"/></svg><span class="rail-tip">Subjects</span></button>
+    <button class="railtab active" data-tab="subjects"><svg class="rail-ring" viewBox="0 0 24 24" fill="none"><circle class="rr-track" cx="12" cy="12" r="9"/><circle class="rr-prog" cx="12" cy="12" r="9" pathLength="100" transform="rotate(-90 12 12)" stroke-dasharray="100" stroke-dashoffset="100"/><circle class="rr-dot" cx="12" cy="3" r="0"/></svg><span class="rail-tip" id="subjRailTip">Subjects</span></button>
     <button class="railtab" data-tab="tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6l1 1 2-2"/><path d="M4 12l1 1 2-2"/><circle cx="5" cy="18" r="1.2"/></svg><span class="rail-tip">Tasks</span></button>
     <button class="railtab" data-tab="calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg><span class="rail-tip">Calendar</span></button>
     <button class="railtab" data-tab="horizon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M6 12h12M9 18h6"/></svg><span class="rail-tip">Horizon</span></button>
@@ -1170,7 +1177,6 @@
 
   <!-- TIMER -->
   <section class="card timer-card">
-    <button class="timer-collapse" id="timerCollapse" title="Hide the timer — give tasks the full width">«</button>
     <div class="subj-select"><label>Subject</label><select class="subj" id="activeSubject"></select></div>
     <button class="distract-btn" id="distractBtn" title="Log a distraction">🌀 <span id="distractCount">0</span></button>
     <div class="task-chip" id="taskChip"><span id="taskChipName"></span><button id="taskChipClear" title="Clear">×</button></div>
@@ -1447,7 +1453,6 @@
 </div></div>
 
 <!-- floating restore pill — shown only when the timer sidebar is hidden -->
-<button class="timer-restore" id="timerRestore" title="Show the timer"><span class="tr-ic">⏱</span><span id="timerRestoreTime">Timer</span></button>
 
 <!-- PREFERENCES POPOVER (theme · task visibility · sounds) -->
 <div id="prefMenu" class="pref-menu">
@@ -2011,7 +2016,31 @@ function renderClock(){
     simFinish(); }
   document.title=(active?(mode==='stopwatch'?$('clock').textContent:mmss(remaining))+' · ':'')+'Focus Den';
   updateTimerTaskUI();
+  updateRailRing();
   if(typeof syncTimerRestore==='function')syncTimerRestore();
+}
+/* Drive the Subjects rail icon's progress ring from the live timer so the running session is glanceable from every page.
+   Pomo: ring fills with elapsed/total. Stopwatch (no fixed total): sweeps once per minute like a clock hand. */
+function updateRailRing(){
+  const tab=document.querySelector('.railtab[data-tab="subjects"]'); if(!tab)return;
+  const prog=tab.querySelector('.rr-prog'), dot=tab.querySelector('.rr-dot'); if(!prog)return;
+  let frac=0, hasProg=false;
+  if(active||workedMs>0){
+    if(mode==='stopwatch'){
+      const e=(workedMs+(active&&segStart?Date.now()-segStart:0))/1000;
+      frac=(e%60)/60; hasProg=true;
+    } else {
+      const total=phaseMin()*60;
+      const rem=active?Math.max(0,(endStamp-Date.now())/1000):remaining;
+      frac=total>0?Math.min(1,Math.max(0,(total-rem)/total)):0; hasProg=true;
+    }
+  }
+  tab.classList.toggle('timing', hasProg);
+  prog.setAttribute('stroke-dashoffset', (100-frac*100).toFixed(2));
+  if(dot){ if(active){ const a=frac*2*Math.PI;
+      dot.setAttribute('cx',(12+9*Math.sin(a)).toFixed(2)); dot.setAttribute('cy',(12-9*Math.cos(a)).toFixed(2)); dot.setAttribute('r','1.9'); }
+    else dot.setAttribute('r','0'); }
+  const tip=$('subjRailTip'); if(tip) tip.textContent=hasProg?('Subjects · '+($('clock')?$('clock').textContent:'')):'Subjects';
 }
 /* project when the whole pomodoro plan (all sessions + breaks) will finish */
 function simFinish(){ const pf=$('planFinish'); if(!pf)return; if(mode!=='pomo'||oneShot){pf.textContent='';return;}
@@ -3933,18 +3962,10 @@ function applyTaskWidth(){ const wrap=document.querySelector('.wrap'); if(!wrap)
   const subjActive=$('tab-subjects')&&$('tab-subjects').classList.contains('show');
   wrap.classList.toggle('tasks-wide', !subjActive); }
 
-/* ---------- collapsible timer sidebar (#3) ---------- */
+/* ---------- timer sidebar — never collapses (the rail ring carries the running session everywhere) ---------- */
 function applyTimerCollapsed(){ const wrap=document.querySelector('.wrap'); if(!wrap)return;
-  const on=!!settings.timerCollapsed;
-  wrap.classList.toggle('timer-collapsed',on);
-  const pill=$('timerRestore'); if(pill)pill.classList.toggle('show',on);
-  syncTimerRestore(); }
-/* mirror the live clock onto the restore pill so a hidden timer is still glanceable */
-function syncTimerRestore(){ if(!settings.timerCollapsed)return; const rt=$('timerRestoreTime'),pill=$('timerRestore'); if(!rt)return;
-  const c=$('clock'); rt.textContent=(active||workedMs>0)&&c?c.textContent:'Timer';
-  if(pill)pill.classList.toggle('running',!!active); }
-$('timerCollapse').onclick=()=>{ settings.timerCollapsed=true; save(); applyTimerCollapsed(); };
-$('timerRestore').onclick=()=>{ settings.timerCollapsed=false; save(); applyTimerCollapsed(); };
+  settings.timerCollapsed=false; wrap.classList.remove('timer-collapsed'); }
+function syncTimerRestore(){ /* manual collapse removed — no restore pill to mirror */ }
 
 function renderTasks(){
   if($('tab-horizon')&&$('tab-horizon').classList.contains('show')){ renderHorizonTab(); return; }   // Horizon is its own page now; horizon sub-renders re-route here
