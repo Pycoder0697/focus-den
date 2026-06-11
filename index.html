@@ -1507,6 +1507,7 @@
   <div class="field"><label>Daily goal (min)</label><input type="number" id="setGoal" min="30" max="900"></div>
   <div class="field"><label>Exam date (D-counter)</label><input type="date" id="setExam"></div>
   <div class="field"><label>Matrix: "urgent" within (days)</label><input type="number" id="setUrgent" min="0" max="30"></div>
+  <div class="pref-row" style="padding:6px 0"><span>Session-end notifications<br><small style="color:var(--faint);font-weight:400">Banner when a focus block or break ends</small></span><div class="toggle" id="setNotify"></div></div>
   <div class="field"><label>Background image</label><div style="display:flex;gap:8px"><input type="file" id="bgFile" accept="image/*" style="display:none"><button class="minor" id="bgPick">Upload</button><button class="minor" id="bgReset">Reset</button></div></div>
   <div class="field" style="border:none"><label>Data backup</label><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="minor" id="exportJson">Export JSON</button><input type="file" id="importFile" accept="application/json,.json" style="display:none"><button class="minor" id="importJson">Import JSON</button></div></div>
   <p style="font-size:12.1px;color:var(--faint);margin:-2px 0 4px;line-height:1.5">Export a full backup any time — same file restores your data here or seeds a future iOS app. <span id="cloudState">Cloud sync: off (local only).</span></p>
@@ -1835,7 +1836,7 @@ const todayKey=()=>dateKey(Date.now());
 /* ---------- state ---------- */
 const PALETTE=['#f5a623','#ff7a33','#2f9bff','#e0218a','#ff6b4a','#4f8cff','#c026d3','#5fc24a','#3fb36b','#a78bfa','#5fd3c4'];
 const FD_VERSION='2.10.0';
-const DEF={focus:50,short:10,long:30,sessions:4,rounds:4,goal:240,autostart:false,examDate:'',urgentDays:3,theme:'dark'};
+const DEF={focus:50,short:10,long:30,sessions:4,rounds:4,goal:240,autostart:false,examDate:'',urgentDays:3,theme:'dark',notify:false};
 let settings=Object.assign({...DEF}, JSON.parse(store.get('fd_settings')||'{}'));
 let subjects=JSON.parse(store.get('fd_subjects')||'null');
 if(!subjects){ // 📎 default subjects seeded from your YPT screenshots — edit/delete freely
@@ -2086,14 +2087,18 @@ function afterStop(){ $('distractBtn').classList.remove('show'); $('startBtn').t
   if(mode==='pomo'){ remaining=phaseMin()*60; phaseStart=null; } renderClock(); reflectTimer&&reflectTimer(); }
 function completePhase(){ clearInterval(tick); active=false; chime(); flash();
   if(phase==='focus' && oneShot){ commit(true); oneShot=false; roundCount=0; phase='focus'; setPhaseButtons();
-    remaining=phaseMin()*60; phaseStart=null; $('distractBtn').classList.remove('show'); muteAmbient(); renderDots(); renderClock(); $('phaseLabel').textContent='Session complete 🎉'; return; }
+    remaining=phaseMin()*60; phaseStart=null; $('distractBtn').classList.remove('show'); muteAmbient(); renderDots(); renderClock(); $('phaseLabel').textContent='Session complete 🎉';
+    fdNotify('Session complete 🎉','Nice work — your focus session is done.'); return; }
   if(phase==='focus'){ commit(true); roundCount++;
     if(roundCount>=(settings.sessions||4)){ roundCount=0; phase='focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null;
-      $('distractBtn').classList.remove('show'); muteAmbient(); renderDots(); renderClock(); $('phaseLabel').textContent='Run complete 🎉'; return; }
+      $('distractBtn').classList.remove('show'); muteAmbient(); renderDots(); renderClock(); $('phaseLabel').textContent='Run complete 🎉';
+      fdNotify('Run complete 🎉','All sessions done — time for a longer rest.'); return; }
     const longDue=settings.rounds>0 && roundCount%settings.rounds===0; phase=longDue?'long':'short'; setPhaseButtons();
     remaining=phaseMin()*60; phaseStart=null; renderDots();
+    fdNotify('Focus block done ✅', longDue?'Time for a long break.':'Time for a short break.');
     if(settings.autostart){ renderClock(); startTimer(); } else { $('distractBtn').classList.remove('show'); renderClock(); }
   } else { commit(false); phase='focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null;
+    fdNotify('Break over ☕','Back to focus — you’ve got this.');
     if(settings.autostart){ renderClock(); startTimer(); } else { $('distractBtn').classList.remove('show'); renderClock(); } } }
 function resetTimer(){ clearInterval(tick); active=false; $('startBtn').textContent='Start'; oneShot=false; muteAmbient();
   $('distractBtn').classList.remove('show'); $('ovPause').classList.remove('show');
@@ -2134,6 +2139,22 @@ function setMode(m){ if(active){freeze();commit(true);} else if(workedMs>0){comm
 function setPhase(p){ if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
   oneShot=false; phase=p; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null; renderClock(); }
 function chime(){try{const ac=new(window.AudioContext||window.webkitAudioContext)();[880,1100,1320].forEach((f,i)=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.type='sine';o.connect(g);g.connect(ac.destination);const t=ac.currentTime+i*.16;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.25,t+.03);g.gain.exponentialRampToValueAtTime(.001,t+.5);o.start(t);o.stop(t+.55);});}catch(e){}}
+/* System notification on session end. Fires even when the app window is in the
+   background (Mac PWA + iOS Home-Screen app). Routed through the service worker
+   (reg.showNotification) so it works on iOS, with a plain Notification fallback.
+   Requires settings.notify + granted permission; silently no-ops otherwise. */
+function fdNotify(title,body){
+  try{
+    if(settings.notify!==true) return;
+    if(!('Notification' in window) || Notification.permission!=='granted') return;
+    const opts={ body, icon:'icon-192.png', badge:'icon-192.png', tag:'fd-timer', renotify:true };
+    if(navigator.serviceWorker && navigator.serviceWorker.ready){
+      navigator.serviceWorker.ready
+        .then(reg=>{ if(reg&&reg.showNotification) reg.showNotification(title,opts); else new Notification(title,opts); })
+        .catch(()=>{ try{ new Notification(title,opts); }catch(e){} });
+    } else { new Notification(title,opts); }
+  }catch(e){}
+}
 function flash(){document.body.animate([{filter:'brightness(1.4)'},{filter:'brightness(1)'}],{duration:600});}
 
 /* ---------- ambient sounds (generated with Web Audio — no files to break) ---------- */
@@ -4614,7 +4635,18 @@ $('settingsBtn').onclick=()=>{$('setFocus').value=settings.focus;$('setSessions'
   $('setRounds').value=settings.rounds;$('setGoal').value=settings.goal;$('setExam').value=settings.examDate||'';$('setUrgent').value=(settings.urgentDays==null?3:settings.urgentDays);
   $('setCloudUrl').value=CLOUD.url||''; $('setCloudKey').value=CLOUD.key||''; refreshCloudState();
   $('setNotionProxy').value=settings.notionProxy||''; $('setNotionKey').value=settings.notionKey||'';
+  refreshNotifyToggle();
   $('ovSettings').classList.add('show');};
+/* reflect the real state: "on" only when enabled AND the OS still grants permission */
+function refreshNotifyToggle(){ const ok=('Notification' in window)&&Notification.permission==='granted'&&settings.notify===true; $('setNotify').classList.toggle('on',ok); }
+$('setNotify').onclick=async ()=>{
+  if(settings.notify===true){ settings.notify=false; refreshNotifyToggle(); save(); return; }   // turn off
+  if(!('Notification' in window)){ alert('This browser doesn’t support notifications.'); return; }
+  let perm=Notification.permission;
+  if(perm!=='granted'){ try{ perm=await Notification.requestPermission(); }catch(e){} }
+  if(perm==='granted'){ settings.notify=true; refreshNotifyToggle(); save(); fdNotify('Notifications on ✅','You’ll get a heads-up when a focus block or break ends.'); }
+  else { settings.notify=false; refreshNotifyToggle(); alert('Notifications are blocked. Allow them for Focus Den in your browser/OS settings, then toggle this again.'); }
+};
 $('railSettings').onclick=()=>$('settingsBtn').click();   // settings reachable from the rail on every tab (timer can be hidden)
 /* connect / update sync: adopt cloud data if it already exists, otherwise seed it from this device */
 $('cloudConnect').onclick=()=>{ applyCloudCfg($('setCloudUrl').value,$('setCloudKey').value);
