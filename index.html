@@ -2008,6 +2008,7 @@ function refreshDplus(){
    ==================================================================== */
 let mode='pomo', phase='focus', active=false, remaining=settings.focus*60, endStamp=null, focusStart=null, phaseStart=null, tick=null;
 let oneShot=false; // single-session pomodoro (a chosen duration; no chained breaks/sessions, ignores autostart)
+let catchingUp=false; // true while replaying phase boundaries missed during iOS background suspension (mutes per-step sounds/notifications)
 let segStart=null, workedMs=0, sessionDistract=0; // segStart=start of current active segment; workedMs=accumulated study time this session (excludes pauses)
 let segs=[]; // [{start,end}] real work segments this session — pauses excluded, gaps preserved, logged individually on commit
 const phaseMin=()=>phase==='focus'?settings.focus:phase==='short'?settings.short:settings.long;
@@ -2061,45 +2062,73 @@ function simFinish(){ const pf=$('planFinish'); if(!pf)return; if(mode!=='pomo'|
   const left=N-roundCount;
   pf.textContent = done>=N ? `Plan ends ~${istTime(t)} · ${left} session${left===1?'':'s'} left` : '';
 }
-function tickFn(){ if(mode==='stopwatch'){ renderClock(); }
-  else { remaining=(endStamp-Date.now())/1000; if(remaining<=0){remaining=0;renderClock();completePhase();} else renderClock(); } }
+function tickFn(){
+  if(mode==='stopwatch'){ renderClock(); return; }
+  if(!active){ renderClock(); return; }
+  remaining=(endStamp-Date.now())/1000;
+  if(remaining>0){ renderClock(); return; }
+  // The current phase's end has passed. This is either a normal on-time end, OR we just
+  // returned from iOS background where JS was frozen and several phases may have elapsed.
+  // Replay every boundary that's now in the past — anchored to wall-clock time — so the
+  // running phase + remaining are correct (e.g. break already counting down, not restarting).
+  remaining=0;
+  catchingUp=true;
+  let crossed=0, guard=0;
+  while(active && mode==='pomo' && endStamp && endStamp<=Date.now() && guard++<2000){ completePhase(); crossed++; }
+  catchingUp=false;
+  if(active && mode==='pomo' && endStamp) remaining=Math.max(0,(endStamp-Date.now())/1000);  // reflect the in-progress phase's true remaining at once
+  if(crossed>0) signalPhaseChange();   // one chime + flash + notification for the phase we landed in
+  renderClock();
+}
+/* Single end-of-phase signal (sound, screen flash, system notification) reflecting where we
+   landed after any catch-up — so we never spam N chimes when returning from a long background. */
+function signalPhaseChange(){
+  chime(); flash();
+  const lbl=$('phaseLabel').textContent;
+  if(!active && lbl.indexOf('Run complete')>=0) fdNotify('Run complete 🎉','All sessions done — time for a longer rest.');
+  else if(!active && lbl.indexOf('Session complete')>=0) fdNotify('Session complete 🎉','Nice work — your focus session is done.');
+  else if(phase==='focus') fdNotify('Break over ☕','Back to focus — you’ve got this.');
+  else fdNotify('Focus block done ✅', phase==='long'?'Time for a long break.':'Time for a short break.');
+}
 
-function startTimer(){ active=true; $('startBtn').textContent='Pause'; workedMs=0; segs=[]; segStart=Date.now();
-  if(mode==='stopwatch'){ running={subjectId:activeSubjectId(),start:segStart,mode:'stopwatch'}; }
-  else { endStamp=Date.now()+remaining*1000; phaseStart=Date.now(); if(phase==='focus'){ focusStart=Date.now(); running={subjectId:activeSubjectId(),start:focusStart,mode:'pomo'}; } }
+function startTimer(anchor){ const base=(typeof anchor==='number')?anchor:Date.now();   // anchor lets a catch-up start the next phase exactly when the last one ended
+  active=true; $('startBtn').textContent='Pause'; workedMs=0; segs=[]; segStart=base;
+  if(mode==='stopwatch'){ running={subjectId:activeSubjectId(),start:base,mode:'stopwatch'}; }
+  else { endStamp=base+remaining*1000; phaseStart=base; if(phase==='focus'){ focusStart=base; running={subjectId:activeSubjectId(),start:focusStart,mode:'pomo'}; } }
   sessionDistract=0; $('distractCount').textContent='0'; $('distractBtn').classList.add('show');
-  timerStartSound&&timerStartSound();
+  if(!catchingUp) timerStartSound&&timerStartSound();
   save(); clearInterval(tick); tick=setInterval(tickFn,250); renderClock(); saveTimer(); }
 function resumeTimer(){ active=true; $('startBtn').textContent='Pause'; segStart=Date.now();
   if(mode==='pomo'){ endStamp=Date.now()+remaining*1000; if(phase==='focus'&&!phaseStart)phaseStart=Date.now(); }
   timerStartSound&&timerStartSound();
   $('distractBtn').classList.add('show'); save(); clearInterval(tick); tick=setInterval(tickFn,250); renderClock(); saveTimer(); }
-function endSeg(){ if(segStart){ const now=Date.now(); if(now-segStart>=500)segs.push({start:segStart,end:now}); workedMs+=now-segStart; segStart=null; } }
+function endSeg(cap){ if(segStart){ const now=(typeof cap==='number')?Math.min(Date.now(),cap):Date.now(); const dur=Math.max(0,now-segStart); if(dur>=500)segs.push({start:segStart,end:now}); workedMs+=dur; segStart=null; } }
 function freeze(){ clearInterval(tick); active=false; $('startBtn').textContent='Start';
   endSeg();
   if(mode==='pomo') remaining=endStamp?Math.max(0,(endStamp-Date.now())/1000):remaining; renderClock(); saveTimer(); }
 function pauseTimer(){ if(!active)return; freeze(); timerPauseSound&&timerPauseSound(); $('distractBtn').classList.remove('show'); $('ovPause').classList.add('show'); }
-function commit(logIt){ endSeg();
+function commit(logIt,cap){ endSeg(cap);
   if(logIt && (mode==='stopwatch'||phase==='focus')){ const sid=activeSubjectId();
     segs.forEach(g=>pushSpan(sid,g.start,g.end,currentTask)); } // each work segment logged separately → pauses excluded, start times truthful, midnight split
   segs=[]; workedMs=0; running=null; save(); saveTimer(); renderSubjects(); refreshStats(); }
 function afterStop(){ $('distractBtn').classList.remove('show'); $('startBtn').textContent='Start'; muteAmbient();
   if(mode==='pomo'){ remaining=phaseMin()*60; phaseStart=null; } renderClock(); reflectTimer&&reflectTimer(); }
-function completePhase(){ clearInterval(tick); active=false; chime(); flash();
-  if(phase==='focus' && oneShot){ commit(true); oneShot=false; roundCount=0; phase='focus'; setPhaseButtons();
-    remaining=phaseMin()*60; phaseStart=null; $('distractBtn').classList.remove('show'); muteAmbient(); renderDots(); renderClock(); $('phaseLabel').textContent='Session complete 🎉';
-    fdNotify('Session complete 🎉','Nice work — your focus session is done.'); return; }
-  if(phase==='focus'){ commit(true); roundCount++;
+/* Advance exactly one phase. The completing phase ended at `endedAt` (its scheduled
+   endStamp, NOT necessarily now) — work is logged up to there and any autostarted next
+   phase is anchored there, so replaying several boundaries in a row stays time-accurate.
+   Sound/flash/notification are NOT fired here; tickFn fires one via signalPhaseChange()
+   after all due boundaries are caught up. */
+function completePhase(){ clearInterval(tick); active=false; const endedAt=(typeof endStamp==='number'&&endStamp)?endStamp:Date.now();
+  if(phase==='focus' && oneShot){ commit(true,endedAt); oneShot=false; roundCount=0; phase='focus'; setPhaseButtons();
+    remaining=phaseMin()*60; phaseStart=null; $('distractBtn').classList.remove('show'); muteAmbient(); renderDots(); renderClock(); $('phaseLabel').textContent='Session complete 🎉'; return; }
+  if(phase==='focus'){ commit(true,endedAt); roundCount++;
     if(roundCount>=(settings.sessions||4)){ roundCount=0; phase='focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null;
-      $('distractBtn').classList.remove('show'); muteAmbient(); renderDots(); renderClock(); $('phaseLabel').textContent='Run complete 🎉';
-      fdNotify('Run complete 🎉','All sessions done — time for a longer rest.'); return; }
+      $('distractBtn').classList.remove('show'); muteAmbient(); renderDots(); renderClock(); $('phaseLabel').textContent='Run complete 🎉'; return; }
     const longDue=settings.rounds>0 && roundCount%settings.rounds===0; phase=longDue?'long':'short'; setPhaseButtons();
     remaining=phaseMin()*60; phaseStart=null; renderDots();
-    fdNotify('Focus block done ✅', longDue?'Time for a long break.':'Time for a short break.');
-    if(settings.autostart){ renderClock(); startTimer(); } else { $('distractBtn').classList.remove('show'); renderClock(); }
-  } else { commit(false); phase='focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null;
-    fdNotify('Break over ☕','Back to focus — you’ve got this.');
-    if(settings.autostart){ renderClock(); startTimer(); } else { $('distractBtn').classList.remove('show'); renderClock(); } } }
+    if(settings.autostart){ renderClock(); startTimer(endedAt); } else { $('distractBtn').classList.remove('show'); renderClock(); }
+  } else { commit(false,endedAt); phase='focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null;
+    if(settings.autostart){ renderClock(); startTimer(endedAt); } else { $('distractBtn').classList.remove('show'); renderClock(); } } }
 function resetTimer(){ clearInterval(tick); active=false; $('startBtn').textContent='Start'; oneShot=false; muteAmbient();
   $('distractBtn').classList.remove('show'); $('ovPause').classList.remove('show');
   workedMs=0; segs=[]; segStart=null; focusStart=null; running=null;
@@ -2117,15 +2146,16 @@ function restoreTimer(){ let snap=null; try{ snap=JSON.parse(store.get('fd_timer
   if(!snap || !snap.active) return false;
   const now=Date.now();
   if(snap.savedAt && now-snap.savedAt > 12*3600000) return false;                 // too stale to trust
-  if(snap.mode==='pomo' && snap.endStamp && snap.endStamp<=now) return false;       // the phase finished while away → idle
   mode = snap.mode==='stopwatch'?'stopwatch':'pomo'; phase=snap.phase||'focus'; roundCount=snap.roundCount||0; oneShot=!!snap.oneShot;
   if(snap.subjectId && subjById(snap.subjectId)) $('activeSubject').value=snap.subjectId;
   if(snap.currentTask){ const t=tasks.find(x=>x.id===snap.currentTask); if(t){ currentTask=t.id; $('taskChipName').textContent=t.name; $('taskChip').classList.add('show'); } }
   const open=snap.segStart||0;
-  workedMs=(snap.workedMs||0)+(open?Math.max(0,now-open):0);
+  const ended = mode==='pomo' && snap.endStamp && snap.endStamp<=now;             // the phase finished while away → tickFn will catch up to the right phase
+  const segEnd = ended ? snap.endStamp : now;                                     // don't credit study time past the focus end
+  workedMs=(snap.workedMs||0)+(open?Math.max(0,segEnd-open):0);
   if(mode==='stopwatch' && workedMs>18*3600000) return false;                       // implausible → bail
-  segs=Array.isArray(snap.segs)?snap.segs.slice():[]; if(open) segs.push({start:open,end:now});
-  segStart=now; active=true;
+  segs=Array.isArray(snap.segs)?snap.segs.slice():[]; if(open) segs.push({start:open,end:segEnd});
+  segStart = ended ? null : now; active=true;                                      // when ended, leave the segment closed so catch-up doesn't double-count
   if(mode==='pomo'){ endStamp=snap.endStamp; phaseStart=snap.phaseStart||now; remaining=Math.max(0,(endStamp-now)/1000); running={subjectId:activeSubjectId(),start:phaseStart,mode:'pomo'}; }
   else { remaining=settings.focus*60; running={subjectId:activeSubjectId(),start:open||now,mode:'stopwatch'}; }
   applyTimerPanel(); $('distractBtn').classList.add('show');
@@ -4943,7 +4973,7 @@ async function boot(){
   // two-way cloud convergence: pull other-device / Notion-sync edits periodically and on refocus
   setInterval(pollCloud,6000);
   // capture the live timer the instant the tab is backgrounded — iOS Safari may reload it before we get another chance
-  document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else pollCloud(); });
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else { pollCloud(); if(active && mode!=='stopwatch') tickFn(); } });
   window.addEventListener('pagehide',saveTimer);
   // Notion DB → board list sync: near-realtime both ways (push is instant; pull polls ~10s while visible, 60s hidden, and immediately on refocus)
   if(notionOn()) notionSyncAll();
