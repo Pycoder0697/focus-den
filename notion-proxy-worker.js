@@ -7,10 +7,10 @@
  *   integration token must never ship inside the public index.html.
  *   This tiny Worker holds the token server-side and exposes two endpoints:
  *
- *     READ   GET  /?db=<databaseId>[&date=<prop>][&desc=<prop>]
+ *     READ   GET  /?db=<databaseId>[&date=<prop>][&desc=<prop>][&dur=<prop>]
  *            -> { ok:true, results:[ {id,title,done,due,dueEnd,desc,props,url}, ... ],
  *                schema:{ titleProp, doneProp:{name,type,doneValue,undoneValue},
- *                         dateProp, descProp },
+ *                         dateProp, descProp, durProp },
  *                fields:[ {name,type}, ... ] }
  *              `props` = up to 4 extra display-only properties [{name,value}],
  *              TickTick-style -- title/done/date/description are excluded (mapped).
@@ -80,6 +80,11 @@
  *           Den writes back here, and a Notion edit pulls back. Auto-detection is
  *           name-matched only (never a random text column); the app's field-
  *           mapping config can override it to any text property (or none).
+ *   dur   : a Number property named like time/duration (Time spent, Duration,
+ *           Hours, Minutes, ...) -- ONE-WAY: Focus Den writes the task's net
+ *           logged study time here (sum of all its timer sessions). A column
+ *           named Hours gets decimal hours; otherwise whole minutes. Name-
+ *           matched only; overridable from the app's field-mapping config.
  *   props : every other property (Text/Number/Select/Multi-Select/Status/Date/
  *           Person/Checkbox/URL/...), up to 4, surfaced read-only on the task --
  *           exactly like TickTick shows up to 4 Notion data points per task.
@@ -88,6 +93,8 @@
 const NOTION_VERSION = '2022-06-28';
 const DONE_WORDS = ['done', 'complete', 'completed', 'closed', 'archived'];
 const DESC_WORDS = /^(description|desc|notes?|details?|summary|content|comments?|body|memo)$/i;
+// a Number property that holds logged study time (Focus Den writes the net session total here, one-way)
+const DUR_WORDS = /(time spent|time|duration|hours?|hrs?|mins?|minutes?|elapsed|logged)/i;
 
 export default {
   async fetch(request, env) {
@@ -155,6 +162,7 @@ export default {
       // optional field-mapping overrides from Focus Den's config (empty value = disable that field)
       if (params.has('date')) schema.dateProp = params.get('date') || null;
       if (params.has('desc')) schema.descProp = params.get('desc') || null;
+      if (params.has('dur')) schema.durProp = params.get('dur') || null;
       // catalog of the database's properties so the app can offer mapping choices
       const fields = Object.keys(meta.properties || {}).map((name) => ({ name, type: meta.properties[name].type }));
 
@@ -224,7 +232,12 @@ function detectSchema(db) {
   let descProp = null;
   for (const name in props) if (props[name].type === 'rich_text' && DESC_WORDS.test(name.trim())) { descProp = name; break; }
 
-  return { titleProp, doneProp, dateProp, descProp };
+  // a Number property named like a time/duration -> Focus Den writes the task's net logged study time here (one-way).
+  // Name-matched only so it can't clobber an unrelated number column; the app's field-mapping config can override it.
+  let durProp = null;
+  for (const name in props) if (props[name].type === 'number' && DUR_WORDS.test(name.trim())) { durProp = name; break; }
+
+  return { titleProp, doneProp, dateProp, descProp, durProp };
 }
 
 /* Turn a raw Notion page into the small shape Focus Den expects. */
@@ -253,7 +266,7 @@ function mapRow(page, schema) {
     desc = (props[schema.descProp].rich_text || []).map((t) => t.plain_text).join('');
 
   // up to 4 extra display-only properties (TickTick shows up to 4 data points) -- skip the integrated title/done/date/description
-  const skip = new Set([schema.titleProp, schema.doneProp && schema.doneProp.name, schema.dateProp, schema.descProp].filter(Boolean));
+  const skip = new Set([schema.titleProp, schema.doneProp && schema.doneProp.name, schema.dateProp, schema.descProp, schema.durProp].filter(Boolean));
   const extra = [];
   for (const name in props) {
     if (extra.length >= 4) break;

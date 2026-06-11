@@ -1684,13 +1684,13 @@ const _notionRecent=new Map();        // pageId → ts of last local push (a rac
    live tasks against this and pushes whatever changed — so ANY mutation site (date picker, drag-drop,
    calendar, timeline, matrix…) reflects back into Notion without each having to call notionPushTask. */
 const _notionShadow=new Map();        // pageId → {name,done,due,dueEnd,desc}
-const notionFields=t=>({name:t.name||'',done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||''});
+const notionFields=t=>({name:t.name||'',done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:Math.round(taskSecs(t))});
 function notionMarkSynced(t){ if(t&&t.notionPageId) _notionShadow.set(t.notionPageId,notionFields(t)); } // baseline matches Notion ⇒ no echo-push
 function notionFlushChanges(){ if(!notionOn()) return;
   for(const t of tasks){ if(!t.notionSourceId||!t.notionPageId) continue;
     const cur=notionFields(t), prev=_notionShadow.get(t.notionPageId);
     if(!prev){ _notionShadow.set(t.notionPageId,cur); continue; } // first sight (freshly imported) — establish baseline, don't push
-    if(prev.name!==cur.name||prev.done!==cur.done||prev.due!==cur.due||prev.dueEnd!==cur.dueEnd||prev.desc!==cur.desc){
+    if(prev.name!==cur.name||prev.done!==cur.done||prev.due!==cur.due||prev.dueEnd!==cur.dueEnd||prev.desc!==cur.desc||prev.secs!==cur.secs){
       _notionShadow.set(t.notionPageId,cur); notionPushTask(t); } } }
 /* Notion rich_text values cap each text object at 2000 chars — chunk a long description so it never truncates */
 function notionRichText(s){ s=String(s||''); if(!s) return []; const out=[]; for(let i=0;i<s.length;i+=2000) out.push({text:{content:s.slice(i,i+2000)}}); return out; }
@@ -1704,6 +1704,7 @@ async function notionSyncOne(src){
   let url=notionProxy()+'?db='+encodeURIComponent(src.dbId); const m=src.map||{};
   if(m.dateProp!==undefined) url+='&date='+encodeURIComponent(m.dateProp||'');
   if(m.descProp!==undefined) url+='&desc='+encodeURIComponent(m.descProp||'');
+  if(m.durProp!==undefined)  url+='&dur='+encodeURIComponent(m.durProp||'');
   try{ const r=await fetch(url,{cache:'no-store',headers:notionHeaders()});
        data=await r.json().catch(()=>null);
        if(!r.ok) return {error:(data&&data.error)||('HTTP '+r.status)}; }
@@ -1755,11 +1756,13 @@ function buildNotionProps(schema,vals){ if(!schema) return null; const p={};
     p[schema.dateProp]= vals.due ? {date:{start:vals.due, ...(vals.dueEnd?{end:vals.dueEnd}:{})}} : {date:null};
   if(vals.desc!==undefined && schema.descProp)  // two-way description — empty clears the text property
     p[schema.descProp]={rich_text:notionRichText(vals.desc)};
+  if(vals.secs!==undefined && schema.durProp)   // one-way duration — net logged study time → a Notion Number (hrs/mins by column name)
+    p[schema.durProp]={number:notionDurValue(schema.durProp,vals.secs)};
   return Object.keys(p).length?p:null; }
 /* TWO-WAY: push a synced task's name + done back to Notion. Fire-and-forget; guarded so a racing pull won't revert it */
 async function notionPushTask(t){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
   const src=notionSources.find(s=>s.id===t.notionSourceId); if(!src||!src.schema) return;
-  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||''}); if(!props) return;
+  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
   const pid=t.notionPageId; _notionInflight.add(pid); _notionRecent.set(pid,Date.now());
   try{ const r=await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,properties:props})});
        const d=await r.json().catch(()=>null);
@@ -1773,7 +1776,7 @@ function notionSourceForList(boardId,listId){ return notionSources.find(s=>s.ena
 /* WRITE / INSERT: a task that lands in a Notion-synced list becomes a brand-new row in that database */
 async function notionMaybeCreate(t){ if(!t||t.notionSourceId||!notionOn()) return;
   const src=notionSourceForList(t.boardId,t.listId); if(!src||!src.schema) return;
-  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||''}); if(!props) return;
+  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
   t.notionSourceId=src.id; t.notionPageId='';            // claim immediately so a racing pull won't duplicate it
   _notionCreating++;
   try{ const r=await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({create:src.dbId,properties:props})});
@@ -1958,6 +1961,10 @@ const subjById=id=>subjects.find(s=>s.id===id);
 const hms=s=>{s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');};
 const mmss=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');};
 const dur=(a,b)=>(b-a)/1000;
+// total seconds a task's timer has logged (sum of every session tagged to it) — pushed to Notion as a number
+const taskSecs=t=>{ if(!t)return 0; let ms=0; for(const s of sessions) if(s.taskId===t.id) ms+=(s.end-s.start); return ms/1000; };
+// seconds → the Notion number, unit inferred from the mapped property's NAME: "Hours/Hrs" ⇒ decimal hours (2dp), else whole minutes
+function notionDurValue(durProp,secs){ return /hour|hrs?\b/i.test(durProp||'') ? Math.round(secs/36)/100 : Math.round(secs/60); }
 function pushSession(subjectId,start,end,taskId){ if(end-start<1000)return; sessions.push({id:Date.now()+Math.random(),subjectId,start,end,taskId:taskId||''}); }
 /* log a span, splitting at IST midnight so day totals stay honest */
 function pushSpan(subjectId,start,end,taskId){ if(end-start<1000)return;
@@ -4611,15 +4618,18 @@ function renderNotionList(){ const wrap=$('notionList'); if(!wrap)return;
     const sub=s.lastErr?`<span style="color:var(--rose)">⚠ ${esc(s.lastErr)}</span>`
       :(s.lastSync?`${s.count||0} row${s.count===1?'':'s'} · synced ${new Date(s.lastSync).toLocaleTimeString()}`:'never synced');
     const fields=Array.isArray(s.fields)?s.fields:[];
-    const txtF=fields.filter(f=>f.type==='rich_text'), dateF=fields.filter(f=>f.type==='date');
-    const curDesc=(s.schema&&s.schema.descProp)||'', curDate=(s.schema&&s.schema.dateProp)||'';
+    const txtF=fields.filter(f=>f.type==='rich_text'), dateF=fields.filter(f=>f.type==='date'), numF=fields.filter(f=>f.type==='number');
+    const curDesc=(s.schema&&s.schema.descProp)||'', curDate=(s.schema&&s.schema.dateProp)||'', curDur=(s.schema&&s.schema.durProp)||'';
     const propOpts=(list,selName)=>['<option value="">— None —</option>'].concat(
       list.map(f=>`<option value="${esc(f.name)}" ${f.name===selName?'selected':''}>${esc(f.name)}</option>`)).join('');
+    const durUI = numF.length ? `<span style="font-size:13.2px;color:var(--muted)">Time spent</span>
+        <select data-ns="durprop" title="Which Notion number property gets the logged study time (Hours column ⇒ hours, else minutes)" style="flex:1;min-width:90px">${propOpts(numF,curDur)}</select>` : '';
     const mapUI = fields.length ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:6px">
         <span style="font-size:13.2px;color:var(--muted);min-width:64px">Description</span>
         <select data-ns="descprop" title="Which Notion text property is the task description" style="flex:1;min-width:90px">${propOpts(txtF,curDesc)}</select>
         <span style="font-size:13.2px;color:var(--muted)">Date</span>
         <select data-ns="dateprop" title="Which Notion date property is the due date" style="flex:1;min-width:90px">${propOpts(dateF,curDate)}</select>
+        ${durUI}
       </div>` : '';
     return `<div class="ns-row" data-id="${s.id}" style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:6px">
       <div style="display:flex;gap:6px;align-items:center">
@@ -4647,6 +4657,7 @@ function renderNotionList(){ const wrap=$('notionList'); if(!wrap)return;
     lsel.onchange=()=>{ s.listId=lsel.value; save(); };
     const dpSel=row.querySelector('[data-ns="descprop"]'); if(dpSel) dpSel.onchange=()=>{ s.map=s.map||{}; s.map.descProp=dpSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
     const dtSel=row.querySelector('[data-ns="dateprop"]'); if(dtSel) dtSel.onchange=()=>{ s.map=s.map||{}; s.map.dateProp=dtSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
+    const duSel=row.querySelector('[data-ns="durprop"]'); if(duSel) duSel.onchange=()=>{ s.map=s.map||{}; s.map.durProp=duSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
     row.querySelector('[data-ns="sync"]').onclick=()=>{ s.boardId=bsel.value; s.listId=lsel.value; save(); notionSyncAll({report:true}); };
     row.querySelector('[data-ns="del"]').onclick=()=>askConfirm('Remove this database? Its synced cards leave the board (your hand-made tasks are untouched).',
       ()=>{ tasks=tasks.filter(t=>t.notionSourceId!==s.id); notionSources=notionSources.filter(x=>x.id!==s.id); save(); renderNotionList(); refreshTaskSurfaces&&refreshTaskSurfaces(); }); });
