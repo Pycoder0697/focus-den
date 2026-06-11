@@ -1,0 +1,3 @@
+# Local-only VAPID secrets — never commit. Set the private key as a worker secret instead.
+vapid-private.json
+.dev.vars

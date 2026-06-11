@@ -1624,7 +1624,7 @@ const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.ran
    in-app local ones). Paste the VAPID public key from push-backend/generate-vapid.mjs below;
    until then push stays off and only the local notifications fire. Pairs with the Cloudflare
    cron worker (push-backend/) which sends the push when an alarm's time arrives. ---- */
-const PUSH_VAPID_PUBLIC='';   // base64url 65-byte P-256 point — must equal the worker's VAPID_PUBLIC
+const PUSH_VAPID_PUBLIC='BPKI7SXl3sPiRTGiNl6QA9nFJe46ezY-_UlzGC3S33601gJ0RT89_To_HSHO87WhISv6fW17Lqi-33Ow3g4XNKM';   // base64url 65-byte P-256 point — must equal the worker's VAPID_PUBLIC
 const pushRef=()=>`${CLOUD.url.replace(/\/+$/,'')}/push/${encodeURIComponent(CLOUD.key)}/${encodeURIComponent(DEVICE)}.json`;
 let pushSub=null;             // this device's PushSubscription (as JSON) once subscribed
 function urlB64ToU8(s){ s=String(s).replace(/-/g,'+').replace(/_/g,'/'); const pad='='.repeat((4-s.length%4)%4); const raw=atob(s+pad); const o=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++)o[i]=raw.charCodeAt(i); return o; }
