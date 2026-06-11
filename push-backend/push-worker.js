@@ -27,16 +27,21 @@ export default {
   async fetch(req, env) {
     const u = new URL(req.url);
     // Manual trigger for testing: GET /run  (handy before the cron's next minute)
-    if (u.pathname === '/run') { const n = await runCron(env); return json({ ran: true, processed: n }); }
+    if (u.pathname === '/run') {
+      try { const n = await runCron(env); return json({ ran: true, processed: n, debug: _DBG }); }
+      catch (e) { return json({ error: String(e && e.stack ? e.stack : e), debug: _DBG }, 500); }
+    }
     return new Response('Focus Den push worker', { headers: { 'content-type': 'text/plain' } });
   }
 };
 
+let _DBG = [];
 async function runCron(env) {
+  _DBG = [];
   const base = (env.RTDB_URL || '').replace(/\/+$/, '');
   const keyPath = encodeURIComponent(env.RTDB_KEY || '');
   if (!base || !env.RTDB_KEY) return 0;
-  const r = await fetch(`${base}/push/${keyPath}.json`, { cache: 'no-store' });
+  const r = await fetch(`${base}/push/${keyPath}.json`, { cf: { cacheTtl: 0 } }); // Workers fetch: no 'cache' init field — use cf.cacheTtl
   if (!r.ok) return 0;
   const data = await r.json();
   if (!data || typeof data !== 'object') return 0;
@@ -54,9 +59,10 @@ async function runCron(env) {
     jobs.push((async () => {
       try {
         const res = await sendPush(a.sub, { title: a.title || 'Focus Den', body: a.body || '', tag: a.tag || 'fd-timer' }, env);
+        if (!(res.status >= 200 && res.status < 300)) { const t = await res.text().catch(() => ''); _DBG.push('push ' + res.status + ': ' + t.slice(0, 200)); }
         // Delete on success or if the subscription is gone (404/410) so we never repeat.
         if ((res.status >= 200 && res.status < 300) || res.status === 404 || res.status === 410) await del();
-      } catch (e) { /* transient — leave it for the next run */ }
+      } catch (e) { _DBG.push('throw: ' + String(e && e.stack ? e.stack : e)); }
     })());
   }
   await Promise.all(jobs);
@@ -141,4 +147,4 @@ async function hmac(keyBytes, dataBytes) {
 }
 function b64url(bytes) { let s = ''; const a = new Uint8Array(bytes); for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function b64urlToBytes(str) { str = String(str).replace(/-/g, '+').replace(/_/g, '/'); const pad = str.length % 4 ? 4 - (str.length % 4) : 0; str += '='.repeat(pad); const bin = atob(str); const o = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) o[i] = bin.charCodeAt(i); return o; }
-function json(o) { return new Response(JSON.stringify(o), { headers: { 'content-type': 'application/json' } }); }
+function json(o, status) { return new Response(JSON.stringify(o), { status: status || 200, headers: { 'content-type': 'application/json' } }); }
