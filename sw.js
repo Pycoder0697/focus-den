@@ -8,10 +8,17 @@
  *
  * skipWaiting() + clients.claim() mean that if this file *itself* ever changes,
  * the new worker takes over immediately instead of waiting for every tab to
- * close. Cross-origin requests (Google Fonts, Firebase, the Notion proxy) are
- * left completely untouched and go straight to the network.
+ * close.
+ *
+ * Offline: the app is self-contained (HTML/CSS/JS inline, localStorage data),
+ * so the cached shell runs with no network. Google Fonts are cached stale-while-
+ * revalidate so type still looks right offline. Firebase cloud sync and the
+ * Notion proxy are intentionally left to the network — they simply pause offline
+ * and resume when a connection returns.
  */
 const CACHE = 'focus-den-runtime';
+const FONT_CACHE = 'focus-den-fonts';
+const FONT_ORIGINS = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'];
 const PRECACHE = [
   './',
   './index.html',
@@ -30,8 +37,9 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
+    const keep = [CACHE, FONT_CACHE];
     const keys = await caches.keys();
-    await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+    await Promise.all(keys.filter((k) => !keep.includes(k)).map((k) => caches.delete(k)));
     await self.clients.claim();
   })());
 });
@@ -41,9 +49,12 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   let url;
   try { url = new URL(req.url); } catch (e) { return; }
-  // Only manage our own origin. Fonts / Firebase / Notion proxy go to network as-is.
-  if (url.origin !== self.location.origin) return;
-  event.respondWith(networkFirst(req));
+  if (url.origin === self.location.origin) {
+    event.respondWith(networkFirst(req));        // our shell: freshest online, cache offline
+  } else if (FONT_ORIGINS.includes(url.origin)) {
+    event.respondWith(staleWhileRevalidate(req)); // fonts: instant + cached for offline
+  }
+  // Everything else (Firebase, Notion proxy) goes straight to the network as-is.
 });
 
 async function networkFirst(req) {
@@ -62,6 +73,18 @@ async function networkFirst(req) {
     }
     throw err;
   }
+}
+
+// Fonts: serve cache immediately if we have it, refresh in the background.
+// Works with opaque (status 0) font responses, so we don't gate on .ok here.
+async function staleWhileRevalidate(req) {
+  const cache = await caches.open(FONT_CACHE);
+  const cached = await cache.match(req);
+  const network = fetch(req).then((res) => {
+    if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
+    return res;
+  }).catch(() => null);
+  return cached || (await network) || Response.error();
 }
 
 // Lets the page trigger an immediate activation if it ever sends a message.
