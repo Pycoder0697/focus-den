@@ -2007,6 +2007,10 @@ function normalizeData(){
   tasks.forEach(t=>{
     if(typeof t.priority!=='number')t.priority=0;
     if(typeof t.subjectId!=='string')t.subjectId=t.subjectId||'';
+    // subjects-as-tags: subjectIds[] is the full set; subjectId stays = subjectIds[0] (primary, drives colour/logging-bucket)
+    if(!Array.isArray(t.subjectIds)) t.subjectIds = t.subjectId ? [t.subjectId] : [];
+    t.subjectIds = [...new Set(t.subjectIds.filter(Boolean))];   // dedupe + drop empties
+    t.subjectId = t.subjectIds[0] || '';
     if(!('due' in t))t.due='';
     if(!('dueEnd' in t))t.dueEnd='';
     if(!('repeat' in t))t.repeat='none';
@@ -2034,7 +2038,7 @@ function normalizeData(){
   // one-time migration: legacy per-task checklists → real child tasks (unified subtask / goal-tree model).
   // Each item becomes a child task that inherits the parent's schedule so it lands in the same column.
   tasks.slice().forEach(t=>{ if(t.checklist&&t.checklist.length){
-    t.checklist.forEach(c=>{ tasks.push({id:uid('t'),name:c.text||'',subjectId:t.subjectId||'',
+    t.checklist.forEach(c=>{ tasks.push({id:uid('t'),name:c.text||'',subjectId:t.subjectId||'',subjectIds:[...subjectIdsOf(t)],
       due:t.due||'',dueEnd:'',priority:0,checklist:[],done:!!c.done,doneOn:c.done?todayKey():'',
       repeat:'none',start:'',dur:0,created:Date.now(),horizon:t.horizon||'',hkey:t.hkey||'',
       parentId:t.id,boardId:'',listId:'',inboxListId:t.inboxListId||''}); });
@@ -2102,18 +2106,20 @@ const subjById=id=>subjects.find(s=>s.id===id);
 const hms=s=>{s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');};
 const mmss=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');};
 const dur=(a,b)=>(b-a)/1000;
+// a session's effective seconds — multi-subject focus blocks log one row per subject, each with share=1/N (totals never double-count)
+const sdur=s=>dur(s.start,s.end)*(s.share||1);
 // total seconds a task's timer has logged (sum of every session tagged to it) — pushed to Notion as a number
-const taskSecs=t=>{ if(!t)return 0; let ms=0; for(const s of sessions) if(s.taskId===t.id) ms+=(s.end-s.start); return ms/1000; };
+const taskSecs=t=>{ if(!t)return 0; let ms=0; for(const s of sessions) if(s.taskId===t.id) ms+=(s.end-s.start)*(s.share||1); return ms/1000; };
 // seconds → the Notion number, unit inferred from the mapped property's NAME: "Hours/Hrs" ⇒ decimal hours (2dp), else whole minutes
 function notionDurValue(durProp,secs){ return /hour|hrs?\b/i.test(durProp||'') ? Math.round(secs/36)/100 : Math.round(secs/60); }
-function pushSession(subjectId,start,end,taskId){ if(end-start<1000)return; sessions.push({id:Date.now()+Math.random(),subjectId,start,end,taskId:taskId||''}); }
+function pushSession(subjectId,start,end,taskId,share){ if(end-start<1000)return; const row={id:Date.now()+Math.random(),subjectId,start,end,taskId:taskId||''}; if(share&&share!==1)row.share=share; sessions.push(row); }
 /* log a span, splitting at IST midnight so day totals stay honest */
-function pushSpan(subjectId,start,end,taskId){ if(end-start<1000)return;
+function pushSpan(subjectId,start,end,taskId,share){ if(end-start<1000)return;
   let s=start, guard=0;
   while(s<end && guard++<400){
     const boundary=new Date(addDays(dateKey(s),1)+'T00:00:00').getTime(); // next day boundary (IST-local; browser runs IST)
     const seg=Math.min(end,boundary);
-    pushSession(subjectId,s,seg,taskId);
+    pushSession(subjectId,s,seg,taskId,share);
     s=seg;
   }
 }
@@ -2235,8 +2241,14 @@ function freeze(){ clearInterval(tick); active=false; $('startBtn').textContent=
   if(mode==='pomo') remaining=endStamp?Math.max(0,(endStamp-Date.now())/1000):remaining; renderClock(); saveTimer(); }
 function pauseTimer(){ if(!active)return; freeze(); timerPauseSound&&timerPauseSound(); $('distractBtn').classList.remove('show'); $('ovPause').classList.add('show'); }
 function commit(logIt,cap){ endSeg(cap);
-  if(logIt && (mode==='stopwatch'||phase==='focus')){ const sid=activeSubjectId();
-    segs.forEach(g=>pushSpan(sid,g.start,g.end,currentTask)); // each work segment logged separately → pauses excluded, start times truthful, midnight split
+  if(logIt && (mode==='stopwatch'||phase==='focus')){
+    // attribute the focus time across the task's subjects (tags) — split evenly, one session row per subject (share=1/N).
+    // A bare subject or no subject ⇒ a single bucket, share=1 (identical to before).
+    const t=focusTaskById(currentTask);
+    let sids = t ? subjectIdsOf(t) : [activeSubjectId()];
+    if(!sids.length) sids=[''];
+    const share = 1/sids.length;
+    segs.forEach(g=> sids.forEach(sid=> pushSpan(sid,g.start,g.end,currentTask,share))); // each work segment logged separately → pauses excluded, start times truthful, midnight split
     // a habit-bound focus block counts toward today's habit check-in (guarded so it never wraps an already-done habit back to 0)
     if(currentHabit && segs.length){ const h=habits.find(x=>x.id===currentHabit), today=todayKey();
       if(h && !habitDoneOn(h,today)){ checkHabit(h,today); if(typeof afterHabitChange==='function')afterHabitChange(); } } }
@@ -2452,8 +2464,9 @@ function focusTaskById(id){ return id?tasks.find(x=>x.id===id)||null:null; }
 function renderFocusHeader(){ const nm=$('fpName'), sub=$('fpSub'), btn=$('focusPick'); if(!nm||!sub||!btn)return;
   let name='Focus', subHTML='', has=true;
   const t=focusTaskById(currentTask);
-  if(t){ name=t.name; const s=t.subjectId?subjById(t.subjectId):null;
-    if(s) subHTML=`<span class="fp-dot" style="background:${s.color}"></span>${esc(s.name)}`; }
+  if(t){ name=t.name; // show all of the task's subjects (tags) on the sub-line
+    subHTML=subjectIdsOf(t).map(id=>subjById(id)).filter(Boolean)
+      .map(s=>`<span class="fp-dot" style="background:${s.color}"></span>${esc(s.name)}`).join('<span class="fp-sep"> · </span>'); }
   else if(currentHabit){ const h=habits.find(x=>x.id===currentHabit); if(h){ name=(h.emoji?h.emoji+' ':'')+h.name; subHTML='Habit'; } else { currentHabit=null; has=false; } }
   else if($('activeSubject').value){ const s=subjById($('activeSubject').value); if(s) name=s.name; else has=false; }
   else has=false;
@@ -2473,9 +2486,11 @@ function renderTaskSelect(){ const sel=$('activeTask'); if(!sel) return;
 /* ====================================================================
    SUBJECTS  (per-subject today total, quick stopwatch, to-dos)
    ==================================================================== */
-function todaySecBySubject(){const m={},tk=todayKey();sessions.forEach(s=>{if(dateKey(s.start)===tk)m[s.subjectId]=(m[s.subjectId]||0)+dur(s.start,s.end);});
+function todaySecBySubject(){const m={},tk=todayKey();sessions.forEach(s=>{if(dateKey(s.start)===tk)m[s.subjectId]=(m[s.subjectId]||0)+sdur(s);});
   const liveMs=workedMs+(active&&segStart?Date.now()-segStart:0); // in-progress focus/stopwatch time
-  if(liveMs>0 && (mode==='stopwatch'||phase==='focus')){ const sid=activeSubjectId(); m[sid]=(m[sid]||0)+liveMs/1000; } return m;}
+  if(liveMs>0 && (mode==='stopwatch'||phase==='focus')){ // split the live preview across the bound task's subjects too
+    const t=focusTaskById(currentTask); let sids=t?subjectIdsOf(t):[activeSubjectId()]; if(!sids.length)sids=[''];
+    const per=liveMs/1000/sids.length; sids.forEach(sid=>m[sid]=(m[sid]||0)+per); } return m;}
 let expandedSubj=new Set();
 function to12(hhmm){ if(!hhmm)return''; const [h,m]=hhmm.split(':').map(Number); const ap=h<12?'AM':'PM'; const h12=((h+11)%12)+1; return h12+':'+String(m).padStart(2,'0')+' '+ap; }
 function weekKeyOf(dk){ const d=new Date(dk+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return dateKey(d.getTime()); } // Monday-anchored week start
@@ -2519,7 +2534,7 @@ function renderSubjects(){
         <button class="subj-menu" title="More options">⋮</button>
       </div>
       <div class="subj-todos"></div>`;
-    item._taskDrop=(t)=>{ t.subjectId=s.id; };   // drop a task card onto a subject → reassign (pointer engine)
+    item._taskDrop=(t)=>{ addTaskSubject(t,s.id); };   // drop a task card onto a subject → ADD it as a tag (pointer engine)
     // drag the whole row up/down to reorder — same pointer gesture as task cards (works on touch)
     item.querySelector('.subj-main').addEventListener('pointerdown',e=>{
       if(e.button===2) return;
@@ -2556,14 +2571,14 @@ function renderSubjects(){
       const add=document.createElement('div'); add.className='add-todo';
       add.innerHTML=`<input placeholder="Add task…" maxlength="200"><button title="Quick add">Add</button><button class="adv" title="Add with date, time, repeat">⚙</button>`;
       const inp=add.querySelector('input');
-      const doAdd=()=>{const v=inp.value.trim();if(!v)return;const t=newTask(v,'');t.subjectId=s.id;tasks.push(t);save();renderSubjects();};
+      const doAdd=()=>{const v=inp.value.trim();if(!v)return;const t=newTask(v,'');setTaskSubjects(t,[s.id]);tasks.push(t);save();renderSubjects();};
       add.querySelector('button:not(.adv)').onclick=doAdd; inp.addEventListener('keydown',e=>{if(e.key==='Enter')doAdd();});
       add.querySelector('.adv').onclick=()=>openTodo(s.id,null);
       td.appendChild(add);
       const ctl=document.createElement('div'); ctl.className='subj-ctl';
       ctl.innerHTML=`<label class="colorlab">Colour <input type="color" value="${s.color}"></label><button class="subj-del">Delete subject</button>`;
       ctl.querySelector('input').oninput=e=>{s.color=e.target.value;save();renderSubjects();refreshStats();};
-      ctl.querySelector('.subj-del').onclick=()=>askConfirm('Delete subject "'+s.name+'"? Its tasks become unassigned (kept in Inbox) and logged sessions stay in history.',()=>{ tasksForSubject(s.id).forEach(t=>t.subjectId=''); subjects=subjects.filter(x=>x.id!==s.id); expandedSubj.delete(s.id); save(); renderSubjectSelect(); renderSubjects(); refreshStats(); });
+      ctl.querySelector('.subj-del').onclick=()=>askConfirm('Delete subject "'+s.name+'"? It is removed as a tag from its tasks (they stay) and logged sessions stay in history.',()=>{ tasksForSubject(s.id).forEach(t=>removeTaskSubject(t,s.id)); subjects=subjects.filter(x=>x.id!==s.id); expandedSubj.delete(s.id); save(); renderSubjectSelect(); renderSubjects(); refreshStats(); });
       td.appendChild(ctl);
     }
     list.appendChild(item);
@@ -2708,7 +2723,7 @@ document.querySelectorAll('#statPills button').forEach(b=>b.onclick=()=>{statRan
   document.querySelectorAll('#statPills button').forEach(x=>x.classList.toggle('active',x===b));refreshStats();});
 let statSubject='all';
 function sessionsOn(key){return sessions.filter(s=>dateKey(s.start)===key);}
-function secOn(key,sid){return sessionsOn(key).reduce((a,s)=>a+((!sid||sid==='all'||s.subjectId===sid)?dur(s.start,s.end):0),0);}
+function secOn(key,sid){return sessionsOn(key).reduce((a,s)=>a+((!sid||sid==='all'||s.subjectId===sid)?sdur(s):0),0);}
 function shiftKey(days){const d=new Date();d.setDate(d.getDate()-days);return dateKey(d.getTime());}
 function streakDays(){let n=0;const d=new Date();if(secOn(dateKey(d.getTime()),statSubject)===0)d.setDate(d.getDate()-1);
   while(secOn(dateKey(d.getTime()),statSubject)>0){n++;d.setDate(d.getDate()-1);}return n;}
@@ -2723,12 +2738,12 @@ function donutHTML(parts,total){ // parts:[{name,color,sec}]
   return `<div class="donut-wrap"><div class="donut" style="background:conic-gradient(${stops.join(',')})"></div><div class="legend">${legend}</div></div>`;
 }
 function subjectParts(keys){ const m={}; subjects.forEach(s=>m[s.id]=0);
-  keys.forEach(k=>sessionsOn(k).forEach(s=>{m[s.subjectId]=(m[s.subjectId]||0)+dur(s.start,s.end);}));
+  keys.forEach(k=>sessionsOn(k).forEach(s=>{m[s.subjectId]=(m[s.subjectId]||0)+sdur(s);}));
   return subjects.map(s=>({name:s.name,color:s.color,sec:m[s.id]||0})); }
 function monthlyHistoryHTML(){
   const now=new Date(),months=[];for(let i=7;i>=0;i--)months.push(new Date(now.getFullYear(),now.getMonth()-i,1));
   const data=months.map(d=>{const y=d.getFullYear(),m=d.getMonth(),p=n=>String(n).padStart(2,'0'),dim=new Date(y,m+1,0).getDate();const bysub={};let tot=0;
-    for(let dd=1;dd<=dim;dd++){const key=y+'-'+p(m+1)+'-'+p(dd);sessionsOn(key).forEach(s=>{bysub[s.subjectId]=(bysub[s.subjectId]||0)+dur(s.start,s.end);tot+=dur(s.start,s.end);});}
+    for(let dd=1;dd<=dim;dd++){const key=y+'-'+p(m+1)+'-'+p(dd);sessionsOn(key).forEach(s=>{bysub[s.subjectId]=(bysub[s.subjectId]||0)+sdur(s);tot+=sdur(s);});}
     return {d,bysub,tot};});
   const max=Math.max(3600,...data.map(x=>x.tot));
   const bars=data.map(x=>{let segs='';subjects.forEach(s=>{const v=x.bysub[s.id]||0;if(v>0)segs+=`<div style="flex:${v};background:${s.color}" title="${esc(s.name)}: ${hms(v)}"></div>`;});
@@ -2740,12 +2755,12 @@ function refreshStats(){ renderDots(); renderSubjectSelect();
   const body=$('statBody');
   if(statRange==='day'){
     const k=todayKey(), ss=sessionsOn(k).slice().sort((a,b)=>a.start-b.start);
-    const total=secOn(k), maxF=ss.reduce((m,s)=>Math.max(m,dur(s.start,s.end)),0);
+    const total=secOn(k), maxF=ss.reduce((m,s)=>Math.max(m,sdur(s)),0);
     const start=ss.length?istTime(ss[0].start):'—', end=ss.length?istTime(ss[ss.length-1].end):'—';
     const score=total===0?'—':Math.min(100,Math.round(total/60/settings.goal*100));
     let line='<div class="empty">No sessions today.</div>';
     if(ss.length){ const dayStart=new Date(k+'T00:00:00').getTime(); let cum=0; const pts=[];
-      ss.forEach(s=>{cum+=dur(s.start,s.end);pts.push([(s.end-dayStart)/86400000,cum]);});
+      ss.forEach(s=>{cum+=sdur(s);pts.push([(s.end-dayStart)/86400000,cum]);});
       const maxC=cum, W=300,H=120; const px=f=>20+f*(W-25), py=v=>H-10-(v/maxC)*(H-20);
       let d='M '+px(0)+' '+py(0); pts.forEach(p=>{d+=' L '+px(p[0])+' '+py(0); d+=' L '+px(p[0])+' '+py(p[1]);});
       line=`<svg class="line" viewBox="0 0 ${W} ${H}"><path d="${d}" fill="none" stroke="var(--amber)" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
@@ -2856,7 +2871,7 @@ function renderTimeline(){
     const sj=subjById(s.subjectId)||(tk&&subjById(tk.subjectId))||{name:'(no subject)',color:'#888'};
     const row=document.createElement('div');row.className='tl-item';
     row.innerHTML=`<div class="tl-time">${istTime(s.start)}</div><div class="tl-dot"><span class="d" style="background:${sj.color}"></span></div>
-      <div class="tl-body"><div class="nm"><span style="color:${sj.color}">${esc(sj.name)}</span>${tk?` · <span style="color:var(--faint);font-weight:400">${esc(tk.name)}</span>`:''}</div><div class="meta">${hms(dur(s.start,s.end))} · ${istTime(s.start)} – ${istTime(s.end)}</div></div>
+      <div class="tl-body"><div class="nm"><span style="color:${sj.color}">${esc(sj.name)}</span>${tk?` · <span style="color:var(--faint);font-weight:400">${esc(tk.name)}</span>`:''}</div><div class="meta">${hms(sdur(s))} · ${istTime(s.start)} – ${istTime(s.end)}</div></div>
       <button class="tl-del" title="Delete">×</button>`;
     row.querySelector('.tl-del').onclick=()=>askConfirm('Delete this study log?',()=>{sessions=sessions.filter(x=>x.id!==s.id);save();renderCalendar();renderSubjects();refreshStats();});
     tl.appendChild(row);});
@@ -2932,7 +2947,7 @@ function filterDateMatch(t){ const today=todayKey();
 function passesTaskFilters(t){
   const groups=[];                                  // one bool per active chip group
   if(filterPriorities.size) groups.push(filterPriorities.has(t.priority||0));
-  if(filterSubjects.size)   groups.push(filterSubjects.has(t.subjectId||''));
+  if(filterSubjects.size)   groups.push(subjectIdsOf(t).length ? subjectIdsOf(t).some(id=>filterSubjects.has(id)) : filterSubjects.has(''));
   if(filterBoards.size || filterLists.size)         // board + list are one dimension: board chip OR specific-list chip
     groups.push((filterBoards.size && filterBoards.has(t.boardId||'')) || (filterLists.size && filterLists.has((t.boardId||'')+'|'+(t.listId||''))));
   if(filterDates.size)      groups.push(filterDateMatch(t));
@@ -2950,7 +2965,7 @@ function addDays(key,n){ const [y,m,d]=key.split('-').map(Number); const dt=new 
 function daysBetween(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
 function prettyDate(key){ const [y,m,d]=key.split('-').map(Number); return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]; }
 const PRI_COL=['transparent','#5fc24a','#f5a623','#ff5a5a'];
-function newTask(name,due){ taskSound(); return {id:uid('t'),name,desc:'',due:due||'',dueEnd:'',priority:0,subjectId:'',checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
+function newTask(name,due){ taskSound(); return {id:uid('t'),name,desc:'',due:due||'',dueEnd:'',priority:0,subjectId:'',subjectIds:[],checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
 
 /* ---- TeuxDeux-style smart entry: parse priority, date & repeat from free text ---- */
 const SMART_WD={sunday:0,sun:0,monday:1,mon:1,tuesday:2,tues:2,tue:2,wednesday:3,weds:3,wed:3,thursday:4,thurs:4,thur:4,thu:4,friday:5,fri:5,saturday:6,sat:6};
@@ -3317,7 +3332,14 @@ function taskSort(a,b){ const ad=isTaskDone(a),bd=isTaskDone(b); if(ad!==bd)retu
   const ao=(typeof a.order==='number')?a.order:a.created||0, bo=(typeof b.order==='number')?b.order:b.created||0;
   if(ao!==bo)return ao-bo; return (a.created||0)-(b.created||0); }
 const CHK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>';
-function tasksForSubject(id){ return tasks.filter(t=>t.subjectId===id); }
+/* ---- subjects-as-tags: subjectIds[] is the full set; t.subjectId mirrors subjectIds[0] (primary) ---- */
+function subjectIdsOf(t){ return Array.isArray(t.subjectIds) ? t.subjectIds : (t.subjectId?[t.subjectId]:[]); }
+function primarySubjectId(t){ return subjectIdsOf(t)[0]||''; }
+function setTaskSubjects(t,ids){ t.subjectIds=[...new Set((ids||[]).filter(Boolean))]; t.subjectId=t.subjectIds[0]||''; }
+function addTaskSubject(t,id){ if(!id)return; const ids=subjectIdsOf(t); if(!ids.includes(id)) setTaskSubjects(t,[...ids,id]); }
+function removeTaskSubject(t,id){ setTaskSubjects(t, subjectIdsOf(t).filter(x=>x!==id)); }
+function toggleTaskSubject(t,id){ if(!id)return; subjectIdsOf(t).includes(id)?removeTaskSubject(t,id):addTaskSubject(t,id); }
+function tasksForSubject(id){ return tasks.filter(t=>subjectIdsOf(t).includes(id)); }
 /* re-render whichever task surfaces are on screen (keeps both tabs in step) */
 function refreshTaskSurfaces(){ renderSubjects();
   if($('tab-tasks')&&$('tab-tasks').classList.contains('show')) renderTasks();
@@ -3328,7 +3350,8 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
   const over=t.due && t.due<today && !done;
   const multi=t.dueEnd && t.due && t.dueEnd>t.due;
   const dueTxt=t.due?(t.due===today?'Today':t.due===addDays(today,1)?'Tomorrow':prettyDate(t.due)):'';
-  const subj=t.subjectId?subjById(t.subjectId):null;
+  const subjChips=subjectIdsOf(t).map(id=>subjById(id)).filter(Boolean)
+    .map(s=>`<span class="tk-chip" style="color:${s.color}">${esc(s.name)}</span>`).join('');
   const kids=childrenOf(t.id);
   const hzChip=(t.horizon&&t.horizon!=='day')?`<span class="tk-chip" style="color:var(--violet)">${esc(hzShort(t.horizon,t.hkey))}</span>`:'';
   const timeChip=(schedHorizon(t)==='day'&&t.start)?`<span class="tk-chip" style="color:var(--accent)" title="Time of day">🕐 ${to12(t.start)}</span>`:'';
@@ -3337,7 +3360,7 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
   const tags=[
     hzChip, timeChip, bdChip,
     multi?`<span class="tk-chip span">${prettyDate(t.due)}–${prettyDate(t.dueEnd)}</span>`:(dueTxt?`<span class="tk-chip ${over?'over':''}">${over?'⚠ ':''}${dueTxt}</span>`:''),
-    subj?`<span class="tk-chip" style="color:${subj.color}">${esc(subj.name)}</span>`:''
+    subjChips
   ].filter(Boolean).join('');
   let subs='';
   const open=expandedGoals.has(t.id);
@@ -3372,7 +3395,7 @@ function renderTaskList(items, key){
 /* create a child (subtask) of `parent`, inheriting its schedule so it sits in the same column */
 function addSubtask(parent,name){ name=(name||'').trim(); if(!name)return null; expandedGoals.add(parent.id);
   const c=newTask(name,''); c.parentId=parent.id; c.horizon=parent.horizon||''; c.hkey=parent.hkey||'';
-  c.due=parent.due||''; c.dueEnd=''; c.subjectId=parent.subjectId||''; clampRepeat(c); tasks.push(c); save(); return c; }
+  c.due=parent.due||''; c.dueEnd=''; setTaskSubjects(c,[...subjectIdsOf(parent)]); clampRepeat(c); tasks.push(c); save(); return c; }
 
 /* shared task-card drag id — still read by the few native drop zones (subjects/calendar) */
 let taskDragId=null;
@@ -3531,8 +3554,8 @@ function sortTasks(list){ const sb=settings.sortBy||'manual';
 /* column/section descriptors for a group-by key: {key,label,color,match(t),drop(t)} */
 function kanbanGroups(gb){ const today=todayKey();
   if(gb==='priority') return [3,2,1,0].map(p=>({key:'p'+p,label:PRI_NAMES[p],color:PRI_COL[p]||'var(--faint)',match:t=>(t.priority||0)===p,drop:t=>{t.priority=p;}}));
-  if(gb==='subject') return subjects.map(s=>({key:'s'+s.id,label:s.name,color:s.color,match:t=>t.subjectId===s.id,drop:t=>{t.subjectId=s.id;}}))
-      .concat([{key:'snone',label:'No subject',color:'var(--faint)',match:t=>!t.subjectId,drop:t=>{t.subjectId='';}}]);
+  if(gb==='subject') return subjects.map(s=>({key:'s'+s.id,label:s.name,color:s.color,match:t=>subjectIdsOf(t).includes(s.id),drop:t=>{addTaskSubject(t,s.id);}}))
+      .concat([{key:'snone',label:'No subject',color:'var(--faint)',match:t=>!subjectIdsOf(t).length,drop:t=>{setTaskSubjects(t,[]);}}]);
   if(gb==='board') return boards.map(b=>({key:'b'+b.id,label:b.name,color:'var(--amber)',match:t=>t.boardId===b.id,
       drop:t=>{ t.boardId=b.id; if(!t.listId||!b.lists.some(l=>l.id===t.listId)) t.listId=(b.lists[0]&&b.lists[0].id)||''; notionMaybeCreate(t); }}))
       .concat([{key:'bnone',label:'No board',color:'var(--faint)',match:t=>!t.boardId,drop:t=>{t.boardId='';t.listId='';}}]);
@@ -3960,16 +3983,18 @@ function openCtxMenu(anchor,page){ closeCtx(); closeDatePicker&&closeDatePicker(
   m.innerHTML = ctxColorsHTML(page.colors) + page.items.map((it,i)=>ctxItemHTML(it,i)).join('');
   if(page.colors) m.querySelectorAll('[data-ci]').forEach(b=>b.onclick=()=>{ page.colors.pick(+b.dataset.ci); if(page.rebuild) openCtxMenu(anchor,page.rebuild()); });
   m.querySelectorAll('.ctx-item').forEach(b=>{ const it=page.items[+b.dataset.i]; if(!it)return;
-    if(it.sub){ const open=()=>{ closeCtxSub(); b.classList.add('subopen'); openCtxSub(b,it.sub()); };
+    if(it.sub){ const open=()=>{ closeCtxSub(); b.classList.add('subopen'); openCtxSub(b,it.sub); };
       b.onclick=open; b.onmouseenter=open; }
     else { b.onmouseenter=closeCtxSub; b.onclick=()=>{ const a=_ctxAnchor; closeCtx(); it.run&&it.run(a); }; } });
   positionFloat(m,anchor,'below');
   setTimeout(()=>document.addEventListener('mousedown',_ctxOutside,true),0); }
-function openCtxSub(itemEl,sub){ const s=$('ctxSub'); closeCtxSub2();
+function openCtxSub(itemEl,subArg){ const s=$('ctxSub'); closeCtxSub2();
+  const sub = (typeof subArg==='function') ? subArg() : subArg;   // builder ⇒ re-evaluated each open (live ✓ for multi-toggles)
   s.innerHTML = sub.items.map((it,i)=>ctxItemHTML(it,i)).join('');
   s.querySelectorAll('.ctx-item').forEach(b=>{ const it=sub.items[+b.dataset.i]; if(!it||it.sep)return;
     if(it.sub){ const open=()=>{ closeCtxSub2(); b.classList.add('subopen'); openCtxSub2(b,it.sub()); };
       b.onclick=open; b.onmouseenter=open; }
+    else if(it.keepOpen){ b.onmouseenter=closeCtxSub2; b.onclick=()=>{ it.run&&it.run(); openCtxSub(itemEl,subArg); }; }  // toggle + re-render the submenu in place
     else { b.onmouseenter=closeCtxSub2; b.onclick=()=>{ const a=_ctxAnchor; closeCtx(); it.run&&it.run(a); }; } });
   positionFloat(s,itemEl,'beside'); }
 /* third menu layer — e.g. Add to board → board → its lists (TimeStripe-style) */
@@ -3983,8 +4008,11 @@ window.addEventListener('resize',()=>closeCtx());
 /* ---- menu definitions ---- */
 function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
   const repItems=repeatOptsFor(t).map(p=>({ic:(t.repeat||'none')===p[0]?'✓':'',label:p[1],run:()=>{t.repeat=p[0];save();re();}}));
-  const subjItems=[{ic:!t.subjectId?'✓':'',label:'— none —',run:()=>{t.subjectId='';save();re();}}].concat(
-    subjects.map(s=>({ic:`<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${s.color}"></span>`,label:s.name,run:()=>{t.subjectId=s.id;save();re();}})));
+  // Subjects are tags: this is a MULTI-toggle. ✓ marks each tagged subject; clicking toggles + keeps the submenu open.
+  const subjTags=subjectIdsOf(t);
+  const subjGloss=subjTags.length ? (((subjById(subjTags[0])||{}).name||'')+(subjTags.length>1?` +${subjTags.length-1}`:'')) : '';
+  const subjectSub=()=>({items:[{ic:!subjectIdsOf(t).length?'✓':'',label:'— none —',keepOpen:true,run:()=>{setTaskSubjects(t,[]);save();re();}}].concat(
+    subjects.map(s=>({ic:`<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${s.color}"></span>`,label:s.name,gloss:subjectIdsOf(t).includes(s.id)?'✓':'',keepOpen:true,run:()=>{toggleTaskSubject(t,s.id);save();re();}})))});
   // two-level: board name → hover/click reveals its lists (TimeStripe-style)
   let boardItems=boards.map(b=>({ic:(t.boardId===b.id)?'✓':'▤',label:b.name,sub:()=>({items:
       b.lists.length ? b.lists.map(l=>({ic:(t.boardId===b.id&&t.listId===l.id)?'✓':'',label:l.name,run:()=>{t.boardId=b.id;t.listId=l.id;save();re();notionMaybeCreate(t);}}))
@@ -4002,7 +4030,7 @@ function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
       {ic:'🔁',label:'Repeat',gloss:(t.repeat&&t.repeat!=='none')?t.repeat:'',sub:()=>({items:repItems})},
       {ic:'＋',label:'Add subtask',gloss:kidN?String(kidN):'',run:()=>{ expandedGoals.add(t.id); _pendingAddReopen='sub|'+t.id; re(); }},
       {ic:'▤',label:'Add to board',sub:()=>({items:boardItems})},
-      {ic:'●',label:'Subject',sub:()=>({items:subjItems})}];
+      {ic:'●',label:'Subject',gloss:subjGloss,sub:subjectSub}];
   if(dayLvl) items.splice(2,0,{ic:'⏱',label:'Time',gloss:timeGloss,run:(a)=>openTimePicker(a||document.body,t,()=>{save();re();})});
   if(elsewhere) items.push({ic:'⮈',label:'Move to No date',run:()=>{assignHorizon(t,'','');t.boardId='';t.listId='';t.inboxListId='';clampRepeat(t);save();refreshTaskSurfaces();}});
   items.push(
@@ -4047,7 +4075,7 @@ function buildSubjectMenu(s){
       {ic:'✎',label:'Rename',run:()=>renameSubject(s)},
       {ic:'＋',label:'Add task',run:()=>{ expandedSubj.add(s.id); renderSubjects(); setTimeout(()=>{ const el=$('subjList').querySelector(`.subj-item[data-id="${s.id}"] .add-todo input`); if(el)el.focus(); },40); }},
       {sep:true},
-      {ic:'🗑',label:'Delete subject',danger:true,run:()=>askConfirm('Delete subject "'+s.name+'"? Its tasks become unassigned (kept in Inbox) and logged sessions stay in history.',()=>{ tasksForSubject(s.id).forEach(t=>t.subjectId=''); subjects=subjects.filter(x=>x.id!==s.id); expandedSubj.delete(s.id); save(); renderSubjectSelect(); renderSubjects(); refreshStats(); })}
+      {ic:'🗑',label:'Delete subject',danger:true,run:()=>askConfirm('Delete subject "'+s.name+'"? It is removed as a tag from its tasks (they stay) and logged sessions stay in history.',()=>{ tasksForSubject(s.id).forEach(t=>removeTaskSubject(t,s.id)); subjects=subjects.filter(x=>x.id!==s.id); expandedSubj.delete(s.id); save(); renderSubjectSelect(); renderSubjects(); refreshStats(); })}
     ] }; }
 function renameSubject(s){ const el=$('subjList').querySelector(`.subj-item[data-id="${s.id}"] .subj-name`); if(!el)return;
   el.contentEditable='true'; el.focus();
@@ -4904,7 +4932,7 @@ function fpPool(){ const today=todayKey(), sc=fpickScope;
   else if(sc==='tomorrow')list=tasks.filter(t=> t.due===addDays(today,1) );
   else if(sc==='next7')   list=tasks.filter(t=> t.due && t.due<=addDays(today,7) );            // up to a week (incl. overdue)
   else if(sc==='inbox')   list=tasks.filter(t=> !t.boardId );
-  else if(sc.startsWith('subj:')){ const id=sc.slice(5); list=tasks.filter(t=> t.subjectId===id ); }
+  else if(sc.startsWith('subj:')){ const id=sc.slice(5); list=tasks.filter(t=> subjectIdsOf(t).includes(id) ); }
   else if(sc.startsWith('board:')){ const rest=sc.slice(6), [bid,lid]=rest.split('|');
     list=tasks.filter(t=> t.boardId===bid && (!lid || t.listId===lid) ); }
   else                    list=tasks.slice();                                                  // all
