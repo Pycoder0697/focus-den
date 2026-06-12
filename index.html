@@ -92,7 +92,7 @@
   /* TIMER */
   .timer-card{padding:24px 24px 26px;display:flex;flex-direction:column;align-items:center;gap:18px;background:var(--card-bg);position:relative}
   .subj-select{width:100%;display:flex;gap:8px;align-items:center}
-  .subj-select label{font-size:13.2px;color:var(--faint);white-space:nowrap}
+  .subj-select label{font-size:13.2px;color:var(--faint);white-space:nowrap;min-width:54px}
   select.subj{flex:1;font-family:inherit;font-size:15.4px;color:var(--ink);background:var(--field-bg);
     border:1px solid var(--stroke);border-radius:12px;padding:10px 12px;outline:none;cursor:pointer}
   select.subj:focus{border-color:var(--amber)}
@@ -102,7 +102,8 @@
   .phases{display:flex;gap:8px;background:var(--track-bg);padding:5px;border-radius:999px;border:1px solid var(--stroke-soft)}
   .phases button{font-family:inherit;font-size:14.3px;font-weight:500;color:var(--muted);background:transparent;border:none;padding:8px 16px;border-radius:999px;cursor:pointer;transition:.25s;white-space:nowrap}
   .phases button.active{background:var(--accent);color:var(--accent-ink);font-weight:600}
-  .clock{font-weight:300;font-size:clamp(77px,13vw,140.8px);line-height:.9;letter-spacing:-3px;font-variant-numeric:tabular-nums;text-shadow:0 6px 40px rgba(0,0,0,.35);user-select:none}
+  .clock{font-weight:300;font-size:clamp(77px,13vw,140.8px);line-height:.9;letter-spacing:-3px;font-variant-numeric:tabular-nums;text-shadow:0 6px 40px rgba(0,0,0,.35);user-select:none;cursor:pointer}
+  .clock-edit{font-family:inherit;font-weight:300;font-size:clamp(64px,11vw,120px);line-height:.9;letter-spacing:-3px;font-variant-numeric:tabular-nums;width:2.6em;text-align:center;color:var(--ink);background:transparent;border:none;border-bottom:3px solid var(--amber);outline:none;padding:0}
   .phase-label{font-size:14.3px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint);margin-top:-6px;text-align:center}
   .phase-label b{color:var(--amber);font-weight:600}
   .controls{display:flex;align-items:center;gap:14px}
@@ -188,7 +189,7 @@
   #tab-tasks.nav-collapsed .task-views{display:none}
 
   /* SUBJECTS */
-  .subj-card{padding:18px}
+  .subj-card{padding:18px;display:flex;flex-direction:column}
   .total-row{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:14px;border-bottom:1px solid var(--stroke-soft);margin-bottom:12px}
   .total-row .lbl{font-size:14.3px;color:var(--muted);letter-spacing:.5px}
   .total-row .big{font-family:'Fraunces',serif;font-size:33px;font-variant-numeric:tabular-nums;color:var(--ink)}
@@ -197,7 +198,7 @@
   .add-subj input{flex:1;font-family:inherit;font-size:15.4px;color:var(--ink);background:var(--field-bg);border:1px solid var(--stroke);border-radius:12px;padding:11px 13px;outline:none}
   .add-subj input:focus{border-color:var(--amber)}
   .add-subj button{background:var(--amber);color:#3a1810;border:none;border-radius:12px;width:46px;font-size:24.2px;cursor:pointer;font-weight:600}
-  .subj-list{display:flex;flex-direction:column;gap:10px;max-height:440px;overflow-y:auto;padding-right:2px}
+  .subj-list{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;overflow-y:auto;padding-right:2px}
   .subj-item{border-radius:14px;background:rgba(255,255,255,.07);border:1px solid var(--stroke-soft);position:relative}
   .subj-main{display:flex;align-items:center;gap:13px;padding:11px 14px}
   .subj-play{width:38px;height:38px;border-radius:50%;border:2px solid rgba(255,255,255,.85);cursor:pointer;display:grid;place-items:center;flex:none;color:#fff;box-shadow:0 3px 12px rgba(0,0,0,.35);transition:transform .15s}
@@ -208,10 +209,10 @@
   .subj-name{flex:1;min-width:0;font-size:16.5px;font-weight:500;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .todocount{font-size:12.1px;color:var(--muted);font-style:normal;background:var(--track-bg);padding:2px 8px;border-radius:999px;flex:none}
   .subj-time{font-size:15.4px;color:var(--ink);font-variant-numeric:tabular-nums;font-weight:500}
-  .subj-exp{background:none;border:none;color:var(--faint);cursor:pointer;font-size:15.4px;padding:6px;transition:transform .25s;line-height:1}
-  .subj-item.expanded .subj-exp{transform:rotate(180deg)}
   .subj-todos{max-height:0;overflow:hidden;transition:max-height .28s ease;padding:0 16px 0 17px}
-  .subj-item.expanded .subj-todos{max-height:600px;padding:2px 16px 14px 17px}
+  .subj-item.expanded .subj-todos{max-height:2000px;padding:2px 16px 14px 17px}
+  .subj-viewall{display:block;width:100%;text-align:left;font-family:inherit;font-size:13px;color:var(--accent);background:none;border:none;padding:8px 4px 4px;cursor:pointer}
+  .subj-viewall:hover{text-decoration:underline}
   .todo{display:flex;align-items:center;gap:10px;font-size:14.9px;padding:5px 0}
   .todo .check{width:19px;height:19px;border-radius:6px;border:2px solid var(--stroke);cursor:pointer;flex:none;display:grid;place-items:center;transition:.2s}
   .todo .check.on{background:var(--ok);border-color:var(--ok)}
@@ -227,8 +228,12 @@
   .add-todo button{background:var(--glass-2);color:var(--ink);border:1px solid var(--stroke);border-radius:9px;padding:0 13px;cursor:pointer}
   .subj-del{margin-top:11px;background:none;border:none;color:var(--faint);font-size:13.2px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
   .subj-del:hover{color:var(--rose)}
-  .grip{cursor:grab;color:var(--faint);font-size:16.5px;line-height:1;user-select:none;flex:none;padding:2px}
-  .grip:active{cursor:grabbing}
+  /* subject drag-to-reorder (pointer-based, works on touch) — same gesture as task cards */
+  .subj-item.subjdragging{opacity:.32}
+  .subj-item.subj-armed{box-shadow:0 0 0 2px var(--accent)}
+  .subj-ghost{position:fixed;left:0;top:0;z-index:120;pointer-events:none;margin:0;width:auto;
+    background:var(--pop-bg);border:1px solid var(--accent);border-radius:14px;box-shadow:var(--shadow);opacity:.95;transform:rotate(-1deg)}
+  .subj-drop-line{height:2px;margin:4px 2px;border-radius:2px;background:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
   .subj-item.dragging{opacity:.45}
   .t-mid{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
   .t-name{font-size:14.9px}
@@ -703,7 +708,15 @@
   .cal-lbl{font-size:14.9px;font-weight:600;color:var(--ink);min-width:128px;text-align:center}
   .cal-nav2{background:var(--glass-2);border:1px solid var(--stroke);color:var(--ink);min-width:32px;height:32px;padding:0 11px;border-radius:9px;font-size:14.3px;font-family:inherit;cursor:pointer;line-height:1}
   .cal-nav2:hover{background:rgba(255,255,255,.16)}
+  .cal-optbtn{display:grid;place-items:center;padding:0;width:32px}
+  .cal-optbtn.open,.cal-optbtn.active{border-color:var(--amber);color:var(--amber)}
   .cal-stage{min-width:0}
+  /* focus records — actual logged Pomodoro/stopwatch time overlaid on the Day & Week time grids */
+  .tlh-rec,.wk-rec{position:absolute;border-radius:6px;background:color-mix(in srgb,var(--rc) 20%,transparent);border:1px solid color-mix(in srgb,var(--rc) 38%,transparent);border-left:3px solid var(--rc);pointer-events:none;overflow:hidden;box-sizing:border-box}
+  .tlh-rec{left:2px;right:2px}
+  .tlh-rec .rl,.wk-rec .rl{display:block;color:var(--ink);opacity:.82;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tlh-rec .rl{font-size:10px;padding:2px 6px;line-height:1.3}
+  .wk-rec .rl{font-size:8.4px;padding:1px 3px;line-height:1.25}
 
   /* ===== Week grid (7-day draggable time grid) ===== */
   .wk-wrap2{--gut:46px;--colw:calc((100% - var(--gut))/7);display:flex;flex-direction:column;min-width:0}
@@ -832,12 +845,6 @@
   .tp-rm{font-family:inherit;font-size:14.3px;color:var(--rose);background:none;border:none;cursor:pointer;padding:2px}
   .tp-rm:hover{text-decoration:underline}
   /* timer extras */
-  .task-chip{font-size:13.2px;color:var(--ink);background:var(--track-bg);border:1px solid var(--stroke-soft);padding:5px 8px 5px 13px;border-radius:999px;display:none;align-items:center;gap:6px;max-width:92%}
-  .task-chip.show{display:inline-flex}
-  .task-chip button{background:none;border:none;color:var(--faint);cursor:pointer;font-size:17.6px;line-height:1}
-  .task-chip-add{display:none;align-items:center;gap:5px;font-family:inherit;font-size:13.2px;color:var(--muted);background:var(--track-bg);border:1px dashed var(--stroke);border-radius:999px;padding:5px 13px;cursor:pointer}
-  .task-chip-add.show{display:inline-flex}
-  .task-chip-add:hover{color:var(--ink);border-color:var(--amber)}
   select.subj.locked{opacity:.85;cursor:not-allowed;border-color:var(--amber)}
   .plan-finish{font-size:12.7px;color:var(--faint);margin-top:-6px;text-align:center}
   .distract-btn{position:absolute;top:14px;left:14px;display:none;align-items:center;gap:5px;background:var(--glass-2);border:1px solid var(--stroke);border-radius:999px;padding:6px 12px;cursor:pointer;font-family:inherit;font-size:13.2px;color:var(--ink);z-index:6}
@@ -881,7 +888,6 @@
   .goal-kid .gk-pbar i{display:block;height:100%;background:var(--teal)}
   .goal-kid .gk-pct{font-variant-numeric:tabular-nums;flex:none;width:34px;text-align:right}
   .kcol.drop{outline:2px dashed var(--accent);outline-offset:-4px}
-  .subj-item.subjdrop{outline:2px dashed var(--accent);outline-offset:-2px}
 
   /* contribution heatmap (GitHub-style) */
   .cg-wrap{overflow-x:auto;padding-bottom:6px}
@@ -1004,6 +1010,7 @@
   .pref-seg{margin-bottom:0;display:flex;width:100%}
   .pref-seg button{flex:1;white-space:nowrap}
   .pref-row{display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:14.3px;color:var(--ink)}
+  .pref-sub{font-size:11.8px;color:var(--faint);margin-top:2px;max-width:188px;line-height:1.35}
   /* task filter (TickTick-style) */
   /* TickTick-style task header: view name + Filter·Sort·Group + ⋯ view options */
   .tv-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-2px 0 12px}
@@ -1188,9 +1195,8 @@
   <!-- TIMER -->
   <section class="card timer-card">
     <div class="subj-select"><label>Subject</label><select class="subj" id="activeSubject"></select></div>
+    <div class="subj-select"><label>Task</label><select class="subj" id="activeTask" title="Run the timer for a task in this subject (optional)"></select></div>
     <button class="distract-btn" id="distractBtn" title="Log a distraction">🌀 <span id="distractCount">0</span></button>
-    <div class="task-chip" id="taskChip"><span id="taskChipName"></span><button id="taskChipClear" title="Clear">×</button></div>
-    <button class="task-chip-add" id="attachTaskBtn" title="Attach a task to this session">＋ Task</button>
     <div class="modeswitch">
       <button data-m="pomo" class="active">Pomodoro</button>
       <button data-m="stopwatch">Stopwatch</button>
@@ -1440,6 +1446,14 @@
       <button data-hv="list" title="List"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16"/><path d="M9 6h11M9 12h11M9 18h11"/></svg><span>List</span></button>
       <button data-hv="calendar" title="Calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg><span>Calendar</span></button>
     </div>
+  </div>
+</div>
+
+<!-- CALENDAR VIEW-OPTIONS POPOVER (the ⋯ on the Calendar page) -->
+<div id="calViewMenu" class="pref-menu">
+  <div class="pref-group">
+    <div class="pref-h">Display</div>
+    <div class="pref-row"><div><span>Show Focus Records</span><div class="pref-sub" id="calRecSub">Overlay your logged Pomodoro / stopwatch time</div></div><div class="toggle" id="calRecToggle"></div></div>
   </div>
 </div>
 
@@ -2053,7 +2067,9 @@ let segs=[]; // [{start,end}] real work segments this session — pauses exclude
 const phaseMin=()=>phase==='focus'?settings.focus:phase==='short'?settings.short:settings.long;
 function setPhaseButtons(){ document.querySelectorAll('#phases button').forEach(b=>b.classList.toggle('active',b.dataset.p===phase)); }
 
+let _clockEditing=false;
 function renderClock(){
+  if(_clockEditing) return;                 // don't clobber the inline time editor while the user is typing
   if(mode==='stopwatch'){ const e=(workedMs+(active&&segStart?Date.now()-segStart:0))/1000;
     $('clock').textContent=hms(e).replace(/^0:/,'');
     $('phaseLabel').textContent=active?'Stopwatch running':(workedMs>0?'Paused — Start to resume':'Stopwatch — counts up');
@@ -2187,7 +2203,7 @@ function restoreTimer(){ let snap=null; try{ snap=JSON.parse(store.get('fd_timer
   if(snap.savedAt && now-snap.savedAt > 12*3600000) return false;                 // too stale to trust
   mode = snap.mode==='stopwatch'?'stopwatch':'pomo'; phase=snap.phase||'focus'; roundCount=snap.roundCount||0; oneShot=!!snap.oneShot;
   if(snap.subjectId && subjById(snap.subjectId)) $('activeSubject').value=snap.subjectId;
-  if(snap.currentTask){ const t=tasks.find(x=>x.id===snap.currentTask); if(t){ currentTask=t.id; $('taskChipName').textContent=t.name; $('taskChip').classList.add('show'); } }
+  if(snap.currentTask){ const t=tasks.find(x=>x.id===snap.currentTask); if(t){ currentTask=t.id; updateTimerTaskUI(); } }
   const open=snap.segStart||0;
   const ended = mode==='pomo' && snap.endStamp && snap.endStamp<=now;             // the phase finished while away → tickFn will catch up to the right phase
   const segEnd = ended ? snap.endStamp : now;                                     // don't credit study time past the focus end
@@ -2303,6 +2319,28 @@ function adjustLen(delta){ if(mode!=='pomo')return;
 $('lenMinus').onclick=()=>adjustLen(-5);
 $('lenPlus').onclick=()=>adjustLen(5);
 
+/* click the pomodoro clock to type a new length (minutes, or MM:SS) */
+function editClock(){ if(mode!=='pomo')return; const el=$('clock'); if(el.querySelector('input'))return;
+  const curSec=active?Math.max(0,(endStamp-Date.now())/1000):remaining;
+  const inp=document.createElement('input'); inp.className='clock-edit'; inp.value=String(Math.max(1,Math.round(curSec/60)));
+  inp.setAttribute('inputmode','numeric'); inp.setAttribute('aria-label','Minutes');
+  _clockEditing=true; el.textContent=''; el.appendChild(inp); inp.focus(); inp.select();
+  let done=false;
+  const fin=commitIt=>{ if(done)return; done=true; _clockEditing=false;
+    if(commitIt){ const v=inp.value.trim(); let secs=null;
+      if(/^\d{1,3}:\d{1,2}$/.test(v)){ const[m,s]=v.split(':').map(Number); secs=m*60+s; }
+      else if(/^\d{1,3}(\.\d+)?$/.test(v)){ secs=Math.round(parseFloat(v)*60); }
+      if(secs!=null && secs>0){ secs=Math.min(secs,600*60);
+        if(active){ endStamp=Date.now()+secs*1000; saveTimer&&saveTimer(); }
+        else remaining=secs; } }
+    renderClock(); };
+  inp.onkeydown=e=>{ if(e.key==='Enter')fin(true); else if(e.key==='Escape')fin(false); };
+  inp.onblur=()=>fin(true); }
+$('clock').onclick=editClock;
+/* mirror the Timer card's height onto the Subjects card whenever the timer grows/shrinks (mode switch, running state, resize) */
+(function(){ const tc=document.querySelector('.timer-card'); if(tc&&'ResizeObserver'in window){ new ResizeObserver(()=>syncSubjCardHeight()).observe(tc); } })();
+window.addEventListener('resize',()=>syncSubjCardHeight());
+
 /* skip: focus → short break, or break → focus, and start it */
 $('skipBtn').onclick=()=>{ if(mode!=='pomo')return; const was=phase;
   if(active){freeze();commit(was==='focus');} else if(workedMs>0){commit(was==='focus');}
@@ -2318,7 +2356,7 @@ function renderDots(){const el=$('dots');if(!el)return;el.innerHTML='';const N=s
 function renderSubjectSelect(){ const sel=$('activeSubject'),cur=sel.value; sel.innerHTML='';
   subjects.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;sel.appendChild(o);});
   if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
-  syncSubjectLock(); }
+  syncSubjectLock(); renderTaskSelect(); }
 
 /* The subject a running session logs against. If a task is attached, it follows
    the task's subject (so moving the task re-points attribution); a task with no
@@ -2331,14 +2369,18 @@ function syncSubjectLock(){ const sel=$('activeSubject'); if(!sel)return;
     else if(t){ if(ul)ul.remove(); sel.value=t.subjectId; }
     sel.disabled=true; sel.classList.add('locked'); sel.title="Locked to this task's subject";
   } else { if(ul)ul.remove(); sel.disabled=false; sel.classList.remove('locked'); sel.title=''; } }
-function updateTimerTaskUI(){ syncSubjectLock();
-  const attach=$('attachTaskBtn'); if(attach) attach.classList.toggle('show', !!(active && !currentTask)); }
-/* pick a task (of the running subject) to attach to a live bare-subject session */
-function attachTaskMenu(anchor){ const sid=$('activeSubject').value;
+function updateTimerTaskUI(){ syncSubjectLock(); renderTaskSelect(); }
+/* the Task dropdown under the Subject dropdown: open tasks of the chosen subject, plus a "— None —"
+   so the timer can run bare. Reflects whatever currentTask is (set here or from the Tasks tab). */
+function renderTaskSelect(){ const sel=$('activeTask'); if(!sel) return;
+  const sid=$('activeSubject').value;
   const list=applyFilter(tasksForSubject(sid),'active').sort(taskSort);
-  const items = list.length ? list.map(t=>({ic:'▶',label:t.name,run:()=>{ currentTask=t.id; $('taskChipName').textContent=t.name; $('taskChip').classList.add('show'); updateTimerTaskUI(); }}))
-                            : [{label:'No open tasks for this subject',run:()=>{}}];
-  openCtxMenu(anchor,{items}); }
+  sel.innerHTML='<option value="">— None —</option>';
+  list.forEach(t=>{ const o=document.createElement('option'); o.value=t.id; o.textContent=t.name; sel.appendChild(o); });
+  if(currentTask){ // make sure the attached task is selectable even if done / outside the current filter
+    if(![...sel.options].some(o=>o.value===currentTask)){ const t=tasks.find(x=>x.id===currentTask); if(t){ const o=document.createElement('option'); o.value=t.id; o.textContent=t.name; sel.appendChild(o); } }
+    sel.value=currentTask;
+  } else sel.value=''; }
 
 /* ====================================================================
    SUBJECTS  (per-subject today total, quick stopwatch, to-dos)
@@ -2347,7 +2389,6 @@ function todaySecBySubject(){const m={},tk=todayKey();sessions.forEach(s=>{if(da
   const liveMs=workedMs+(active&&segStart?Date.now()-segStart:0); // in-progress focus/stopwatch time
   if(liveMs>0 && (mode==='stopwatch'||phase==='focus')){ const sid=activeSubjectId(); m[sid]=(m[sid]||0)+liveMs/1000; } return m;}
 let expandedSubj=new Set();
-let dragId=null;
 function to12(hhmm){ if(!hhmm)return''; const [h,m]=hhmm.split(':').map(Number); const ap=h<12?'AM':'PM'; const h12=((h+11)%12)+1; return h12+':'+String(m).padStart(2,'0')+' '+ap; }
 function weekKeyOf(dk){ const d=new Date(dk+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return dateKey(d.getTime()); } // Monday-anchored week start
 function isTaskDone(t){
@@ -2366,6 +2407,11 @@ function toggleTask(t){
   (isTaskDone(t)?checkSound:uncheckSound)();
   // two-way push happens via the caller's save() → notionFlushChanges()
 }
+/* keep the Subjects card exactly as tall as the Timer card beside it (the list scrolls to fit) */
+function syncSubjCardHeight(){ const tc=document.querySelector('.timer-card'), card=document.querySelector('#tab-subjects .subj-card'); if(!tc||!card)return;
+  const show=$('tab-subjects')&&$('tab-subjects').classList.contains('show');
+  if(!show || getComputedStyle(tc).display==='none'){ card.style.height=''; return; }   // not side-by-side (other tab / narrow) → natural height
+  card.style.height=tc.offsetHeight+'px'; }
 function renderSubjects(){
   const map=todaySecBySubject(); let tot=0; Object.values(map).forEach(v=>tot+=v);
   $('totalToday').textContent=hms(tot);
@@ -2378,35 +2424,46 @@ function renderSubjects(){
                         :'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
     const all=tasksForSubject(s.id); const doneN=all.filter(isTaskDone).length, totN=all.length;
     item.innerHTML=`<div class="subj-main">
-        <span class="grip" draggable="true" title="Drag to reorder">⠿</span>
         <button class="subj-play ${isRun?'running':''}" style="background:${s.color}" title="${isRun?'Pause':'Start'} timer">${playIcon}</button>
         <span class="subj-name">${esc(s.name)}</span>
         ${totN?`<em class="todocount">✓ ${doneN}/${totN}</em>`:''}
         <span class="subj-time">${hms(map[s.id]||0)}</span>
-        <button class="subj-menu" title="More options">⋯</button>
-        <button class="subj-exp" title="Tasks">▾</button>
+        <button class="subj-menu" title="More options">⋮</button>
       </div>
       <div class="subj-todos"></div>`;
-    const grip=item.querySelector('.grip');
-    grip.addEventListener('dragstart',()=>{dragId=s.id;item.classList.add('dragging');});
-    grip.addEventListener('dragend',()=>{dragId=null;item.classList.remove('dragging');});
     item._taskDrop=(t)=>{ t.subjectId=s.id; };   // drop a task card onto a subject → reassign (pointer engine)
-    item.addEventListener('dragover',e=>{e.preventDefault(); if(taskDragId)item.classList.add('subjdrop');});
-    item.addEventListener('dragleave',()=>item.classList.remove('subjdrop'));
-    item.addEventListener('drop',e=>{e.preventDefault(); item.classList.remove('subjdrop');
-      if(taskDragId){ const t=tasks.find(x=>x.id===taskDragId); if(t&&t.subjectId!==s.id){ t.subjectId=s.id; save(); refreshTaskSurfaces(); } return; } // drag a task card onto a subject → reassign
-      if(dragId&&dragId!==s.id){const from=subjects.findIndex(x=>x.id===dragId),to=subjects.findIndex(x=>x.id===s.id);const[mv]=subjects.splice(from,1);subjects.splice(to,0,mv);save();renderSubjectSelect();renderSubjects();}});
+    // drag the whole row up/down to reorder — same pointer gesture as task cards (works on touch)
+    item.querySelector('.subj-main').addEventListener('pointerdown',e=>{
+      if(e.button===2) return;
+      if(e.target.closest('.subj-play,.subj-menu,input,textarea,select,button,a')) return;
+      _startSubjGesture(e, item, s);
+    });
     item.querySelector('.subj-play').onclick=e=>{e.stopPropagation();startSubjectTimer(s.id);};
     item.querySelector('.subj-menu').onclick=e=>{e.stopPropagation();openCtxMenu(e.currentTarget,buildSubjectMenu(s));};
-    const toggle=()=>{ $('activeSubject').value=s.id; renderClock(); if(expandedSubj.has(s.id))expandedSubj.delete(s.id);else expandedSubj.add(s.id); renderSubjects(); };
-    item.querySelector('.subj-name').onclick=toggle;
-    item.querySelector('.subj-exp').onclick=toggle;
+    // tapping anywhere on the row (handled as a tap in _startSubjGesture) opens/closes this subject's task list
+    const toggle=()=>{ const sel=$('activeSubject');
+      if(sel.value!==s.id){ sel.value=s.id; sel.dispatchEvent(new Event('change')); }
+      renderClock();
+      if(expandedSubj.has(s.id))expandedSubj.delete(s.id);else expandedSubj.add(s.id);
+      renderSubjects(); };
+    item._toggle=toggle;
     const td=item.querySelector('.subj-todos');
     if(open){
-      const listed=applyFilter(all.slice().sort(taskSort),subjTaskFilter);
+      // Subjects stays a glance: preview the first few active tasks + quick-add; full management (Filter·Sort·Group) lives in the Tasks tab.
+      const SUBJ_PREVIEW=5, gkey='subj|'+s.id;
+      const activeAll=all.filter(t=>!isTaskDone(t)).sort(taskSort), doneAll=all.filter(isTaskDone).sort(taskSort);
+      const showActive=subjTaskFilter!=='done', showDone=subjTaskFilter!=='active';
+      const shownActive=showActive?activeAll.slice(0,SUBJ_PREVIEW):[];
+      const hiddenActive=showActive?(activeAll.length-shownActive.length):0;
+      let inner=shownActive.map(t=>taskCard(t)).join('');
+      if(hiddenActive>0) inner+=`<button class="subj-viewall" data-viewall="${s.id}">View all ${activeAll.length} tasks in Tasks →</button>`;
+      if(showDone && doneAll.length){ const dopen=completedOpen.has(gkey);
+        inner+=`<button class="tk-done-head" data-cdone="${gkey}">✓ Completed · ${doneAll.length} <span class="cv">${dopen?'⌃':'⌄'}</span></button>`;
+        if(dopen) inner+=doneAll.map(t=>taskCard(t)).join(''); }
       const holder=document.createElement('div');
-      holder.innerHTML = listed.length?renderTaskList(listed,'subj|'+s.id):'<div class="empty-t" style="padding:10px 0">No tasks in this filter.</div>';
+      holder.innerHTML = inner || '<div class="empty-t" style="padding:10px 0">No tasks in this filter.</div>';
       wireTasks(holder, refreshTaskSurfaces); wireTaskGestures(holder, refreshTaskSurfaces);
+      const va=holder.querySelector('[data-viewall]'); if(va) va.onclick=e=>{ e.stopPropagation(); openSubjectInTasks(s.id); };
       td.appendChild(holder);
       const add=document.createElement('div'); add.className='add-todo';
       add.innerHTML=`<input placeholder="Add task…" maxlength="200"><button title="Quick add">Add</button><button class="adv" title="Add with date, time, repeat">⚙</button>`;
@@ -2423,7 +2480,76 @@ function renderSubjects(){
     }
     list.appendChild(item);
   });
+  syncSubjCardHeight();
 }
+/* drill-in: jump to the Tasks tab filtered to this one subject, where Filter·Sort·Group·boards handle volume */
+function openSubjectInTasks(subjectId){
+  filterSubjects=new Set([subjectId]); filterPriorities.clear(); filterBoards.clear(); filterLists.clear(); filterDates.clear(); filterMatchAll=true;
+  persistFilters(); updateFilterBadge();
+  setTaskView('all');
+  switchTab('tasks');
+}
+/* subject reorder — pointer-based drag of the whole row, mirroring the task-card gesture
+   (mouse: drag immediately; touch: long-press to arm, then drag). Single flat list, no zones. */
+let _subjGho=null, _subjLine=null;
+function _startSubjGesture(e, item, s){
+  const sy=e.clientY, sx=e.clientX, pid=e.pointerId, touch=(e.pointerType==='touch');
+  const main=item.querySelector('.subj-main'), list=item.parentElement;
+  let dragging=false, armed=!touch;
+  const lp=setTimeout(()=>{ if(dragging) return; armed=true; if(touch){ try{navigator.vibrate&&navigator.vibrate(8);}catch(_){ } item.classList.add('subj-armed'); } }, 450);
+  const rowsNow=()=>[...list.children].filter(c=>c.classList&&c.classList.contains('subj-item')&&c!==item);
+  function _begin(ev){ dragging=true; item.classList.add('subjdragging'); item.classList.remove('subj-armed');
+    const r=main.getBoundingClientRect();
+    _subjGho=main.cloneNode(true); _subjGho.classList.add('subj-ghost'); _subjGho.style.width=r.width+'px';
+    _subjGho._dx=ev.clientX-r.left; _subjGho._dy=ev.clientY-r.top; document.body.appendChild(_subjGho);
+    if(!_subjLine){ _subjLine=document.createElement('div'); _subjLine.className='subj-drop-line'; }
+    try{ main.setPointerCapture(pid); }catch(_){}
+    _move(ev);
+  }
+  function _move(ev){ if(ev.cancelable) ev.preventDefault();
+    _subjGho.style.left=(ev.clientX-_subjGho._dx)+'px'; _subjGho.style.top=(ev.clientY-_subjGho._dy)+'px';
+    const rows=rowsNow(); let before=null;
+    for(const row of rows){ const rr=row.getBoundingClientRect(); if(ev.clientY < rr.top+rr.height/2){ before=row; break; } }
+    if(before) list.insertBefore(_subjLine, before); else list.appendChild(_subjLine);
+    _subjAutoScroll(list, ev.clientY);
+  }
+  function _finish(){
+    if(!_subjLine||!_subjLine.parentNode) return;
+    // build the new order from DOM: the drop-line marks where `item` lands; the original `item` stays put, so exclude it
+    const order=[...list.children]
+      .filter(c=> c===_subjLine || (c.classList&&c.classList.contains('subj-item')&&c!==item))
+      .map(c=> c===_subjLine ? item : c);
+    const ids=order.map(c=>c.dataset.id);
+    subjects.sort((a,b)=>ids.indexOf(a.id)-ids.indexOf(b.id));
+    save(); renderSubjectSelect();
+  }
+  const onMove=ev=>{ if(ev.pointerId!==pid) return; const dx=ev.clientX-sx, dy=ev.clientY-sy;
+    if(!dragging){ if(Math.hypot(dx,dy)<=6) return; clearTimeout(lp);
+      if(!armed){ cleanup(false); return; }                 // un-armed touch move = let the list scroll
+      _begin(ev); return; }
+    _move(ev);
+  };
+  const onUp=ev=>{ if(ev.pointerId!==pid) return; clearTimeout(lp);
+    if(dragging){ _finish(); cleanup(true); return; }
+    cleanup(false);
+    if(item._toggle) item._toggle();                         // plain tap on the row → open/close this subject's tasks
+  };
+  function cleanup(didDrag){ document.removeEventListener('pointermove',onMove); document.removeEventListener('pointerup',onUp); document.removeEventListener('pointercancel',onUp);
+    try{ main.releasePointerCapture(pid); }catch(_){}
+    item.classList.remove('subjdragging','subj-armed'); _subjStopScroll();
+    if(_subjGho){ _subjGho.remove(); _subjGho=null; }
+    if(_subjLine&&_subjLine.parentNode) _subjLine.parentNode.removeChild(_subjLine);
+    if(didDrag) renderSubjects();
+  }
+  document.addEventListener('pointermove',onMove,{passive:false});
+  document.addEventListener('pointerup',onUp);
+  document.addEventListener('pointercancel',onUp);
+}
+let _subjScrTimer=null;
+function _subjAutoScroll(cont, y){ _subjStopScroll(); const r=cont.getBoundingClientRect(); const M=36;
+  let dir=0; if(y<r.top+M) dir=-1; else if(y>r.bottom-M) dir=1; if(!dir) return;
+  _subjScrTimer=setInterval(()=>{ cont.scrollTop+=dir*10; }, 16); }
+function _subjStopScroll(){ if(_subjScrTimer){ clearInterval(_subjScrTimer); _subjScrTimer=null; } }
 /* task modal — create / edit a unified task (used by Subjects ⚙ and Tasks ⚙) */
 let _tdCtx=null, _tdDraft=null;
 /* refresh the modal's When button, horizon-aware Repeat options & day-only Time row from the draft */
@@ -2474,7 +2600,7 @@ function quickStopwatch(subjectId){
   if(active){ freeze(); commit(true); }
   else if(workedMs>0 && !canResume){ commit(true); }
   oneShot=false;
-  if(!canResume){ currentTask=null; $('taskChip').classList.remove('show'); } // subject stopwatch isn't task-bound
+  if(!canResume){ currentTask=null; updateTimerTaskUI(); } // subject stopwatch isn't task-bound
   $('activeSubject').value=subjectId; mode='stopwatch';
   document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='stopwatch'));
   $('phases').style.display='none'; $('dots').style.display='none'; $('timeAdjust').style.display='none'; $('skipBtn').style.display='none';
@@ -3138,7 +3264,7 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
     <div class="tk-main">
       <button class="tk-check pri${pri} ${done?'on':''}" data-act="check" title="Mark done"${pri?` style="--prc:${PRI_COL[pri]}"`:''}>${CHK}</button>
       <span class="tk-name" title="Open task">${esc(t.name)}</span>
-      <button class="tk-ic tk-menu" data-act="menu" title="More options">⋯</button>
+      <button class="tk-ic tk-menu" data-act="menu" title="More options">⋮</button>
     </div>
     ${t.desc?`<div class="tk-note" data-act="open" title="${esc(t.desc)}">${esc(t.desc.split('\n')[0].slice(0,140))}</div>`:''}
     ${tags?`<div class="tk-tags">${tags}</div>`:''}
@@ -3544,7 +3670,7 @@ function timelineHTML(srcPool){ const src=srcPool||tasks;
   const allowResize=tlZoom==='day';
   const bar=t=>{ const pl=place(t); if(!pl)return ''; const [cs,ce]=pl,w=ce-cs+1;
     const subj=subjById(t.subjectId); const col=subj?subj.color:'var(--violet)'; const d=isTaskDone(t);
-    return `<div class="g-row"><div class="lbl"><span class="ln" title="${esc(t.name)}">${esc(t.name)}</span><button class="g-menu" data-menu="${t.id}" title="More">⋯</button></div>
+    return `<div class="g-row"><div class="lbl"><span class="ln" title="${esc(t.name)}">${esc(t.name)}</span><button class="g-menu" data-menu="${t.id}" title="More">⋮</button></div>
       <div class="g-track"><div class="g-grid">${grid}</div>
         <div class="g-bar ${d?'done':''}" data-id="${t.id}" style="left:calc(${cs}*var(--colw));width:calc(${w}*var(--colw) - 4px);background:${col}">${esc(t.name)}${allowResize?'<span class="rz" data-act="rz"></span>':''}</div>
       </div></div>`; };
@@ -3616,6 +3742,17 @@ function layoutDayLanes(items){ items.sort((a,b)=>a.s-b.s||a.e-b.e);
   let cluster=[],cEnd=-1; const flush=()=>{ if(!cluster.length)return; const cols=Math.max(...cluster.map(i=>items[i].lane))+1; cluster.forEach(i=>items[i].cols=cols); cluster=[]; };
   items.forEach((it,idx)=>{ if(cluster.length&&it.s>=cEnd){ flush(); cEnd=-1; } cluster.push(idx); cEnd=Math.max(cEnd,it.e); }); flush();
 }
+function recDurLabel(min){ min=Math.round(min); if(min<60)return min+'m'; const h=Math.floor(min/60),m=min%60; return h+'h'+(m?' '+m+'m':''); }
+/* the actual logged Pomodoro / stopwatch spans that fall on `dayKey`, as {sMin,eMin,col,label,dur} for the time grids */
+function focusRecsForDay(dayKey){ if(!settings.showFocusRecords)return [];
+  const dayStart=new Date(dayKey+'T00:00:00').getTime(), dayEnd=dayStart+86400000;
+  return sessions.filter(s=>s.end>dayStart&&s.start<dayEnd).map(s=>{
+    const a=Math.max(s.start,dayStart), b=Math.min(s.end,dayEnd);
+    const subj=subjById(s.subjectId), col=subj?subj.color:'var(--violet)';
+    const t=s.taskId?tasks.find(x=>x.id===s.taskId):null;
+    const dur=Math.round((b-a)/60000);
+    return { sMin:(a-dayStart)/60000, eMin:(b-dayStart)/60000, col, label:(t?t.name:(subj?subj.name:'Focus')), dur };
+  }).filter(r=>r.eMin>r.sMin); }
 function tlHoursHTML(day){
   const today=todayKey(); day=day||tlDay||today;
   const pool=topLevel(applyFilter(tasksInHorizon('day',day),taskFilter).sort(taskSort));
@@ -3633,11 +3770,13 @@ function tlHoursHTML(day){
     const top=it.s/60*TLH_H, hgt=Math.max(it.dur/60*TLH_H,16), cols=it.cols||1, lane=it.lane||0;
     const tl=to12(t.start)+(t.dur>0?'–'+to12(addMinutes(t.start,t.dur)):'');
     return `<div class="tlh-block ${dn?'done':''}" data-id="${t.id}" style="top:${top}px;height:${hgt}px;left:calc(${lane}/${cols}*100% + 2px);width:calc(100%/${cols} - 4px);background:${col}">
-        <button class="bm" data-hact="menu" title="More">⋯</button>
+        <button class="bm" data-hact="menu" title="More">⋮</button>
         <span class="bn">${esc(t.name)}</span><span class="bt">${tl}</span><span class="rz"></span></div>`; }).join('');
+  const recs=focusRecsForDay(day).map(r=>{ const top=r.sMin/60*TLH_H, hgt=Math.max((r.eMin-r.sMin)/60*TLH_H,3);
+    return `<div class="tlh-rec" style="top:${top}px;height:${hgt}px;--rc:${r.col}" title="${esc(r.label)} · ${recDurLabel(r.dur)} logged">${hgt>14?`<span class="rl">${esc(r.label)} · ${recDurLabel(r.dur)}</span>`:''}</div>`; }).join('');
   let nowLine=''; if(day===today){ const now=new Date(), nm=now.getHours()*60+now.getMinutes(); nowLine=`<div class="tlh-now" style="top:${nm/60*TLH_H}px"></div>`; }
   return `<div class="tlh-allday"><span class="lbl">All-day</span>${adChips}<button class="tlh-ad-add" title="Add an all-day task">＋</button></div>
-    <div class="tlh-wrap" id="tlhWrap"><div class="tlh-canvas" style="--hourh:${TLH_H}px;height:${24*TLH_H}px">${rows}${blocks}${nowLine}</div></div>
+    <div class="tlh-wrap" id="tlhWrap"><div class="tlh-canvas" style="--hourh:${TLH_H}px;height:${24*TLH_H}px">${rows}${recs}${blocks}${nowLine}</div></div>
     <div class="g-note">Drag a block to change its time · drag a block up to All-day to clear it · drag the bottom edge to resize · click an empty slot to add · ⋯ to edit.</div>`;
 }
 function openHourAdd(canvas,day,mins){ if(canvas.querySelector('.tlh-newinp'))return;
@@ -3845,7 +3984,7 @@ function calChip(t){ const done=isTaskDone(t); const subj=subjById(t.subjectId);
   return `<div class="cv2-chip ${done?'done':''}" data-id="${t.id}" draggable="true">
     <button class="cv2-cb ${done?'on':''}" data-cact="check" title="Mark done" style="border-color:${done?'transparent':col}">${done?CHK:''}</button>
     <span class="cn" data-cact="menu" title="${esc(t.name)}">${esc(t.name)}</span>
-    <button class="cv2-cm" data-cact="menu" title="More">⋯</button></div>`; }
+    <button class="cv2-cm" data-cact="menu" title="More">⋮</button></div>`; }
 /* ====================================================================
    CALENDAR — one view, five sub-views (Day / Week / Month / Quarter /
    Year). Day reuses the hours grid; Week is a draggable 7-day time grid;
@@ -3867,7 +4006,7 @@ function calShift(v){ const today=todayKey(); if(v==='now'){ calAnchor=today; re
 function calHeadHTML(){ const sw=[['day','Day'],['week','Week'],['month','Month'],['quarter','Quarter'],['year','Year']]
     .map(([v,l])=>`<button data-calview="${v}" class="${calSub===v?'on':''}">${l}</button>`).join('');
   return `<div class="cal-bar"><div class="view-filter cal-sw">${sw}</div>
-    <div class="cal-pager"><button class="cal-nav2" data-calnav="-1" title="Previous">‹</button><span class="cal-lbl">${esc(calLabel())}</span><button class="cal-nav2" data-calnav="now">Today</button><button class="cal-nav2" data-calnav="1" title="Next">›</button></div></div>`; }
+    <div class="cal-pager"><button class="cal-nav2" data-calnav="-1" title="Previous">‹</button><span class="cal-lbl">${esc(calLabel())}</span><button class="cal-nav2" data-calnav="now">Today</button><button class="cal-nav2" data-calnav="1" title="Next">›</button><button class="cal-nav2 cal-optbtn" id="calViewBtn" title="Calendar view options"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div></div>`; }
 function calendarHTML(){ if(!calAnchor)calAnchor=todayKey(); let inner;
   if(calSub==='day') inner=tlHoursHTML(calAnchor);
   else if(calSub==='week') inner=weekGridHTML(weekStartMon(calAnchor));
@@ -3878,6 +4017,7 @@ function calendarHTML(){ if(!calAnchor)calAnchor=todayKey(); let inner;
 function wireCalendar(scope){
   scope.querySelectorAll('[data-calview]').forEach(b=>b.onclick=()=>{ calSub=b.dataset.calview; settings.calView=calSub; if(calSub==='week')wkScroll=null; if(calSub==='day')tlhScroll=null; save(); renderTasks(); });
   scope.querySelectorAll('[data-calnav]').forEach(b=>b.onclick=()=>{ calShift(b.dataset.calnav); if(calSub==='day')tlhScroll=null; if(calSub==='week')wkScroll=null; renderTasks(); });
+  const ob=scope.querySelector('#calViewBtn'); if(ob)ob.onclick=e=>{ e.stopPropagation(); $('calViewMenu').classList.contains('open')?closeCalView():openCalView(); };
   if(calSub==='day'){ wireTlHours(scope,calAnchor); return; }
   if(calSub==='week'){ wireWeekGrid(scope); return; }
   if(calSub==='month'){ wireMonth(scope); return; }
@@ -3995,13 +4135,15 @@ function weekGridHTML(wk){ const today=todayKey(); const DOW=['Sun','Mon','Tue',
     blocks+=items.map(it=>{ const t=it.t,subj=subjById(t.subjectId),col=subj?subj.color:'var(--violet)',dn=isTaskDone(t);
       const top=it.s/60*TLH_H,hgt=Math.max(it.dur/60*TLH_H,14),cols=it.cols||1,lane=it.lane||0;
       const tl=to12(t.start)+(t.dur>0?'–'+to12(addMinutes(t.start,t.dur)):'');
-      return `<div class="wk-block ${dn?'done':''}" data-id="${t.id}" style="top:${top}px;height:${hgt}px;left:calc(var(--gut) + (${i} + ${lane}/${cols})*var(--colw) + 1px);width:calc(var(--colw)/${cols} - 2px);background:${col}"><button class="bm" data-wact="menu">⋯</button><span class="bn">${esc(t.name)}</span><span class="bt">${tl}</span><span class="rz"></span></div>`; }).join('');
+      return `<div class="wk-block ${dn?'done':''}" data-id="${t.id}" style="top:${top}px;height:${hgt}px;left:calc(var(--gut) + (${i} + ${lane}/${cols})*var(--colw) + 1px);width:calc(var(--colw)/${cols} - 2px);background:${col}"><button class="bm" data-wact="menu">⋮</button><span class="bn">${esc(t.name)}</span><span class="bt">${tl}</span><span class="rz"></span></div>`; }).join('');
   });
+  let recs=''; days.forEach((k,i)=>{ recs+=focusRecsForDay(k).map(r=>{ const top=r.sMin/60*TLH_H, hgt=Math.max((r.eMin-r.sMin)/60*TLH_H,3);
+    return `<div class="wk-rec" style="top:${top}px;height:${hgt}px;left:calc(var(--gut) + ${i}*var(--colw) + 1px);width:calc(var(--colw) - 2px);--rc:${r.col}" title="${esc(r.label)} · ${recDurLabel(r.dur)} logged">${hgt>12?`<span class="rl">${recDurLabel(r.dur)}</span>`:''}</div>`; }).join(''); });
   let nowLine=''; const ti=days.indexOf(today); if(ti>=0){ const now=new Date(),nm=now.getHours()*60+now.getMinutes(); nowLine=`<div class="wk-now" style="top:${nm/60*TLH_H}px;left:calc(var(--gut) + ${ti}*var(--colw));width:var(--colw)"></div>`; }
   return `<div class="wk-wrap2">
      <div class="wk-headrow"><div class="wk-corner"></div>${head}</div>
      <div class="wk-adrow"><div class="wk-adlbl">All-day</div>${adcells}</div>
-     <div class="wk-scroll" id="wkScroll"><div class="wk-canvas" style="--hourh:${TLH_H}px;height:${24*TLH_H}px">${lines}${colbg}${blocks}${nowLine}</div></div>
+     <div class="wk-scroll" id="wkScroll"><div class="wk-canvas" style="--hourh:${TLH_H}px;height:${24*TLH_H}px">${lines}${colbg}${recs}${blocks}${nowLine}</div></div>
      <div class="g-note">Drag a block across days &amp; times · drag its bottom edge to resize · click an empty slot to add · ⋯ to edit.</div></div>`; }
 function openWeekAdd(canvas,day,di,mins){ if(canvas.querySelector('.wk-newinp'))return;
   const inp=document.createElement('input'); inp.className='wk-newinp'; inp.placeholder='New task…'; inp.maxLength=200;
@@ -4277,7 +4419,7 @@ function renderCountdownTab(){ const body=$('cdBody'); if(!body)return;
     const big = d===0?'Today':n;
     const sub = d===0?('On '+cdDateLabel(c.date)) : (past?'Days since ':'Days until ')+cdDateLabel(c.date);
     return `<div class="cd-card" data-id="${c.id}">
-      <button class="cd-more" data-cdmore="${c.id}" title="More">⋯</button>
+      <button class="cd-more" data-cdmore="${c.id}" title="More">⋮</button>
       <div class="cd-emoji">${esc(c.emoji||'🎯')}</div>
       <div class="cd-name">${esc(c.name||'Untitled')}</div>
       <div class="cd-num ${d===0?'today':past?'past':''}">${esc(String(big))}</div>
@@ -4396,7 +4538,7 @@ function habitListHTML(live){ const today=todayKey(); const start=addDays(today,
       <div class="hb-emoji">${esc(h.emoji||'✅')}</div>
       <div class="hb-meta"><div class="hb-name">${esc(h.name)}</div><div class="hb-sub">${esc(habitSubLabel(h))} · 🔥 ${habitStreak(h)}${prog}</div></div>
       <div class="hb-strip">${strip}</div>
-      <button class="hb-more" data-hbmore="${h.id}" title="More">⋯</button>
+      <button class="hb-more" data-hbmore="${h.id}" title="More">⋮</button>
     </div>`; };
   // group rows into collapsible sections (Morning · Afternoon · … · Others), each with a remaining-today count
   const collapsed=new Set(settings.hbCollapsed||[]);
@@ -4424,7 +4566,7 @@ function habitMonthCard(h,cur){ const today=todayKey(); const [y,mo]=cur.split('
   let cells='';
   for(let i=0;i<42;i++){ const k=addDays(start,i); const inMo=(+k.slice(5,7))===mo; const due=habitDueOn(h,k),done=habitDoneOn(h,k),miss=inMo&&due&&!done&&k<today;
     cells+=`<button class="hb-cd ${inMo?'':'out'} ${done?'done':''} ${miss?'miss':''} ${k===today?'today':''}" data-hb-day="${h.id}|${k}" ${(!inMo||k>today||!due)?'disabled':''} style="--hc:${h.color||'var(--accent)'}">${inMo?+k.slice(8,10):''}</button>`; }
-  return `<div class="hb-card"><div class="hb-card-h"><span class="hb-emoji">${esc(h.emoji||'✅')}</span><span class="hb-name">${esc(h.name)}</span><span class="hb-cnt">🔥 ${habitStreak(h)} · ${monthDoneCount(h,cur)} done</span><button class="hb-more" data-hbmore="${h.id}">⋯</button></div>
+  return `<div class="hb-card"><div class="hb-card-h"><span class="hb-emoji">${esc(h.emoji||'✅')}</span><span class="hb-name">${esc(h.name)}</span><span class="hb-cnt">🔥 ${habitStreak(h)} · ${monthDoneCount(h,cur)} done</span><button class="hb-more" data-hbmore="${h.id}">⋮</button></div>
     <div class="hb-cddow">${dow}</div><div class="hb-cdgrid">${cells}</div></div>`; }
 /* ---- the detail panel shown alongside the list when a habit is clicked: stats + that habit's full month calendar (TickTick-style) ---- */
 function habitDetailHTML(h){ if(!h) return `<div class="hb-detail hb-detail-empty">Pick a habit to see its calendar.</div>`;
@@ -4438,7 +4580,7 @@ function habitDetailHTML(h){ if(!h) return `<div class="hb-detail hb-detail-empt
   for(let i=0;i<42;i++){ const k=addDays(start,i); const inMo=(+k.slice(5,7))===mo; const due=habitDueOn(h,k),done=habitDoneOn(h,k),miss=inMo&&due&&!done&&k<today;
     cells+=`<button class="hb-cd ${inMo?'':'out'} ${done?'done':''} ${miss?'miss':''} ${k===today?'today':''}" data-hb-day="${h.id}|${k}" ${(!inMo||k>today||!due)?'disabled':''} style="--hc:${h.color||'var(--accent)'}">${inMo?+k.slice(8,10):''}</button>`; }
   return `<div class="hb-detail">
-    <div class="hb-detail-h"><span class="hb-emoji">${esc(h.emoji||'✅')}</span><div class="hb-detail-ti"><span class="hb-name">${esc(h.name)}</span><span class="hb-detail-sub">${esc(habitSubLabel(h))}</span></div><button class="hb-more" data-hbmore="${h.id}">⋯</button></div>
+    <div class="hb-detail-h"><span class="hb-emoji">${esc(h.emoji||'✅')}</span><div class="hb-detail-ti"><span class="hb-name">${esc(h.name)}</span><span class="hb-detail-sub">${esc(habitSubLabel(h))}</span></div><button class="hb-more" data-hbmore="${h.id}">⋮</button></div>
     <div class="hb-stats">${stats}</div>
     <div class="hb-detail-mh"><button data-hbm="-1" title="Earlier">‹</button><span>${MONTHS[mo-1]} ${y}</span><button data-hbm="1" title="Later">›</button></div>
     <div class="hb-cddow big">${dow}</div><div class="hb-cdgrid big">${cells}</div>
@@ -4621,7 +4763,7 @@ document.querySelectorAll('#taskViews [data-v]').forEach(b=>b.onclick=()=>setTas
 /* start a pomodoro focus block bound to a task */
 function startTaskPomodoro(t,mins){ if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
   if(t.subjectId) $('activeSubject').value=t.subjectId;
-  currentTask=t.id; $('taskChipName').textContent=t.name; $('taskChip').classList.add('show'); updateTimerTaskUI();
+  currentTask=t.id; updateTimerTaskUI();
   mode='pomo'; document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='pomo'));
   oneShot=!!mins; roundCount=0;
   $('phases').style.display=oneShot?'none':'flex'; $('dots').style.display=oneShot?'none':'flex'; $('timeAdjust').style.display='flex'; $('skipBtn').style.display='';
@@ -4640,7 +4782,7 @@ function startTaskTimer(t){
   reflectTimer(); }
 function startTaskStopwatch(t){ if(active){freeze();commit(true);} else if(workedMs>0){commit(true);}
   if(t.subjectId) $('activeSubject').value=t.subjectId;
-  currentTask=t.id; $('taskChipName').textContent=t.name; $('taskChip').classList.add('show'); updateTimerTaskUI();
+  currentTask=t.id; updateTimerTaskUI();
   oneShot=false; mode='stopwatch';
   document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='stopwatch'));
   $('phases').style.display='none'; $('dots').style.display='none'; $('timeAdjust').style.display='none'; $('skipBtn').style.display='none';
@@ -4652,14 +4794,18 @@ function startSubjectTimer(id){
   if(mode==='pomo') startSubjectPomodoro(id); else quickStopwatch(id);
   reflectTimer(); }
 function startSubjectPomodoro(id,mins){ if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
-  currentTask=null; $('taskChip').classList.remove('show'); updateTimerTaskUI();
+  currentTask=null; updateTimerTaskUI();
   $('activeSubject').value=id||''; renderClock();
   mode='pomo'; document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='pomo'));
   oneShot=!!mins; roundCount=0;
   $('phases').style.display=oneShot?'none':'flex'; $('dots').style.display=oneShot?'none':'flex'; $('timeAdjust').style.display='flex'; $('skipBtn').style.display='';
   phase='focus'; setPhaseButtons(); remaining=(oneShot?mins:phaseMin())*60; phaseStart=null; startTimer(); renderSubjects(); }
-$('taskChipClear').onclick=()=>{ currentTask=null; $('taskChip').classList.remove('show'); updateTimerTaskUI(); };
-$('attachTaskBtn').onclick=()=>attachTaskMenu($('attachTaskBtn'));
+/* Task dropdown (under Subject): pick an open task of the chosen subject to bind the timer, or "— None —" to run bare */
+$('activeTask').onchange=()=>{ const id=$('activeTask').value;
+  currentTask = id ? ((tasks.find(x=>x.id===id)||{}).id || null) : null;
+  updateTimerTaskUI(); reflectTimer&&reflectTimer(); };
+/* changing the subject re-scopes the task list and drops any attached task */
+$('activeSubject').addEventListener('change',()=>{ currentTask=null; renderClock(); renderTaskSelect(); reflectTimer&&reflectTimer(); });
 
 /* PAUSE modal: save / discard / continue */
 $('pauseContinue').onclick=()=>{ $('ovPause').classList.remove('show'); resumeTimer(); };
@@ -4686,6 +4832,7 @@ function switchTab(name){
   if(name==='countdown')renderCountdownTab();
   if(name==='habits')renderHabitsTab();
   if(name==='log')renderCalendar();
+  if(name==='subjects')syncSubjCardHeight();
   // re-opening Tasks in single-column mode should land back on today / the current period, not wherever a stray scroll left us
   if(name==='tasks'){ if(colsVisible()===1)colsScrollGoCur=true; renderTasks(); }
   applyTaskWidth();
@@ -4936,6 +5083,18 @@ $('tvCalToggle').onclick=()=>{ settings.showCal=!settings.showCal;
   save(); syncTvViewMenu(); renderTasks(); };
 document.addEventListener('mousedown',e=>{ const m=$('tvViewMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#tvViewBtn')||m.contains(e.target))return; closeTvView(); });
 window.addEventListener('resize',closeTvView);
+
+/* ---------- Calendar view-options popover (the ⋯ on the Calendar page) ---------- */
+function syncCalViewMenu(){ const tg=$('calRecToggle'); if(tg)tg.classList.toggle('on',!!settings.showFocusRecords);
+  const sub=$('calRecSub'); if(sub)sub.textContent=(calSub==='day'||calSub==='week')?'Overlay your logged Pomodoro / stopwatch time':'Shown in the Day & Week views'; }
+function openCalView(){ const m=$('calViewMenu'),b=$('calViewBtn'); if(!m||!b)return; closeTaskFilter&&closeTaskFilter(); syncCalViewMenu(); b.classList.add('open');
+  m.style.visibility='hidden'; m.classList.add('open'); const r=b.getBoundingClientRect(), w=m.offsetWidth||248;
+  m.style.left=Math.max(8,Math.min(r.right-w, innerWidth-8-w))+'px'; m.style.top=(r.bottom+8)+'px'; m.style.visibility=''; }
+function closeCalView(){ const m=$('calViewMenu'); if(m)m.classList.remove('open'); const b=$('calViewBtn'); if(b)b.classList.remove('open'); }
+$('calRecToggle').onclick=()=>{ settings.showFocusRecords=!settings.showFocusRecords; save(); syncCalViewMenu();
+  const cb=$('calBody'); if(cb){ cb.innerHTML=calendarHTML(); wireCalendar(cb); } };
+document.addEventListener('mousedown',e=>{ const m=$('calViewMenu'); if(!m||!m.classList.contains('open'))return; if(e.target.closest('#calViewBtn')||m.contains(e.target))return; closeCalView(); });
+window.addEventListener('resize',closeCalView);
 
 /* ---------- JSON backup: export / import ---------- */
 $('exportJson').onclick=()=>{ const data=JSON.stringify({...snapshot(),_app:'focus-den',_version:FD_VERSION},null,2);
