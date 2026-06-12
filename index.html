@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Focus Den — Study Tracker</title>
 <!-- Favicon: the amber "F" logo (italic serif on a rounded amber square), inline SVG so it stays single-file -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjMwIiBoZWlnaHQ9IjMwIiByeD0iOC41IiBmaWxsPSIjZjU5MTJlIi8+PHRleHQgeD0iMTYiIHk9IjIzLjUiIGZvbnQtZmFtaWx5PSJHZW9yZ2lhLCdUaW1lcyBOZXcgUm9tYW4nLHNlcmlmIiBmb250LXN0eWxlPSJpdGFsaWMiIGZvbnQtd2VpZ2h0PSI3MDAiIGZvbnQtc2l6ZT0iMjIiIGZpbGw9IiMzYTE4MTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkY8L3RleHQ+PC9zdmc+Cg==">
@@ -63,7 +63,9 @@
   ::-webkit-scrollbar-thumb:hover{background:linear-gradient(#ffc98a,#ff86b0);background-clip:padding-box}
   ::-webkit-scrollbar-corner{background:transparent}
   html,body{height:100%}
-  body{font-family:'Outfit',sans-serif;color:var(--ink);min-height:100vh;overflow-x:hidden;position:relative;background:var(--body-bg);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;transition:background .4s ease,color .25s ease}
+  /* lock iOS from auto-inflating type in landscape, and keep tap highlights from flashing on the PWA */
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Outfit',sans-serif;color:var(--ink);min-height:100vh;overflow-x:hidden;position:relative;background:var(--body-bg);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;-webkit-overflow-scrolling:touch;transition:background .4s ease,color .25s ease}
   .bg{position:fixed;inset:0;z-index:-4;background:var(--bg-grad)}
   .bgimg{position:fixed;inset:0;z-index:-3;background-size:cover;background-position:center;display:none}
   .bgscrim{position:fixed;inset:0;z-index:-1;background:transparent;pointer-events:none}
@@ -75,7 +77,8 @@
   .grain{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:var(--grain-op);
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 
-  .wrap{max-width:1180px;margin:0 auto;padding:26px clamp(16px,3vw,34px) 44px;
+  .wrap{max-width:1180px;margin:0 auto;
+    padding:calc(26px + env(safe-area-inset-top)) clamp(16px,3vw,34px) calc(44px + env(safe-area-inset-bottom)) clamp(16px,3vw,34px);
     display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:26px;align-items:start}
   .wrap>section{min-width:0}
   @media(max-width:880px){.wrap{grid-template-columns:minmax(0,1fr)}}
@@ -151,9 +154,14 @@
   /* ---- TickTick-style vertical nav rail ---- */
   .shell{display:flex;align-items:flex-start;min-height:100vh}
   .shell>.wrap{flex:1;min-width:0}
-  .rail{position:sticky;top:0;align-self:stretch;flex:none;width:60px;min-height:100vh;box-sizing:border-box;
-    display:flex;flex-direction:column;align-items:center;gap:5px;padding:14px 0 16px;
+  /* viewport-tall, not page-tall: align-self:flex-start keeps it from stretching to the full
+     scroll height so position:sticky actually engages and the nav never scrolls off-screen.
+     overflow-y:auto lets the few tabs scroll internally on very short screens. */
+  .rail{position:sticky;top:0;align-self:flex-start;flex:none;width:60px;height:100vh;height:100dvh;box-sizing:border-box;
+    display:flex;flex-direction:column;align-items:center;gap:5px;
+    padding:calc(14px + env(safe-area-inset-top)) 0 calc(16px + env(safe-area-inset-bottom));overflow-y:auto;scrollbar-width:none;
     background:var(--card-bg);border-right:1px solid var(--stroke-soft);z-index:30}
+  .rail::-webkit-scrollbar{display:none}
   .rail-logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;margin-bottom:8px;flex:none;
     background:var(--amber);color:#3a1810;font-family:'Fraunces',serif;font-style:italic;font-weight:600;font-size:19.8px;box-shadow:0 0 14px var(--amber)}
   .railtab{position:relative;width:44px;height:44px;border-radius:12px;flex:none;display:grid;place-items:center;
