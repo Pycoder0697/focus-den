@@ -2867,13 +2867,21 @@ function renderTimeline(){
   $('tlDate').textContent=new Date(selectedDay+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+(dayoff[selectedDay]?' · Day Off ✈':'');
   tl.innerHTML='';
   if(!items.length && !distr.length){tl.innerHTML='<div class="empty">No study sessions logged on this day.</div>';return;}
-  items.forEach(s=>{const tk=s.taskId?tasks.find(x=>x.id===s.taskId):null;
-    const sj=subjById(s.subjectId)||(tk&&subjById(tk.subjectId))||{name:'(no subject)',color:'#888'};
+  // a multi-subject focus block logs one session row per subject (same start/end/taskId, share=1/N);
+  // merge those back into a single timeline row that lists every subject and the full duration.
+  const groups=[], gmap=new Map();
+  items.forEach(s=>{ const key=s.start+'|'+s.end+'|'+(s.taskId||'');
+    let g=gmap.get(key); if(!g){ g={start:s.start,end:s.end,taskId:s.taskId,rows:[]}; gmap.set(key,g); groups.push(g); } g.rows.push(s); });
+  groups.forEach(g=>{ const tk=g.taskId?tasks.find(x=>x.id===g.taskId):null;
+    const subs=g.rows.map(s=>subjById(s.subjectId)).filter(Boolean);
+    const list=subs.length?subs:[(tk&&subjById(tk.subjectId))||{name:'(no subject)',color:'#888'}];
+    const total=g.rows.reduce((a,s)=>a+sdur(s),0);
+    const names=list.map(sj=>`<span style="color:${sj.color}">${esc(sj.name)}</span>`).join('<span style="color:var(--faint)"> · </span>');
     const row=document.createElement('div');row.className='tl-item';
-    row.innerHTML=`<div class="tl-time">${istTime(s.start)}</div><div class="tl-dot"><span class="d" style="background:${sj.color}"></span></div>
-      <div class="tl-body"><div class="nm"><span style="color:${sj.color}">${esc(sj.name)}</span>${tk?` · <span style="color:var(--faint);font-weight:400">${esc(tk.name)}</span>`:''}</div><div class="meta">${hms(sdur(s))} · ${istTime(s.start)} – ${istTime(s.end)}</div></div>
+    row.innerHTML=`<div class="tl-time">${istTime(g.start)}</div><div class="tl-dot"><span class="d" style="background:${list[0].color}"></span></div>
+      <div class="tl-body"><div class="nm">${names}${tk?` · <span style="color:var(--faint);font-weight:400">${esc(tk.name)}</span>`:''}</div><div class="meta">${hms(total)} · ${istTime(g.start)} – ${istTime(g.end)}</div></div>
       <button class="tl-del" title="Delete">×</button>`;
-    row.querySelector('.tl-del').onclick=()=>askConfirm('Delete this study log?',()=>{sessions=sessions.filter(x=>x.id!==s.id);save();renderCalendar();renderSubjects();refreshStats();});
+    row.querySelector('.tl-del').onclick=()=>askConfirm('Delete this study log?',()=>{const ids=new Set(g.rows.map(s=>s.id));sessions=sessions.filter(x=>!ids.has(x.id));save();renderCalendar();renderSubjects();refreshStats();});
     tl.appendChild(row);});
   if(distr.length){
     const head=document.createElement('div'); head.className='tl-subhead'; head.textContent=`🌀 Distractions (${distr.length})`; tl.appendChild(head);
