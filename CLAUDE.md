@@ -56,7 +56,7 @@ One file only: `index.html`
 - `refreshTaskSurfaces()` — re-renders both tabs if visible (call after any task mutation)
 - `applyFilter(list, mode)` — filters tasks by all/active/done
 - `taskSort(a,b)` — sorts done tasks to bottom, then by priority/due
-- `isTaskDone(t)` — respects repeat logic (daily/weekdays/weekly)
+- `isTaskDone(t)` — respects repeat logic (daily/weekdays/weekly); also returns true for **"Won't Do"** tasks (`t.wontDo`), so abandoned tasks leave the active pool everywhere. `toggleWontDo(t)` abandons/reactivates (mutually exclusive with `done`); `renderTaskList` files them in a separate collapsed **"✗ Won't Do · N"** group (key `…·wd`) below Completed, the card shows a muted ✗ (`.tk-check.wd`), and the Show-tasks filter has a **Won't Do** segment (`applyFilter` mode `wontdo`; `done` excludes won't-do). App-only (not synced to Notion).
 - `toggleTask(t)` — toggles done/doneOn respecting repeat
 - `quadrant(t)` — returns 0-3 for Eisenhower matrix
 - `duplicateTask(t)` — clones a task (fresh id, reset done/checklist), inserts right after the original
@@ -81,6 +81,8 @@ One file only: `index.html`
   "checklist": [{"id":"c...","text":"string","done":false}],
   "done": false,
   "doneOn": "",
+  "wontDo": false,
+  "wontDoOn": "",
   "repeat": "none|daily|weekdays|weekly|monthly|quarterly|yearly",
   "start": "HH:MM",
   "dur": 0,

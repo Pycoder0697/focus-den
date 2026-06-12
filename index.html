@@ -287,8 +287,12 @@
   .tk-check{width:20px;height:20px;border-radius:6px;border:2px solid var(--prc,var(--faint));cursor:pointer;flex:none;display:grid;place-items:center}
   .tk-check.on{background:var(--ok);border-color:var(--ok)}
   .tk-check svg{width:12px;height:12px;opacity:0;color:#123}.tk-check.on svg{opacity:1}
+  /* "Won't Do" — abandoned: hollow muted check showing an ✗ (never the green fill) */
+  .tk-check.wd{border-color:var(--faint);background:none}
+  .tk-check.wd svg{opacity:1;color:var(--faint)}
   .tk-name{flex:1;font-size:15.4px;min-width:0;cursor:pointer;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
   .tk.done > .tk-main > .tk-name{text-decoration:line-through;color:var(--faint)}
+  .tk.wontdo > .tk-main > .tk-name{font-style:italic}
   /* drag-to-reorder (pointer-based, works on touch) */
   .tk.tkdrag{opacity:.32}
   .tk.tk-armed{box-shadow:0 0 0 2px var(--accent);transform:scale(.99)}
@@ -300,6 +304,7 @@
   .tk-done-head{display:flex;align-items:center;gap:6px;width:100%;font-family:inherit;font-size:13.2px;color:var(--faint);
     background:none;border:none;padding:8px 4px 6px;cursor:pointer;text-align:left}
   .tk-done-head:hover{color:var(--ink)} .tk-done-head .cv{font-size:11px;opacity:.7;margin-left:auto}
+  .tk-done-head.wd{color:var(--muted)}
   .tk-note{padding:0 12px 9px 42px;margin-top:-4px;font-size:13.8px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
   .tk.done .tk-note{opacity:.6}
   .tk-tags{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 9px 42px;margin-top:-4px}
@@ -1551,6 +1556,7 @@
       <button data-f="all">All</button>
       <button data-f="active">Unchecked</button>
       <button data-f="done">Completed</button>
+      <button data-f="wontdo">Won't Do</button>
     </div>
   </div>
   <div class="pref-group">
@@ -2495,6 +2501,7 @@ let expandedSubj=new Set();
 function to12(hhmm){ if(!hhmm)return''; const [h,m]=hhmm.split(':').map(Number); const ap=h<12?'AM':'PM'; const h12=((h+11)%12)+1; return h12+':'+String(m).padStart(2,'0')+' '+ap; }
 function weekKeyOf(dk){ const d=new Date(dk+'T00:00:00'); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return dateKey(d.getTime()); } // Monday-anchored week start
 function isTaskDone(t){
+  if(t.wontDo) return true;   // "Won't Do" (abandoned) — resolved, so it leaves the active pool everywhere (filed under its own group)
   if(!t.repeat||t.repeat==='none') return !!t.done;
   if(t.repeat==='weekly')    return !!t.doneOn && weekKeyOf(t.doneOn)===weekKeyOf(todayKey());
   if(t.repeat==='monthly')   return !!t.doneOn && monthKey(t.doneOn)===monthKey(todayKey());
@@ -2504,11 +2511,17 @@ function isTaskDone(t){
   return t.doneOn===todayKey(); // daily & weekdays reset each day
 }
 function toggleTask(t){
+  if(t.wontDo){ t.wontDo=false; t.wontDoOn=''; uncheckSound(); return; }   // clicking the check on an abandoned task reactivates it
   const was=isTaskDone(t);
   if(!t.repeat||t.repeat==='none') t.done=!t.done;
   else t.doneOn = was ? '' : todayKey();
   (isTaskDone(t)?checkSound:uncheckSound)();
   // two-way push happens via the caller's save() → notionFlushChanges()
+}
+/* "Won't Do" (TickTick): abandon a task without deleting it — filed separately, mutually exclusive with done */
+function toggleWontDo(t){
+  if(t.wontDo){ t.wontDo=false; t.wontDoOn=''; uncheckSound(); }
+  else { t.wontDo=true; t.wontDoOn=todayKey(); t.done=false; t.doneOn=''; uncheckSound(); }
 }
 /* keep the Subjects card exactly as tall as the Timer card beside it (the list scrolls to fit) */
 function syncSubjCardHeight(){ const tc=document.querySelector('.timer-card'), card=document.querySelector('#tab-subjects .subj-card'); if(!tc||!card)return;
@@ -2525,7 +2538,7 @@ function renderSubjects(){
     const item=document.createElement('div'); item.className='subj-item'+(open?' expanded':''); item.style.setProperty('--c',s.color); item.dataset.id=s.id;
     const playIcon=isRun?'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'
                         :'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
-    const all=tasksForSubject(s.id); const doneN=all.filter(isTaskDone).length, totN=all.length;
+    const all=tasksForSubject(s.id); const doneN=all.filter(t=>isTaskDone(t)&&!t.wontDo).length, totN=all.filter(t=>!t.wontDo).length;
     item.innerHTML=`<div class="subj-main">
         <button class="subj-play ${isRun?'running':''}" style="background:${s.color}" title="${isRun?'Pause':'Start'} timer">${playIcon}</button>
         <span class="subj-name">${esc(s.name)}</span>
@@ -2554,8 +2567,8 @@ function renderSubjects(){
     if(open){
       // Subjects stays a glance: preview the first few active tasks + quick-add; full management (Filter·Sort·Group) lives in the Tasks tab.
       const SUBJ_PREVIEW=5, gkey='subj|'+s.id;
-      const activeAll=all.filter(t=>!isTaskDone(t)).sort(taskSort), doneAll=all.filter(isTaskDone).sort(taskSort);
-      const showActive=subjTaskFilter!=='done', showDone=subjTaskFilter!=='active';
+      const activeAll=all.filter(t=>!isTaskDone(t)).sort(taskSort), doneAll=all.filter(t=>isTaskDone(t)&&!t.wontDo).sort(taskSort), wontAll=all.filter(t=>t.wontDo).sort(taskSort);
+      const showActive=subjTaskFilter==='all'||subjTaskFilter==='active', showDone=subjTaskFilter==='all'||subjTaskFilter==='done', showWont=subjTaskFilter==='all'||subjTaskFilter==='wontdo';
       const shownActive=showActive?activeAll.slice(0,SUBJ_PREVIEW):[];
       const hiddenActive=showActive?(activeAll.length-shownActive.length):0;
       let inner=shownActive.map(t=>taskCard(t)).join('');
@@ -2563,6 +2576,9 @@ function renderSubjects(){
       if(showDone && doneAll.length){ const dopen=completedOpen.has(gkey);
         inner+=`<button class="tk-done-head" data-cdone="${gkey}">✓ Completed · ${doneAll.length} <span class="cv">${dopen?'⌃':'⌄'}</span></button>`;
         if(dopen) inner+=doneAll.map(t=>taskCard(t)).join(''); }
+      if(showWont && wontAll.length){ const wkey=gkey+'·wd', wopen=completedOpen.has(wkey);
+        inner+=`<button class="tk-done-head wd" data-cdone="${wkey}">✗ Won't Do · ${wontAll.length} <span class="cv">${wopen?'⌃':'⌄'}</span></button>`;
+        if(wopen) inner+=wontAll.map(t=>taskCard(t)).join(''); }
       const holder=document.createElement('div');
       holder.innerHTML = inner || '<div class="empty-t" style="padding:10px 0">No tasks in this filter.</div>';
       wireTasks(holder, refreshTaskSurfaces); wireTaskGestures(holder, refreshTaskSurfaces);
@@ -2967,7 +2983,7 @@ let planKeys={};                                  // currently-viewed period per
 const collapsedHorizons=new Set();                // Horizon-view sections collapsed by user
 const collapsedGoals=new Set();                   // Dashboard goal rollups collapsed by user
 function curKey(h){ if(h==='life')return ''; if(!planKeys[h])planKeys[h]=currentPeriodKey(h); return planKeys[h]; }
-function applyFilter(list,mode){ let out = (mode==='active')?list.filter(t=>!isTaskDone(t)) : (mode==='done')?list.filter(t=>isTaskDone(t)) : list;
+function applyFilter(list,mode){ let out = (mode==='active')?list.filter(t=>!isTaskDone(t)) : (mode==='done')?list.filter(t=>isTaskDone(t)&&!t.wontDo) : (mode==='wontdo')?list.filter(t=>!!t.wontDo) : list;
   if(filtersActive()) out=out.filter(passesTaskFilters); return out; }
 function addDays(key,n){ const [y,m,d]=key.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+n); return dt.toISOString().slice(0,10); }
 function daysBetween(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
@@ -3340,6 +3356,7 @@ function taskSort(a,b){ const ad=isTaskDone(a),bd=isTaskDone(b); if(ad!==bd)retu
   const ao=(typeof a.order==='number')?a.order:a.created||0, bo=(typeof b.order==='number')?b.order:b.created||0;
   if(ao!==bo)return ao-bo; return (a.created||0)-(b.created||0); }
 const CHK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 6"/></svg>';
+const XMARK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
 /* ---- subjects-as-tags: subjectIds[] is the full set; t.subjectId mirrors subjectIds[0] (primary) ---- */
 function subjectIdsOf(t){ return Array.isArray(t.subjectIds) ? t.subjectIds : (t.subjectId?[t.subjectId]:[]); }
 function primarySubjectId(t){ return subjectIdsOf(t)[0]||''; }
@@ -3378,10 +3395,10 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
     const lbl = kids.length ? `${kids.length} subgoal${kids.length>1?'s':''} · ${gp}%` : 'Subtasks';
     subs=`<div class="tk-subs"><button class="tk-subtoggle" data-act="subtoggle">${lbl} <span class="cv">${open?'⌃':'⌄'}</span></button>${inner}</div>`;
   }
-  const pri=t.priority||0;
-  return `<div class="tk ${done?'done':''} ${kids.length?'has-kids':''}" data-id="${t.id}">
+  const pri=t.priority||0; const wd=!!t.wontDo;
+  return `<div class="tk ${done?'done':''} ${wd?'wontdo':''} ${kids.length?'has-kids':''}" data-id="${t.id}">
     <div class="tk-main">
-      <button class="tk-check pri${pri} ${done?'on':''}" data-act="check" title="Mark done"${pri?` style="--prc:${PRI_COL[pri]}"`:''}>${CHK}</button>
+      <button class="tk-check pri${pri} ${done&&!wd?'on':''} ${wd?'wd':''}" data-act="check" title="${wd?"Won't do — click to reactivate":'Mark done'}"${pri?` style="--prc:${PRI_COL[pri]}"`:''}>${wd?XMARK:CHK}</button>
       <span class="tk-name" title="Open task">${esc(t.name)}</span>
       <button class="tk-ic tk-menu" data-act="menu" title="More options">⋮</button>
     </div>
@@ -3392,12 +3409,15 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
 /* render a list with completed tasks collapsed into a bottom "Completed" group (TickTick-style) */
 const completedOpen=new Set();                                   // group keys whose Completed section is expanded
 function renderTaskList(items, key){
-  const active=items.filter(t=>!isTaskDone(t)), done=items.filter(isTaskDone);
-  if(taskFilter==='done') return items.map(taskCard).join('');    // explicit "Completed" filter → flat list, no collapse
-  let html=active.map(taskCard).join('');                          // otherwise done tasks always sink into the collapsed "Completed" group below — even when nothing is active
+  if(taskFilter==='done'||taskFilter==='wontdo') return items.map(taskCard).join('');   // explicit Completed / Won't Do filter → flat list, no collapse
+  const active=items.filter(t=>!isTaskDone(t)), done=items.filter(t=>isTaskDone(t)&&!t.wontDo), wont=items.filter(t=>t.wontDo);
+  let html=active.map(taskCard).join('');                          // done & won't-do tasks always sink into their own collapsed groups below — even when nothing is active
   if(done.length){ const open=completedOpen.has(key);
     html += `<button class="tk-done-head" data-cdone="${esc(String(key))}">✓ Completed · ${done.length} <span class="cv">${open?'⌃':'⌄'}</span></button>`;
     if(open) html += done.map(taskCard).join(''); }
+  if(wont.length){ const wkey=key+'·wd', wopen=completedOpen.has(wkey);
+    html += `<button class="tk-done-head wd" data-cdone="${esc(String(wkey))}">✗ Won't Do · ${wont.length} <span class="cv">${wopen?'⌃':'⌄'}</span></button>`;
+    if(wopen) html += wont.map(taskCard).join(''); }
   return html;
 }
 /* create a child (subtask) of `parent`, inheriting its schedule so it sits in the same column */
@@ -4055,6 +4075,7 @@ function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
         {ic:'⌨',label:'Custom…',run:()=>{ const v=Math.round(+prompt('Focus length in minutes:',settings.focus||50)); if(v>0&&v<=600)startTaskPomodoro(t,v); }}
       ]})},
       {sep:true},
+      {ic:t.wontDo?'↩':'✗',label:t.wontDo?"Reactivate (un-abandon)":"Won't do",run:()=>{toggleWontDo(t);save();re();}},
       {ic:'🗑',label:'Delete',danger:true,run:()=>askConfirm('Delete this task?',()=>{notionArchivePage(t);tasks=tasks.filter(x=>x.id!==t.id);save();re();})});
   if(isNotionTask(t)){   // TickTick-style: synced tasks surface their Notion data points + a jump-to-Notion link
     const _ns=notionSources.find(s=>s.id===t.notionSourceId);
