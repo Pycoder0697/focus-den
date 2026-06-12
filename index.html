@@ -1083,6 +1083,61 @@
   .ctx-item.danger{color:var(--rose)}
   .ctx-item.danger .ci{color:var(--rose)}
 
+  /* ===== Focus picker (TickTick-style "what to focus on") ===== */
+  .focus-pick{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;cursor:pointer;
+    margin:0 auto 6px;padding:4px 12px;border-radius:10px;font-family:inherit;color:var(--muted);transition:background .15s,color .15s;max-width:90%}
+  .focus-pick:hover{background:var(--glass-2);color:var(--ink)}
+  .focus-pick .fp-top{display:flex;align-items:center;justify-content:center;gap:5px;max-width:260px}
+  .focus-pick .fp-name{font-size:15.4px;font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .focus-pick .fp-chev{font-size:14px;color:var(--faint);flex:none}
+  .focus-pick.has-target .fp-name{color:var(--ink)}
+  .fp-sub{font-size:12.1px;color:var(--faint);line-height:1.2;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fp-sub:empty{display:none}
+  .fp-sub .fp-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+
+  .fpick-pop{position:fixed;z-index:95;display:none;flex-direction:column;width:min(360px,calc(100vw - 16px));
+    max-height:min(70vh,calc(100vh - 16px));background:var(--pop-bg);border:1px solid var(--stroke);border-radius:16px;
+    padding:12px;box-shadow:var(--shadow);font-family:inherit}
+  .fpick-pop.open{display:flex}
+  .fpick-tabs{display:flex;justify-content:center;gap:4px;margin-bottom:10px}
+  .fpick-tabs button{background:none;border:none;cursor:pointer;font-family:inherit;font-size:13.8px;font-weight:600;color:var(--faint);
+    padding:5px 12px;border-radius:14px;transition:.14s}
+  .fpick-tabs button:hover{color:var(--muted)}
+  .fpick-tabs button.on{color:var(--accent);background:var(--accent-soft,var(--glass-2))}
+  .fpick-search{margin-bottom:8px}
+  .fpick-search input{width:100%;box-sizing:border-box;background:var(--field-bg);border:1px solid transparent;border-radius:10px;
+    padding:8px 11px;font-family:inherit;font-size:14px;color:var(--ink)}
+  .fpick-search input:focus{outline:none;border-color:var(--accent)}
+  .fpick-search input::placeholder{color:var(--faint)}
+  .fpick-listsel{display:flex;align-items:center;gap:5px;background:none;border:none;cursor:pointer;font-family:inherit;
+    font-size:14.4px;font-weight:600;color:var(--ink);padding:4px 4px 8px;border-radius:8px}
+  .fpick-listsel .fp-chev{font-size:12px;color:var(--faint)}
+  .fpick-body{overflow-y:auto;flex:1;min-height:40px}
+  .fpick-group{font-size:11.6px;font-weight:700;letter-spacing:.4px;color:var(--faint);text-transform:uppercase;padding:9px 4px 4px}
+  .fpick-group.over{color:var(--rose)}
+  .fpick-row{display:flex;align-items:center;gap:11px;width:100%;background:none;border:none;cursor:pointer;font-family:inherit;
+    text-align:left;padding:8px 9px;border-radius:9px;color:var(--ink);transition:background .13s}
+  .fpick-row:hover{background:var(--glass-2)}
+  .fpick-row .fr-check{width:17px;height:17px;border-radius:50%;border:2px solid var(--prc,var(--stroke));flex:none}
+  .fpick-row .fr-dot{width:11px;height:11px;border-radius:50%;flex:none}
+  .fpick-row .fr-emoji{width:18px;text-align:center;flex:none;font-size:15px}
+  .fpick-row .fr-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14.3px}
+  .fpick-row .fr-meta{margin-left:auto;flex:none;font-size:12.4px;color:var(--faint);padding-left:8px}
+  .fpick-row .fr-meta.over{color:var(--rose)}
+  .fpick-row.none{color:var(--faint)}
+  .fpick-empty{padding:18px 4px;text-align:center;color:var(--faint);font-size:13.5px}
+  .fpick-scopemenu{position:fixed;z-index:97;display:none;flex-direction:column;min-width:200px;max-width:min(300px,calc(100vw - 16px));
+    max-height:min(60vh,calc(100vh - 16px));overflow-y:auto;background:var(--pop-bg);border:1px solid var(--stroke);
+    border-radius:12px;padding:6px;box-shadow:var(--shadow)}
+  .fpick-scopemenu.open{display:flex}
+  .fpick-scopemenu .sc-item{display:flex;align-items:center;gap:9px;background:none;border:none;cursor:pointer;font-family:inherit;
+    text-align:left;font-size:14px;color:var(--ink);padding:8px 10px;border-radius:8px;width:100%}
+  .fpick-scopemenu .sc-item:hover{background:var(--glass-2)}
+  .fpick-scopemenu .sc-item.on{color:var(--accent);font-weight:600}
+  .fpick-scopemenu .sc-item.sub{padding-left:26px;font-size:13.4px;color:var(--muted)}
+  .fpick-scopemenu .sc-item .sc-dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .fpick-scopemenu .sc-head{font-size:11.4px;font-weight:700;letter-spacing:.4px;color:var(--faint);text-transform:uppercase;padding:8px 10px 3px}
+
   /* ===== shared "more" buttons on cards ===== */
   .tk-menu{font-size:16.5px;font-weight:700;letter-spacing:0;line-height:1}
   .subj-menu{background:none;border:none;color:var(--faint);cursor:pointer;font-size:18.7px;font-weight:700;letter-spacing:1px;padding:6px;line-height:1;flex:none}
@@ -1194,8 +1249,7 @@
 
   <!-- TIMER -->
   <section class="card timer-card">
-    <div class="subj-select"><label>Subject</label><select class="subj" id="activeSubject"></select></div>
-    <div class="subj-select"><label>Task</label><select class="subj" id="activeTask" title="Run the timer for a task in this subject (optional)"></select></div>
+    <select id="activeSubject" style="display:none"></select>
     <button class="distract-btn" id="distractBtn" title="Log a distraction">🌀 <span id="distractCount">0</span></button>
     <div class="modeswitch">
       <button data-m="pomo" class="active">Pomodoro</button>
@@ -1206,6 +1260,10 @@
       <button data-p="short">Short</button>
       <button data-p="long">Long</button>
     </div>
+    <button class="focus-pick" id="focusPick" type="button" title="Choose what to focus on">
+      <span class="fp-top"><span class="fp-name" id="fpName">Focus</span><span class="fp-chev">›</span></span>
+      <div class="fp-sub" id="fpSub"></div>
+    </button>
     <div class="clock" id="clock">50:00</div>
     <div class="phase-label" id="phaseLabel">Time to focus</div>
     <div class="time-adjust" id="timeAdjust">
@@ -1607,6 +1665,20 @@
 <div id="ctxSub" class="ctx-menu"></div>
 <div id="ctxSub2" class="ctx-menu"></div>
 
+<!-- FOCUS PICKER (TickTick-style "what to focus on" popover) -->
+<div id="fpickPop" class="fpick-pop">
+  <div class="fpick-tabs" id="fpickTabs">
+    <button data-ft="recent" type="button">Recent</button>
+    <button data-ft="task" type="button" class="on">Task</button>
+    <button data-ft="subject" type="button">Subject</button>
+    <button data-ft="habit" type="button">Habit</button>
+  </div>
+  <div class="fpick-search"><input id="fpickSearch" type="text" placeholder="Search" maxlength="120"></div>
+  <button class="fpick-listsel" id="fpickListSel" type="button"><span id="fpickScopeLbl">Today</span> <span class="fp-chev">⌄</span></button>
+  <div class="fpick-body" id="fpickBody"></div>
+</div>
+<div id="fpickScopeMenu" class="fpick-scopemenu"></div>
+
 <!-- "More" view menu (analytical views, kept out of the main tab bar) -->
 
 <script>
@@ -1918,7 +1990,7 @@ function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_
 /* device-local live-timer snapshot so an active session survives an iOS-Safari tab reload.
    All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
 function timerSnap(){ return { active, mode, phase, subjectId:(typeof $==='function'&&$('activeSubject')?$('activeSubject').value:''),
-  currentTask, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, savedAt:Date.now() }; }
+  currentTask, currentHabit, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, savedAt:Date.now() }; }
 function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); }
 
 /* ====================================================================
@@ -2164,7 +2236,10 @@ function freeze(){ clearInterval(tick); active=false; $('startBtn').textContent=
 function pauseTimer(){ if(!active)return; freeze(); timerPauseSound&&timerPauseSound(); $('distractBtn').classList.remove('show'); $('ovPause').classList.add('show'); }
 function commit(logIt,cap){ endSeg(cap);
   if(logIt && (mode==='stopwatch'||phase==='focus')){ const sid=activeSubjectId();
-    segs.forEach(g=>pushSpan(sid,g.start,g.end,currentTask)); } // each work segment logged separately → pauses excluded, start times truthful, midnight split
+    segs.forEach(g=>pushSpan(sid,g.start,g.end,currentTask)); // each work segment logged separately → pauses excluded, start times truthful, midnight split
+    // a habit-bound focus block counts toward today's habit check-in (guarded so it never wraps an already-done habit back to 0)
+    if(currentHabit && segs.length){ const h=habits.find(x=>x.id===currentHabit), today=todayKey();
+      if(h && !habitDoneOn(h,today)){ checkHabit(h,today); if(typeof afterHabitChange==='function')afterHabitChange(); } } }
   segs=[]; workedMs=0; running=null; save(); saveTimer(); renderSubjects(); refreshStats(); }
 function afterStop(){ $('distractBtn').classList.remove('show'); $('startBtn').textContent='Start'; muteAmbient();
   if(mode==='pomo'){ remaining=phaseMin()*60; phaseStart=null; } renderClock(); reflectTimer&&reflectTimer(); }
@@ -2204,6 +2279,7 @@ function restoreTimer(){ let snap=null; try{ snap=JSON.parse(store.get('fd_timer
   mode = snap.mode==='stopwatch'?'stopwatch':'pomo'; phase=snap.phase||'focus'; roundCount=snap.roundCount||0; oneShot=!!snap.oneShot;
   if(snap.subjectId && subjById(snap.subjectId)) $('activeSubject').value=snap.subjectId;
   if(snap.currentTask){ const t=tasks.find(x=>x.id===snap.currentTask); if(t){ currentTask=t.id; updateTimerTaskUI(); } }
+  else if(snap.currentHabit && habits.find(h=>h.id===snap.currentHabit)){ currentHabit=snap.currentHabit; updateTimerTaskUI(); }
   const open=snap.segStart||0;
   const ended = mode==='pomo' && snap.endStamp && snap.endStamp<=now;             // the phase finished while away → tickFn will catch up to the right phase
   const segEnd = ended ? snap.endStamp : now;                                     // don't credit study time past the focus end
@@ -2369,7 +2445,19 @@ function syncSubjectLock(){ const sel=$('activeSubject'); if(!sel)return;
     else if(t){ if(ul)ul.remove(); sel.value=t.subjectId; }
     sel.disabled=true; sel.classList.add('locked'); sel.title="Locked to this task's subject";
   } else { if(ul)ul.remove(); sel.disabled=false; sel.classList.remove('locked'); sel.title=''; } }
-function updateTimerTaskUI(){ syncSubjectLock(); renderTaskSelect(); }
+function updateTimerTaskUI(){ syncSubjectLock(); renderFocusHeader(); }
+/* ---------- Focus header + TickTick-style picker (task is the primary parameter; subject is a tag) ---------- */
+let currentHabit=null, fpickTab='task', fpickScope='today';
+function focusTaskById(id){ return id?tasks.find(x=>x.id===id)||null:null; }
+function renderFocusHeader(){ const nm=$('fpName'), sub=$('fpSub'), btn=$('focusPick'); if(!nm||!sub||!btn)return;
+  let name='Focus', subHTML='', has=true;
+  const t=focusTaskById(currentTask);
+  if(t){ name=t.name; const s=t.subjectId?subjById(t.subjectId):null;
+    if(s) subHTML=`<span class="fp-dot" style="background:${s.color}"></span>${esc(s.name)}`; }
+  else if(currentHabit){ const h=habits.find(x=>x.id===currentHabit); if(h){ name=(h.emoji?h.emoji+' ':'')+h.name; subHTML='Habit'; } else { currentHabit=null; has=false; } }
+  else if($('activeSubject').value){ const s=subjById($('activeSubject').value); if(s) name=s.name; else has=false; }
+  else has=false;
+  nm.textContent=name; sub.innerHTML=subHTML; btn.classList.toggle('has-target',has); }
 /* the Task dropdown under the Subject dropdown: open tasks of the chosen subject, plus a "— None —"
    so the timer can run bare. Reflects whatever currentTask is (set here or from the Tasks tab). */
 function renderTaskSelect(){ const sel=$('activeTask'); if(!sel) return;
@@ -4800,12 +4888,101 @@ function startSubjectPomodoro(id,mins){ if(active){freeze();commit(phase==='focu
   oneShot=!!mins; roundCount=0;
   $('phases').style.display=oneShot?'none':'flex'; $('dots').style.display=oneShot?'none':'flex'; $('timeAdjust').style.display='flex'; $('skipBtn').style.display='';
   phase='focus'; setPhaseButtons(); remaining=(oneShot?mins:phaseMin())*60; phaseStart=null; startTimer(); renderSubjects(); }
-/* Task dropdown (under Subject): pick an open task of the chosen subject to bind the timer, or "— None —" to run bare */
-$('activeTask').onchange=()=>{ const id=$('activeTask').value;
-  currentTask = id ? ((tasks.find(x=>x.id===id)||{}).id || null) : null;
-  updateTimerTaskUI(); reflectTimer&&reflectTimer(); };
-/* changing the subject re-scopes the task list and drops any attached task */
-$('activeSubject').addEventListener('change',()=>{ currentTask=null; renderClock(); renderTaskSelect(); reflectTimer&&reflectTimer(); });
+/* changing the (now hidden) subject binding re-renders the focus header and surfaces */
+$('activeSubject').addEventListener('change',()=>{ currentTask=null; renderClock(); renderFocusHeader(); reflectTimer&&reflectTimer(); });
+
+/* ===== Focus picker popover ===== */
+const FP_SMART=[['today','Today'],['tomorrow','Tomorrow'],['next7','Next 7 Days'],['inbox','Inbox'],['all','All Tasks']];
+function fpScopeLabel(sc){ const m=FP_SMART.find(x=>x[0]===sc); if(m)return m[1];
+  if(sc.startsWith('subj:')){ const s=subjById(sc.slice(5)); return s?s.name:'Subject'; }
+  if(sc.startsWith('board:')){ const rest=sc.slice(6), [bid,lid]=rest.split('|'); const b=boardById(bid); if(!b)return 'Board';
+    if(lid){ const l=b.lists.find(x=>x.id===lid); return b.name+(l?' · '+l.name:''); } return b.name; }
+  return 'Today'; }
+function fpPool(){ const today=todayKey(), sc=fpickScope;
+  let list;
+  if(sc==='today')        list=tasks.filter(t=> t.due && t.due<=today );                      // overdue + today
+  else if(sc==='tomorrow')list=tasks.filter(t=> t.due===addDays(today,1) );
+  else if(sc==='next7')   list=tasks.filter(t=> t.due && t.due<=addDays(today,7) );            // up to a week (incl. overdue)
+  else if(sc==='inbox')   list=tasks.filter(t=> !t.boardId );
+  else if(sc.startsWith('subj:')){ const id=sc.slice(5); list=tasks.filter(t=> t.subjectId===id ); }
+  else if(sc.startsWith('board:')){ const rest=sc.slice(6), [bid,lid]=rest.split('|');
+    list=tasks.filter(t=> t.boardId===bid && (!lid || t.listId===lid) ); }
+  else                    list=tasks.slice();                                                  // all
+  return list.filter(t=> !isTaskDone(t) ).sort(taskSort); }
+function fpDueLabel(due){ if(!due)return ''; const today=todayKey();
+  if(due===today)return 'Today'; if(due===addDays(today,1))return 'Tomorrow';
+  if(due===addDays(today,-1))return 'Yesterday'; return prettyDate(due); }
+function fpRow(t){ const today=todayKey(), over=t.due&&t.due<today, due=fpDueLabel(t.due);
+  return `<button class="fpick-row" type="button" data-ftask="${t.id}">
+    <span class="fr-check" style="--prc:${PRI_COL[t.priority||0]||'var(--stroke)'}"></span>
+    <span class="fr-name">${esc(t.name)}</span>
+    ${due?`<span class="fr-meta ${over?'over':''}">${due}</span>`:''}</button>`; }
+function fpGroupedTasks(list){ const today=todayKey();
+  const over=list.filter(t=>t.due&&t.due<today), tod=list.filter(t=>t.due===today),
+        tom=list.filter(t=>t.due===addDays(today,1)),
+        fut=list.filter(t=>t.due&&t.due>addDays(today,1)).sort((a,b)=>a.due<b.due?-1:1),
+        none=list.filter(t=>!t.due);
+  let h='';
+  if(over.length) h+=`<div class="fpick-group over">Overdue</div>`+over.map(fpRow).join('');
+  if(tod.length)  h+=`<div class="fpick-group">Today</div>`+tod.map(fpRow).join('');
+  if(tom.length)  h+=`<div class="fpick-group">Tomorrow</div>`+tom.map(fpRow).join('');
+  let lastD=''; fut.forEach(t=>{ if(t.due!==lastD){ h+=`<div class="fpick-group">${prettyDate(t.due)}</div>`; lastD=t.due; } h+=fpRow(t); });
+  if(none.length) h+=`<div class="fpick-group">No date</div>`+none.map(fpRow).join('');
+  return h; }
+function renderFocusPicker(){ const body=$('fpickBody'); if(!body)return;
+  $('fpickTabs').querySelectorAll('[data-ft]').forEach(b=>b.classList.toggle('on',b.dataset.ft===fpickTab));
+  const q=($('fpickSearch').value||'').trim().toLowerCase();
+  const ls=$('fpickListSel'); ls.style.display=(fpickTab==='task')?'':'none';
+  $('fpickScopeLbl').textContent=fpScopeLabel(fpickScope);
+  const noneRow=`<button class="fpick-row none" type="button" data-fnone="1"><span class="fr-name">— None (focus with nothing) —</span></button>`;
+  if(fpickTab==='task'){
+    let list=fpPool(); if(q) list=list.filter(t=>t.name.toLowerCase().includes(q));
+    body.innerHTML=noneRow+(list.length?fpGroupedTasks(list):`<div class="fpick-empty">No tasks here.</div>`);
+  } else if(fpickTab==='recent'){
+    const seen=new Set(), recent=[];
+    sessions.slice().sort((a,b)=>b.end-a.end).forEach(s=>{ if(s.taskId&&!seen.has(s.taskId)){ const t=focusTaskById(s.taskId); if(t){ seen.add(s.taskId); recent.push(t); } } });
+    let list=recent.slice(0,12); if(q) list=list.filter(t=>t.name.toLowerCase().includes(q));
+    body.innerHTML=noneRow+(list.length?`<div class="fpick-group">Task</div>`+list.map(fpRow).join(''):`<div class="fpick-empty">Nothing focused yet.</div>`);
+  } else if(fpickTab==='subject'){
+    let list=subjects.slice(); if(q) list=list.filter(s=>s.name.toLowerCase().includes(q));
+    body.innerHTML=noneRow+(list.length?list.map(s=>{ const all=tasksForSubject(s.id), doneN=all.filter(isTaskDone).length;
+      return `<button class="fpick-row" type="button" data-fsubj="${s.id}"><span class="fr-dot" style="background:${s.color}"></span><span class="fr-name">${esc(s.name)}</span>${all.length?`<span class="fr-meta">✓ ${doneN}/${all.length}</span>`:''}</button>`; }).join(''):`<div class="fpick-empty">No subjects.</div>`);
+  } else { // habit
+    let list=habitsForDay(todayKey()); if(q) list=list.filter(h=>h.name.toLowerCase().includes(q));
+    body.innerHTML=list.length?list.map(h=>`<button class="fpick-row" type="button" data-fhabit="${h.id}"><span class="fr-emoji">${esc(h.emoji||'✅')}</span><span class="fr-name">${esc(h.name)}</span><span class="fr-meta">🔥 ${habitStreak(h)}</span></button>`).join(''):`<div class="fpick-empty">No habits due today.</div>`;
+  }
+  body.querySelectorAll('[data-ftask]').forEach(b=>b.onclick=()=>selectFocusTask(focusTaskById(b.dataset.ftask)));
+  body.querySelectorAll('[data-fsubj]').forEach(b=>b.onclick=()=>selectFocusSubject(b.dataset.fsubj));
+  body.querySelectorAll('[data-fhabit]').forEach(b=>b.onclick=()=>selectFocusHabit(habits.find(h=>h.id===b.dataset.fhabit)));
+  body.querySelectorAll('[data-fnone]').forEach(b=>b.onclick=()=>{ clearFocus(); closeFocusPicker(); }); }
+function openFocusPicker(){ const m=$('fpickPop'),b=$('focusPick'); closeScopeMenu();
+  renderFocusPicker(); m.style.visibility='hidden'; m.classList.add('open');
+  const r=b.getBoundingClientRect(), w=m.offsetWidth||360;
+  m.style.left=Math.max(8,Math.min(r.left+r.width/2-w/2, innerWidth-8-w))+'px'; m.style.top=(r.bottom+8)+'px'; m.style.visibility='';
+  setTimeout(()=>$('fpickSearch').focus(),40); }
+function closeFocusPicker(){ $('fpickPop').classList.remove('open'); closeScopeMenu(); }
+function closeScopeMenu(){ $('fpickScopeMenu').classList.remove('open'); }
+function openScopeMenu(){ const m=$('fpickScopeMenu'),b=$('fpickListSel');
+  let h=FP_SMART.map(([v,l])=>`<button class="sc-item ${fpickScope===v?'on':''}" type="button" data-sc="${v}">${l}</button>`).join('');
+  if(boards.length){ h+=`<div class="sc-head">Lists</div>`+boards.map(bd=>`<button class="sc-item ${fpickScope==='board:'+bd.id?'on':''}" type="button" data-sc="board:${bd.id}">${esc(bd.name)}</button>`+
+    bd.lists.map(l=>`<button class="sc-item sub ${fpickScope==='board:'+bd.id+'|'+l.id?'on':''}" type="button" data-sc="board:${bd.id}|${l.id}">${esc(l.name)}</button>`).join('')).join(''); }
+  if(subjects.length){ h+=`<div class="sc-head">Subjects</div>`+subjects.map(s=>`<button class="sc-item ${fpickScope==='subj:'+s.id?'on':''}" type="button" data-sc="subj:${s.id}"><span class="sc-dot" style="background:${s.color}"></span>${esc(s.name)}</button>`).join(''); }
+  m.innerHTML=h; m.style.visibility='hidden'; m.classList.add('open');
+  const r=b.getBoundingClientRect(), w=m.offsetWidth||220;
+  m.style.left=Math.max(8,Math.min(r.left, innerWidth-8-w))+'px'; m.style.top=(r.bottom+4)+'px'; m.style.visibility='';
+  m.querySelectorAll('[data-sc]').forEach(it=>it.onclick=()=>{ fpickScope=it.dataset.sc; closeScopeMenu(); renderFocusPicker(); }); }
+/* selection handlers — pick the focus target only; the existing Start button runs the timer */
+function selectFocusTask(t){ if(!t)return; currentTask=t.id; currentHabit=null; $('activeSubject').value=t.subjectId||''; updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); closeFocusPicker(); }
+function selectFocusSubject(id){ currentTask=null; currentHabit=null; $('activeSubject').value=id||''; updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); closeFocusPicker(); }
+function selectFocusHabit(h){ if(!h)return; currentHabit=h.id; currentTask=null; $('activeSubject').value=''; updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); closeFocusPicker(); }
+function clearFocus(){ currentTask=null; currentHabit=null; $('activeSubject').value=''; updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); }
+$('focusPick').onclick=e=>{ e.stopPropagation(); $('fpickPop').classList.contains('open')?closeFocusPicker():openFocusPicker(); };
+$('fpickTabs').querySelectorAll('[data-ft]').forEach(b=>b.onclick=()=>{ fpickTab=b.dataset.ft; renderFocusPicker(); });
+$('fpickSearch').addEventListener('input',renderFocusPicker);
+$('fpickListSel').onclick=e=>{ e.stopPropagation(); $('fpickScopeMenu').classList.contains('open')?closeScopeMenu():openScopeMenu(); };
+document.addEventListener('mousedown',e=>{ const m=$('fpickPop'); if(!m||!m.classList.contains('open'))return;
+  if(e.target.closest('#focusPick')||m.contains(e.target)||e.target.closest('#fpickScopeMenu'))return; closeFocusPicker(); });
+window.addEventListener('resize',closeFocusPicker);
 
 /* PAUSE modal: save / discard / continue */
 $('pauseContinue').onclick=()=>{ $('ovPause').classList.remove('show'); resumeTimer(); };
