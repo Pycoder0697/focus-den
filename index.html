@@ -1253,6 +1253,91 @@
     /* tighter outer gutters reclaim horizontal room on a phone */
     .wrap{padding-left:clamp(10px,3vw,34px);padding-right:clamp(10px,3vw,34px)}
   }
+
+  /* ============ GAMIFICATION — rail flame, Quest page, toast ============ */
+  .rail-flame{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
+    width:40px;height:38px;border:none;background:transparent;cursor:pointer;border-radius:10px;color:var(--faint);opacity:.55;transition:.2s}
+  .rail-flame:hover{background:var(--glass-2);opacity:1}
+  .rail-flame .gc-fire{font-size:15px;line-height:1;filter:grayscale(1)}
+  .rail-flame .gc-n{font-size:11px;font-weight:800;line-height:1.1;color:var(--ink)}
+  .rail-flame.lit{opacity:1}
+  .rail-flame.lit .gc-fire{filter:none;animation:flamePulse 2.4s ease-in-out infinite}
+  .rail-flame.lit .gc-n{color:var(--amber)}
+  .rail-flame.lit.pending .gc-fire{filter:grayscale(.4) brightness(.9)}
+  @keyframes flamePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
+
+  #tab-quest #questBody{display:flex;flex-direction:column;gap:14px;padding-bottom:30px}
+  .q-hero{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px;align-items:center;padding:20px}
+  .q-rankcol,.q-goalcol,.q-streakcol{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px}
+  .q-ring{width:128px;height:128px}
+  .qr-track{fill:none;stroke:var(--glass-2);stroke-width:9}
+  .qr-prog{fill:none;stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .6s ease}
+  .q-ring.rank .qr-prog{stroke:var(--amber)}
+  .q-ring.goal .qr-prog{stroke:var(--accent,#5ec8ff)}
+  .qr-main{fill:var(--ink);font-size:30px;font-weight:800;text-anchor:middle;dominant-baseline:middle}
+  .q-ring.rank .qr-main{font-size:42px}
+  .qr-sub{fill:var(--faint);font-size:12px;font-weight:600;text-anchor:middle}
+  .q-rankname{font-weight:800;font-size:15px}
+  .q-rankxp{font-size:11.5px;color:var(--faint)}
+  .q-goallbl{font-size:12px;color:var(--faint);font-weight:600}
+  .q-flame{font-size:34px;filter:grayscale(1);line-height:1}
+  .q-flame.lit{filter:none;animation:flamePulse 2.6s ease-in-out infinite}
+  .q-streaknum{font-size:30px;font-weight:800;color:var(--amber);line-height:1}
+  .q-streaklbl{font-size:12px;color:var(--faint);font-weight:600}
+  .q-freeze{margin-top:6px;font-size:11.5px;color:var(--faint);background:var(--glass-2);padding:3px 9px;border-radius:20px}
+
+  .q-card{padding:16px 18px}
+  .q-ctitle{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-weight:800;font-size:15px;margin-bottom:10px;flex-wrap:wrap}
+  .q-lmeta{font-size:11.5px;color:var(--faint);font-weight:600}
+  .q-tier{font-weight:800;color:var(--tc)}
+  .q-legend{display:flex;gap:14px;font-size:11px;color:var(--faint);margin-bottom:8px}
+  .q-legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}
+  .q-legend .dot.promo,.q-lrow.promo .q-lrank{background:#3ecf8e}
+  .q-legend .dot.demo,.q-lrow.demo .q-lrank{background:var(--rose,#ff6b6b)}
+  .q-ltable{display:flex;flex-direction:column;gap:2px}
+  .q-lrow{display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:10px;padding:7px 10px;border-radius:9px;font-size:13.5px}
+  .q-lrow:nth-child(odd){background:var(--glass-2)}
+  .q-lrank{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--glass-2);font-size:12px;font-weight:700;color:var(--faint)}
+  .q-lrow.promo .q-lrank,.q-lrow.demo .q-lrank{color:#06210f}
+  .q-lrow.demo .q-lrank{color:#2a0707}
+  .q-lname{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .q-lxp{font-variant-numeric:tabular-nums;font-weight:700;color:var(--faint)}
+  .q-lrow.me{background:color-mix(in srgb,var(--amber) 22%,transparent);outline:1px solid color-mix(in srgb,var(--amber) 45%,transparent)}
+  .q-lrow.me .q-lname,.q-lrow.me .q-lxp{color:var(--ink)}
+  .q-ghost{margin-top:10px;font-size:12px;color:var(--faint);background:var(--glass-2);padding:7px 11px;border-radius:9px}
+  .q-ghost b{color:var(--ink)}
+
+  .q-mapwrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .q-map{width:100%;min-width:560px;height:auto;display:block}
+  .q-track2{fill:none;stroke:var(--glass-2);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+  .q-fill2{fill:none;stroke:var(--amber);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+  .q-node circle{fill:var(--card-bg,#1b1b22);stroke:var(--glass-2);stroke-width:2}
+  .q-node.done circle{fill:var(--amber);stroke:var(--amber)}
+  .q-nic{font-size:11px;text-anchor:middle}
+  .q-nlbl{fill:var(--ink);font-size:9px;font-weight:700;text-anchor:middle;opacity:.55}
+  .q-node.done .q-nlbl{opacity:1}
+  .q-nh{fill:var(--faint);font-size:8px;text-anchor:middle}
+  .q-hiker{fill:#fff;stroke:var(--amber);stroke-width:3}
+
+  .q-sbody{display:flex;flex-direction:column;gap:7px}
+  .q-sbrow{display:grid;grid-template-columns:120px 1fr 46px;align-items:center;gap:10px;font-size:12.5px}
+  .q-sbname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+  .q-sbtrack{height:9px;border-radius:6px;background:var(--glass-2);overflow:hidden}
+  .q-sbfill{display:block;height:100%;border-radius:6px}
+  .q-sbh{text-align:right;color:var(--faint);font-variant-numeric:tabular-nums}
+  .q-empty{color:var(--faint);font-size:12.5px;padding:6px 0}
+  .q-rules{font-size:11.5px;color:var(--faint);line-height:1.6;padding:0 4px}
+  .q-rules b{color:var(--ink)}
+
+  .game-toast{position:fixed;left:50%;top:22px;transform:translate(-50%,-26px);z-index:9999;
+    display:flex;align-items:center;gap:12px;padding:13px 18px;border-radius:14px;
+    background:var(--card-bg,#1b1b22);border:1px solid color-mix(in srgb,var(--amber) 55%,transparent);
+    box-shadow:0 14px 40px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:.35s cubic-bezier(.2,1.3,.4,1)}
+  .game-toast.show{opacity:1;transform:translate(-50%,0)}
+  .game-toast .gt-ic{font-size:28px}
+  .game-toast .gt-t{font-weight:800;font-size:14.5px}
+  .game-toast .gt-s{font-size:12px;color:var(--faint);margin-top:1px}
+  @media(max-width:760px){ .q-hero{grid-template-columns:1fr;gap:18px} .q-sbrow{grid-template-columns:90px 1fr 42px} }
 </style>
 </head>
 <body>
@@ -1268,12 +1353,14 @@
     <button class="railtab" data-tab="horizon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M6 12h12M9 18h6"/></svg><span class="rail-tip">Horizon</span></button>
     <button class="railtab" data-tab="countdown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12M7 3c0 5 4 6 5 9 1-3 5-4 5-9M7 21c0-5 4-6 5-9 1 3 5 4 5 9"/></svg><span class="rail-tip">Countdown</span></button>
     <button class="railtab" data-tab="habits"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg><span class="rail-tip">Habits</span></button>
+    <button class="railtab" data-tab="quest"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3"/></svg><span class="rail-tip">Quest</span></button>
     <button class="railtab" data-tab="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="rail-tip">Stats</span></button>
     <button class="railtab" data-tab="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="rail-tip">Log</span></button>
     <button class="railtab" data-tab="music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg><span class="rail-tip">Music</span></button>
     <div class="rail-spacer"></div>
     <div class="rail-bottom">
       <span class="rail-sync" id="syncBadge" style="display:none" title="Cloud sync on">☁</span>
+      <button class="rail-flame" id="gameChip" title="Streak"><span class="gc-fire">🔥</span><span class="gc-n">0</span></button>
       <span class="rail-dplus" id="dplus" title="Days to exam">D-—</span>
       <button class="rail-ibtn" id="prefBtn" title="Preferences — theme, task visibility, sounds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2.4" fill="var(--track-bg)"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2.4" fill="var(--track-bg)"/></svg></button>
       <button class="rail-ibtn" id="railSettings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -1381,6 +1468,14 @@
         </div>
       </div>
       <div id="hbBody"></div>
+    </div>
+
+    <!-- QUEST (gamification: XP · streak · league · expedition) -->
+    <div class="tabview" id="tab-quest">
+      <div class="tv-head">
+        <div class="tv-title">Quest</div>
+      </div>
+      <div id="questBody"></div>
     </div>
 
     <!-- COUNTDOWN (TickTick-style) -->
@@ -1615,6 +1710,7 @@
   <div class="field"><label>Daily goal (min)</label><input type="number" id="setGoal" min="30" max="900"></div>
   <div class="field"><label>Exam date (D-counter)</label><input type="date" id="setExam"></div>
   <div class="field"><label>Matrix: "urgent" within (days)</label><input type="number" id="setUrgent" min="0" max="30"></div>
+  <div class="field"><label>Daily XP goal (Quest streak)</label><input type="number" id="setXpGoal" min="20" max="2000"></div>
   <div class="pref-row" style="padding:6px 0"><span>Session-end notifications<br><small style="color:var(--faint);font-weight:400">Banner when a focus block or break ends</small></span><div class="toggle" id="setNotify"></div></div>
   <div class="field"><label>Background image</label><div style="display:flex;gap:8px"><input type="file" id="bgFile" accept="image/*" style="display:none"><button class="minor" id="bgPick">Upload</button><button class="minor" id="bgReset">Reset</button></div></div>
   <div class="field" style="border:none"><label>Data backup</label><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="minor" id="exportJson">Export JSON</button><input type="file" id="importFile" accept="application/json,.json" style="display:none"><button class="minor" id="importJson">Import JSON</button></div></div>
@@ -1794,7 +1890,7 @@ function _pushAlarmFlush(){
 })();
 function applyCloudCfg(url,key){ CLOUD.url=(url||'').trim(); CLOUD.key=(key||'').trim();
   try{ if(cloudOn()) store.set('fd_cloud',JSON.stringify({url:CLOUD.url,key:CLOUD.key})); else { try{localStorage.removeItem('fd_cloud');}catch(_){} delete mem['fd_cloud']; } }catch(e){} }
-function snapshot(){return {settings,subjects,sessions,dayoff,tasks,distractions,boards,inboxLists,notionSources,countdowns,habits,_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local
+function snapshot(){return {settings,subjects,sessions,dayoff,tasks,distractions,boards,inboxLists,notionSources,countdowns,habits,game,_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local
 async function cloudLoad(){ if(!cloudOn())return null; try{const r=await fetch(cloudRef(),{cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;} }
 let _cloudT=null, _lastLocalWrite=0, _lastSeenRemote=0;
 function cloudSave(){ if(!cloudOn())return; setSync('saving'); clearTimeout(_cloudT);
@@ -1817,16 +1913,18 @@ function applyRemote(cloud){
   if(Array.isArray(cloud.notionSources)) notionSources=cloud.notionSources;
   if(Array.isArray(cloud.countdowns)) countdowns=cloud.countdowns;
   if(Array.isArray(cloud.habits)) habits=cloud.habits;
+  if(cloud.game && typeof cloud.game==='object') game=cloud.game;
   normalizeData();
   store.set('fd_settings',JSON.stringify(settings));store.set('fd_subjects',JSON.stringify(subjects));
   store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
   store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
   store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
   store.set('fd_notionsrc',JSON.stringify(notionSources));store.set('fd_countdowns',JSON.stringify(countdowns));
-  store.set('fd_habits',JSON.stringify(habits));
+  store.set('fd_habits',JSON.stringify(habits));store.set('fd_game',JSON.stringify(game));
   applyTheme(); refreshDplus(); renderSubjectSelect&&renderSubjectSelect(); refreshTaskSurfaces&&refreshTaskSurfaces(); refreshStats&&refreshStats(); renderCalendar&&renderCalendar();
   if($('tab-countdown')&&$('tab-countdown').classList.contains('show')) renderCountdownTab();
   if($('tab-habits')&&$('tab-habits').classList.contains('show')) renderHabitsTab();
+  gameRefreshChip&&gameRefreshChip(); if($('tab-quest')&&$('tab-quest').classList.contains('show')) renderQuest();
 }
 async function pollCloud(){ if(!cloudOn())return; if(_cloudT)return; // don't pull mid-save
   const ae=document.activeElement; if(ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName))return; // don't clobber active typing
@@ -1997,7 +2095,7 @@ const todayKey=()=>dateKey(Date.now());
 /* ---------- state ---------- */
 const PALETTE=['#f5a623','#ff7a33','#2f9bff','#e0218a','#ff6b4a','#4f8cff','#c026d3','#5fc24a','#3fb36b','#a78bfa','#5fd3c4'];
 const FD_VERSION='2.10.0';
-const DEF={focus:50,short:10,long:30,sessions:4,rounds:4,goal:240,autostart:false,examDate:'',urgentDays:3,theme:'dark',notify:false};
+const DEF={focus:50,short:10,long:30,sessions:4,rounds:4,goal:240,autostart:false,examDate:'',urgentDays:3,theme:'dark',notify:false,xpGoal:150};
 let settings=Object.assign({...DEF}, JSON.parse(store.get('fd_settings')||'{}'));
 let subjects=JSON.parse(store.get('fd_subjects')||'null');
 if(!subjects){ // 📎 default subjects seeded from your YPT screenshots — edit/delete freely
@@ -2014,13 +2112,14 @@ let countdowns=JSON.parse(store.get('fd_countdowns')||'[]'); // {id,name,emoji,d
 let habits=JSON.parse(store.get('fd_habits')||'[]'); // {id,name,emoji,color,freq:'daily'|'weekdays'|'weekly'|'interval',days:[0-6],perWeek,interval,goal,unit,checkType:'auto'|'all',step,goalDays(0=forever),section,checkStyle:'check'|'icon',log:{YYYY-MM-DD:n},notes:{YYYY-MM-DD:str},start,archived,created} — TickTick-style habits
 let notionSources=JSON.parse(store.get('fd_notionsrc')||'[]'); // {id,name,dbId,boardId,listId,enabled,lastSync,lastErr,count} — each Notion DB pinned to ONE board list
 let running=JSON.parse(store.get('fd_running')||'null'); // {subjectId,start,mode}
+let game=JSON.parse(store.get('fd_game')||'null')||{}; // gamification state — see GAMIFICATION block (freezes/league/celebration flags; XP itself is DERIVED)
 let roundCount=0;
 function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_subjects',JSON.stringify(subjects));
   store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
   store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
   store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
   store.set('fd_notionsrc',JSON.stringify(notionSources));store.set('fd_countdowns',JSON.stringify(countdowns));
-  store.set('fd_habits',JSON.stringify(habits));
+  store.set('fd_habits',JSON.stringify(habits));store.set('fd_game',JSON.stringify(game));
   store.set('fd_running',JSON.stringify(running));cloudSave();
   notionFlushChanges();}   // push any name/done/date change on a synced task back to Notion (two-way)
 /* device-local live-timer snapshot so an active session survives an iOS-Safari tab reload.
@@ -2125,6 +2224,19 @@ function normalizeData(){
       if((b.priority||0)!==(a.priority||0))return (b.priority||0)-(a.priority||0);
       const x=a.due||'9999-99-99',y=b.due||'9999-99-99'; if(x!==y)return x<y?-1:1; return (a.created||0)-(b.created||0); };
     tasks.slice().sort(legacy).forEach((t,i)=>{ if(typeof t.order!=='number') t.order=(i+1)*100; });
+  }
+  gameNormalize();
+}
+/* gamification persistent state — only the bits that can't be DERIVED from sessions/tasks/habits */
+function gameNormalize(){
+  if(!game||typeof game!=='object') game={};
+  if(typeof game.freezes!=='number') game.freezes=0;
+  if(!game.frozenDays||typeof game.frozenDays!=='object') game.frozenDays={}; // {YYYY-MM-DD:true} days a freeze covered the streak
+  if(!game.shown||typeof game.shown!=='object') game.shown={};                 // one-time celebration flags {level,weekKey,freezeStreak}
+  if(!game.league||typeof game.league!=='object') game.league=null;            // weekly bot bracket, (re)built lazily by gameLeague()
+  if(!game.start){ // first day we start counting the streak — so a brand-new install isn't punished for "missing" all of history
+    const firstSess=sessions.reduce((m,s)=>Math.min(m,s.start),Date.now());
+    game.start=dateKey(Math.min(firstSess,Date.now()));
   }
 }
 /* next order value → appends a new task to the bottom of every list */
@@ -2288,7 +2400,7 @@ function commit(logIt,cap){ endSeg(cap);
     // a habit-bound focus block counts toward today's habit check-in (guarded so it never wraps an already-done habit back to 0)
     if(currentHabit && segs.length){ const h=habits.find(x=>x.id===currentHabit), today=todayKey();
       if(h && !habitDoneOn(h,today)){ checkHabit(h,today); if(typeof afterHabitChange==='function')afterHabitChange(); } } }
-  segs=[]; workedMs=0; running=null; save(); saveTimer(); renderSubjects(); refreshStats(); }
+  segs=[]; workedMs=0; running=null; save(); saveTimer(); renderSubjects(); refreshStats(); gamePulse('focus'); }
 function afterStop(){ $('distractBtn').classList.remove('show'); $('startBtn').textContent='Start'; muteAmbient();
   if(mode==='pomo'){ remaining=phaseMin()*60; phaseStart=null; } renderClock(); reflectTimer&&reflectTimer(); }
 /* Advance exactly one phase. The completing phase ended at `endedAt` (its scheduled
@@ -2543,9 +2655,10 @@ function isTaskDone(t){
 function toggleTask(t){
   if(t.wontDo){ t.wontDo=false; t.wontDoOn=''; uncheckSound(); return; }   // clicking the check on an abandoned task reactivates it
   const was=isTaskDone(t);
-  if(!t.repeat||t.repeat==='none') t.done=!t.done;
+  if(!t.repeat||t.repeat==='none'){ t.done=!t.done; t.doneOn=t.done?todayKey():''; } // doneOn powers XP-per-day (derived, no parallel counter)
   else t.doneOn = was ? '' : todayKey();
   (isTaskDone(t)?checkSound:uncheckSound)();
+  setTimeout(gamePulse,0);   // award/refresh XP after the caller's save() lands
   // two-way push happens via the caller's save() → notionFlushChanges()
 }
 /* "Won't Do" (TickTick): abandon a task without deleting it — filed separately, mutually exclusive with done */
@@ -4790,7 +4903,7 @@ function wireHabits(scope){
     else { let [y,m]=monthKey(habitCalCursor||todayKey()).split('-').map(Number); m+=(+v); while(m<1){m+=12;y--;} while(m>12){m-=12;y++;} habitCalCursor=y+'-'+String(m).padStart(2,'0')+'-01'; }   // string math avoids the toISOString() IST date shift
     renderHabitsTab(); }); }
 /* re-render every surface a habit check-in could touch */
-function afterHabitChange(){ save();
+function afterHabitChange(){ save(); gamePulse('habit');
   if($('tab-habits')&&$('tab-habits').classList.contains('show')) renderHabitsTab();
   else if($('tab-tasks')&&$('tab-tasks').classList.contains('show')) renderTasks();
   else if($('tab-horizon')&&$('tab-horizon').classList.contains('show')) renderHorizonTab();
@@ -5089,6 +5202,180 @@ $('distractSave').onclick=()=>{ const v=$('distractNote').value.trim();
   sessionDistract++; $('distractCount').textContent=sessionDistract; save(); $('ovDistract').classList.remove('show'); };
 $('distractNote').onkeydown=e=>{ if(e.key==='Enter')$('distractSave').click(); };
 
+/* ====================================================================
+   GAMIFICATION  — Quest page (XP · streak · ranks · league · expedition)
+   Design: XP is DERIVED, never stored — recomputed from sessions/tasks/
+   habits so it can never drift, double-count, or need migration. The only
+   persisted state is `game` (freezes, weekly league bracket, one-time
+   celebration flags), which rides cloud sync like countdowns/habits.
+
+   XP rules (shown to the user on the Quest page):
+     • Focus      1 XP / minute
+     • Deep block +15 bonus for any unbroken block ≥ 25 min
+     • Task done  10 + 10×priority   (10 / 20 / 30 / 40)
+     • Habit done 15
+   ==================================================================== */
+const XP_DEEP_SECS=1500, XP_DEEP_BONUS=15, XP_TASK_BASE=10, XP_HABIT=15;
+const RANKS=[ // cumulative-XP → UPSC-themed rank ladder
+  {xp:0,name:'Aspirant',ic:'🌱'},{xp:500,name:'Prelims Hopeful',ic:'📚'},
+  {xp:1500,name:'Prelims Qualifier',ic:'✅'},{xp:3500,name:'Mains Warrior',ic:'✍️'},
+  {xp:7000,name:'Interview Caller',ic:'🎙'},{xp:12000,name:'Rank Holder',ic:'🎖'},
+  {xp:20000,name:'Probationer · LBSNAA',ic:'🏛'},{xp:32000,name:'Sub-Collector',ic:'🧭'},
+  {xp:50000,name:'District Collector',ic:'⚖️'},{xp:75000,name:'Secretary',ic:'📜'},
+  {xp:110000,name:'Cabinet Secretary',ic:'👑'} ];
+const EXPED=[ // syllabus expedition checkpoints, gated on cumulative FOCUS hours
+  {h:0,name:'Foundation',ic:'🚩'},{h:25,name:'Base Camp',ic:'⛺'},
+  {h:60,name:'GS Trailhead',ic:'🥾'},{h:120,name:'Polity Ridge',ic:'⛰️'},
+  {h:200,name:'Economy Pass',ic:'🏔️'},{h:300,name:'Optional Summit',ic:'🧗'},
+  {h:430,name:'Prelims Plateau',ic:'🎯'},{h:600,name:'Mains Massif',ic:'📖'},
+  {h:800,name:'Interview Vista',ic:'🎤'},{h:1000,name:'Final Rank',ic:'🏆'} ];
+const LEAGUE_TIERS=[ {name:'Bronze',col:'#cd7f32',base:600},{name:'Silver',col:'#b8c4d0',base:950},
+  {name:'Gold',col:'#f5c542',base:1400},{name:'Sapphire',col:'#4aa3ff',base:1950},{name:'Diamond',col:'#7ce0ff',base:2600} ];
+const BOT_NAMES=['Ananya','Rahul','Meera','Arjun','Priya','Vikram','Sneha','Karthik','Divya','Rohan','Ishaan','Nisha','Aditya','Pooja','Sanjay'];
+
+/* unique focus blocks (one row per start|end — multi-subject blocks counted ONCE, full duration) */
+function focusBlocks(){ const seen=new Map();
+  sessions.forEach(s=>{ const key=s.start+'|'+s.end; if(!seen.has(key)) seen.set(key,{start:s.start,end:s.end,secs:(s.end-s.start)/1000}); });
+  return [...seen.values()]; }
+/* {YYYY-MM-DD → XP} across all of history, in one O(n) pass — the spine everything reads */
+function xpDayMap(){ const m={};
+  focusBlocks().forEach(b=>{ const k=dateKey(b.start); m[k]=(m[k]||0)+Math.round(b.secs/60)+(b.secs>=XP_DEEP_SECS?XP_DEEP_BONUS:0); });
+  tasks.forEach(t=>{ if(t.wontDo||!t.done)return; const k=t.doneOn; if(k) m[k]=(m[k]||0)+XP_TASK_BASE+XP_TASK_BASE*(t.priority||0); });
+  habits.forEach(h=>{ const log=h.log||{}; Object.keys(log).forEach(k=>{ if(habitDoneOn(h,k)) m[k]=(m[k]||0)+XP_HABIT; }); });
+  return m; }
+const xpGoal=()=>Math.max(20,settings.xpGoal||150);
+function totalXP(map){ map=map||xpDayMap(); let n=0; for(const k in map) n+=map[k]; return n; }
+function totalFocusSecs(){ return focusBlocks().reduce((a,b)=>a+b.secs,0); }
+function rankInfo(xp){ let i=0; for(let j=0;j<RANKS.length;j++) if(xp>=RANKS[j].xp) i=j;
+  const cur=RANKS[i], next=RANKS[i+1]||null;
+  const into=xp-cur.xp, span=next?next.xp-cur.xp:1; return {i,cur,next,into,span,pct:next?Math.min(100,into/span*100):100}; }
+
+/* streak: consecutive days meeting the daily XP goal (a frozen day keeps it alive); today is "pending" until met */
+function dayMet(k,map){ return (map[k]||0)>=xpGoal() || !!game.frozenDays[k]; }
+function streakCount(map){ map=map||xpDayMap(); let k=todayKey(); if(!dayMet(k,map)) k=addDays(k,-1);
+  let n=0,g=0; while(g++<4000 && k>=game.start){ if(dayMet(k,map)){ n++; k=addDays(k,-1); } else break; } return n; }
+/* run once on load: auto-spend a freeze to save a missed yesterday, and award freezes at 7-day streak milestones (cap 3) */
+function gameRollover(){ const map=xpDayMap(), y=addDays(todayKey(),-1);
+  if(y>=game.start && !dayMet(y,map) && dayMet(addDays(y,-1),map) && game.freezes>0){ game.frozenDays[y]=true; game.freezes--; }
+  const st=streakCount(map);
+  if(st>0 && st%7===0 && game.shown.freezeStreak!==st){ game.freezes=Math.min(3,game.freezes+1); game.shown.freezeStreak=st; }
+  try{ save(); }catch(e){} }
+
+/* deterministic per-week RNG so the bot bracket is stable within a week */
+function gameRng(seedStr){ let h=2166136261>>>0; for(let i=0;i<seedStr.length;i++){ h^=seedStr.charCodeAt(i); h=Math.imul(h,16777619); }
+  return ()=>{ h+=0x6D2B79F5; let t=h; t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; }; }
+function weekXP(wk,map){ map=map||xpDayMap(); let n=0; for(let i=0;i<7;i++) n+=map[addDays(wk,i)]||0; return n; }
+function recentWeekAvg(map){ map=map||xpDayMap(); const cur=weekKeyOf(todayKey()); let sum=0,cnt=0;
+  for(let w=1;w<=4;w++){ const wk=addDays(cur,-7*w); const x=weekXP(wk,map); if(x>0||w<=2){ sum+=x; cnt++; } } return cnt?Math.round(sum/cnt):0; }
+function gameBots(wk,tier){ const rng=gameRng(wk+'|'+tier), pool=BOT_NAMES.slice();
+  const picks=[]; while(picks.length<9 && pool.length){ picks.push(pool.splice(Math.floor(rng()*pool.length),1)[0]); }
+  const tBase=LEAGUE_TIERS[tier].base, my=Math.max(recentWeekAvg(),tBase*0.5);
+  return picks.map(name=>({ name, target:Math.round((tBase*0.55 + my*0.45) * (0.55+rng()*1.0)) })); }
+/* (re)build / advance the weekly bracket; returns standings sorted desc with `me` flagged */
+function gameLeague(map){ map=map||xpDayMap(); const wk=weekKeyOf(todayKey());
+  if(!game.league || game.league.week!==wk){
+    let tier=game.league?(game.league.tier||0):0;
+    if(game.league){ const r=game.league.lastRank||5; if(r<=3) tier=Math.min(4,tier+1); else if(r>=8) tier=Math.max(0,tier-1); }
+    game.league={week:wk,tier,bots:gameBots(wk,tier),lastRank:5};
+  }
+  const elapsed=Math.min(7,Math.max(1,daysBetween(wk,todayKey())+1)), frac=elapsed/7;
+  const my=weekXP(wk,map);
+  const rows=game.league.bots.map(b=>({name:b.name,xp:Math.round(b.target*frac),me:false}));
+  rows.push({name:'You',xp:my,me:true});
+  rows.sort((a,b)=>b.xp-a.xp||(a.me?1:-1));
+  const rank=rows.findIndex(r=>r.me)+1; game.league.lastRank=rank;
+  return {wk,tier:game.league.tier,rows,rank,my,frac,avg:recentWeekAvg(map),proj:Math.round(my/frac)}; }
+
+/* per-subject focus hours (uses sdur so multi-subject splits match Stats) */
+function subjectHours(){ const m={}; sessions.forEach(s=>{ m[s.subjectId]=(m[s.subjectId]||0)+sdur(s); });
+  return subjects.map(s=>({name:s.name,color:s.color,h:(m[s.id]||0)/3600})).sort((a,b)=>b.h-a.h); }
+
+/* ---- celebratory toast (level-up / goal met / freeze earned) ---- */
+function gameToast(title,sub,ic){ let host=$('gameToast'); if(!host){ host=document.createElement('div'); host.id='gameToast'; host.className='game-toast'; document.body.appendChild(host); }
+  host.innerHTML=`<div class="gt-ic">${ic||'🎉'}</div><div><div class="gt-t">${esc(title)}</div>${sub?`<div class="gt-s">${esc(sub)}</div>`:''}</div>`;
+  host.classList.remove('show'); void host.offsetWidth; host.classList.add('show'); flash();
+  clearTimeout(host._t); host._t=setTimeout(()=>host.classList.remove('show'),3600); }
+
+/* small flame chip in the rail (visible on every tab) + Quest-tab live refresh; fires celebration toasts */
+function gameRefreshChip(){ const chip=$('gameChip'); if(!chip)return; const map=xpDayMap();
+  const st=streakCount(map), today=map[todayKey()]||0, goal=xpGoal();
+  chip.querySelector('.gc-n').textContent=st; chip.classList.toggle('lit',st>0);
+  chip.classList.toggle('pending', today<goal);
+  chip.title=`🔥 ${st}-day streak · ${today}/${goal} XP today`; }
+function gamePulse(kind){ if(!game||!game.shown){ gameNormalize(); }
+  const map=xpDayMap(), today=map[todayKey()]||0, goal=xpGoal();
+  // daily goal just met
+  if(today>=goal && game.shown.goalDay!==todayKey()){ game.shown.goalDay=todayKey();
+    gameToast('Daily goal smashed!',`${today} XP · 🔥 ${streakCount(map)}-day streak`,'🎯'); }
+  // level up
+  const tot=totalXP(map), r=rankInfo(tot);
+  if(game.shown.level==null) game.shown.level=r.i;
+  else if(r.i>game.shown.level){ game.shown.level=r.i; gameToast('Rank up!',r.cur.name,r.cur.ic); }
+  gameRefreshChip();
+  if($('tab-quest')&&$('tab-quest').classList.contains('show')) renderQuest();
+  try{ save(); }catch(e){} }
+
+function ringSVG(pct,cls,label,sub){ const R=52,C=2*Math.PI*R, off=C*(1-Math.max(0,Math.min(100,pct))/100);
+  return `<svg class="q-ring ${cls}" viewBox="0 0 120 120"><circle class="qr-track" cx="60" cy="60" r="${R}"/>
+    <circle class="qr-prog" cx="60" cy="60" r="${R}" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 60 60)"/>
+    <text class="qr-main" x="60" y="58">${label}</text><text class="qr-sub" x="60" y="78">${esc(sub||'')}</text></svg>`; }
+
+function renderQuest(){ const body=$('questBody'); if(!body)return; const map=xpDayMap();
+  const tot=totalXP(map), r=rankInfo(tot), today=map[todayKey()]||0, goal=xpGoal();
+  const st=streakCount(map), L=gameLeague(map), tier=LEAGUE_TIERS[L.tier];
+  const hours=totalFocusSecs()/3600;
+  // hero — rank ring + daily-goal ring + streak
+  const hero=`<div class="q-hero card">
+    <div class="q-rankcol">${ringSVG(r.pct, 'rank', r.cur.ic, r.next?`${r.into}/${r.span}`:'MAX')}
+      <div class="q-rankname">${esc(r.cur.name)}</div>
+      <div class="q-rankxp">${tot.toLocaleString()} XP total${r.next?` · ${r.next.xp-tot} to ${esc(r.next.name)}`:''}</div></div>
+    <div class="q-goalcol">${ringSVG(Math.min(100,today/goal*100),'goal',`${today}`,`/ ${goal}`)}
+      <div class="q-goallbl">Today's XP</div></div>
+    <div class="q-streakcol">
+      <div class="q-flame ${st>0?'lit':''}">🔥</div><div class="q-streaknum">${st}</div>
+      <div class="q-streaklbl">day streak</div>
+      <div class="q-freeze" title="Streak freezes auto-save a missed day">❄️ ${game.freezes} freeze${game.freezes===1?'':'s'}</div>
+    </div></div>`;
+  // league
+  const rowsHTML=L.rows.map((row,i)=>{ const rank=i+1; const zone = rank<=3?'promo':(rank>=8?'demo':'');
+    return `<div class="q-lrow ${row.me?'me':''} ${zone}"><span class="q-lrank">${rank}</span>
+      <span class="q-lname">${esc(row.name)}${row.me?'':''}</span><span class="q-lxp">${row.xp.toLocaleString()}</span></div>`; }).join('');
+  const ghost = L.avg>0 ? `<div class="q-ghost">👻 Pace ${L.proj.toLocaleString()} XP vs your 4-wk avg ${L.avg.toLocaleString()} — <b>${L.proj>=L.avg?'+':''}${L.avg?Math.round((L.proj-L.avg)/L.avg*100):0}%</b></div>` : '';
+  const league=`<div class="q-card card"><div class="q-ctitle"><span class="q-tier" style="--tc:${tier.col}">◆ ${tier.name} League</span>
+      <span class="q-lmeta">Rank ${L.rank}/10 · resets Monday</span></div>
+    <div class="q-legend"><span class="dot promo"></span>Top 3 promote <span class="dot demo"></span>Bottom 3 drop</div>
+    <div class="q-ltable">${rowsHTML}</div>${ghost}</div>`;
+  // expedition — checkpoints spaced EVENLY by index (avoids early-stop label crowding); fill/hiker track real hours
+  const next=EXPED.find(c=>c.h>hours);
+  const expW=760, padX=42, N=EXPED.length, yFor=i=>64+(i%2?24:-24);
+  const X=i=>padX+(expW-2*padX)*(N<2?0:i/(N-1));
+  // fractional index of the hiker along the route, by interpolating hours between the two bracketing checkpoints
+  let segHi=EXPED.findIndex(c=>c.h>hours); if(segHi<0) segHi=N-1; const segLo=Math.max(0,segHi-1);
+  const segF=EXPED[segHi].h>EXPED[segLo].h?Math.max(0,Math.min(1,(hours-EXPED[segLo].h)/(EXPED[segHi].h-EXPED[segLo].h))):1;
+  const curI=segLo+segF, curX=X(curI), curY=yFor(segLo)+(yFor(segHi)-yFor(segLo))*segF;
+  const nodes=EXPED.map((c,i)=>{ const done=hours>=c.h, x=X(i).toFixed(0), y=yFor(i);
+    return `<g class="q-node ${done?'done':''}"><circle cx="${x}" cy="${y}" r="9"/>
+      <text class="q-nic" x="${x}" y="${y+4}">${c.ic}</text>
+      <text class="q-nlbl" x="${x}" y="${y>64?y+22:y-15}">${esc(c.name)}</text>
+      <text class="q-nh" x="${x}" y="${y>64?y+33:y-26}">${c.h}h</text></g>`; }).join('');
+  const path=`M ${X(0).toFixed(0)} ${yFor(0)} ` + EXPED.map((c,i)=>i?`L ${X(i).toFixed(0)} ${yFor(i)}`:'').join(' ');
+  const exped=`<div class="q-card card"><div class="q-ctitle"><span>🗺️ Syllabus Expedition</span>
+      <span class="q-lmeta">${hours.toFixed(1)} h focused${next?` · ${(next.h-hours).toFixed(1)} h to ${esc(next.name)}`:' · journey complete 🏆'}</span></div>
+    <div class="q-mapwrap"><svg class="q-map" viewBox="0 0 ${expW} 138" preserveAspectRatio="xMidYMid meet">
+      <path class="q-track2" d="${path}"/><clipPath id="qclip"><rect x="0" y="0" width="${curX.toFixed(0)}" height="138"/></clipPath>
+      <path class="q-fill2" d="${path}" clip-path="url(#qclip)"/>
+      <circle class="q-hiker" cx="${curX.toFixed(0)}" cy="${curY.toFixed(0)}" r="7"/>
+      ${nodes}</svg></div></div>`;
+  // per-subject progress
+  const subs=subjectHours().filter(s=>s.h>0.05).slice(0,8); const maxH=Math.max(1,...subs.map(s=>s.h));
+  const subBars=subs.map(s=>`<div class="q-sbrow"><span class="q-sbname">${esc(s.name)}</span>
+    <span class="q-sbtrack"><span class="q-sbfill" style="width:${(s.h/maxH*100).toFixed(0)}%;background:${s.color||'var(--accent)'}"></span></span>
+    <span class="q-sbh">${s.h.toFixed(1)}h</span></div>`).join('')||'<div class="q-empty">Log some focus time to chart your subjects.</div>';
+  const subsCard=`<div class="q-card card"><div class="q-ctitle"><span>📊 Hours by subject</span></div><div class="q-sbody">${subBars}</div></div>`;
+  const rules=`<div class="q-rules">Earn XP: <b>1/min</b> focus · <b>+15</b> deep block (≥25 min) · <b>+10×</b>(1+priority) per task · <b>+15</b> per habit. Daily goal <b>${goal} XP</b> — change it in Settings.</div>`;
+  body.innerHTML=hero+league+exped+subsCard+rules;
+}
+
 /* ---------- tabs ---------- */
 /* expand/contract the Tasks smart-list panel (clicking the Tasks rail icon while already on Tasks) */
 function toggleTasksNav(){ $('tab-tasks').classList.toggle('nav-collapsed'); }
@@ -5101,6 +5388,7 @@ function switchTab(name){
   if(name==='horizon')renderHorizonTab();
   if(name==='countdown')renderCountdownTab();
   if(name==='habits')renderHabitsTab();
+  if(name==='quest')renderQuest();
   if(name==='log')renderCalendar();
   if(name==='subjects')syncSubjCardHeight();
   // re-opening Tasks in single-column mode should land back on today / the current period, not wherever a stray scroll left us
@@ -5118,7 +5406,7 @@ $('autoToggle').classList.toggle('on',settings.autostart);
 $('autoToggle').onclick=()=>{settings.autostart=!settings.autostart;$('autoToggle').classList.toggle('on',settings.autostart);save();};
 function refreshCloudState(){ if($('cloudState'))$('cloudState').textContent=cloudOn()?'Cloud sync: ON — shared across devices & Notion.':'Cloud sync: OFF — local to this browser only.'; }
 $('settingsBtn').onclick=()=>{$('setFocus').value=settings.focus;$('setSessions').value=settings.sessions;$('setShort').value=settings.short;$('setLong').value=settings.long;
-  $('setRounds').value=settings.rounds;$('setGoal').value=settings.goal;$('setExam').value=settings.examDate||'';$('setUrgent').value=(settings.urgentDays==null?3:settings.urgentDays);
+  $('setRounds').value=settings.rounds;$('setGoal').value=settings.goal;$('setExam').value=settings.examDate||'';$('setUrgent').value=(settings.urgentDays==null?3:settings.urgentDays);$('setXpGoal').value=(settings.xpGoal||150);
   $('setCloudUrl').value=CLOUD.url||''; $('setCloudKey').value=CLOUD.key||''; refreshCloudState();
   $('setNotionProxy').value=settings.notionProxy||''; $('setNotionKey').value=settings.notionKey||'';
   refreshNotifyToggle();
@@ -5134,6 +5422,7 @@ $('setNotify').onclick=async ()=>{
   else { settings.notify=false; refreshNotifyToggle(); alert('Notifications are blocked. Allow them for Focus Den in your browser/OS settings, then toggle this again.'); }
 };
 $('railSettings').onclick=()=>$('settingsBtn').click();   // settings reachable from the rail on every tab (timer can be hidden)
+if($('gameChip')) $('gameChip').onclick=()=>switchTab('quest');   // rail flame → Quest page
 /* connect / update sync: adopt cloud data if it already exists, otherwise seed it from this device */
 $('cloudConnect').onclick=()=>{ applyCloudCfg($('setCloudUrl').value,$('setCloudKey').value);
   if(!cloudOn()){ refreshCloudState(); askConfirm('That URL/key doesn\'t look complete. Sync stays off.',()=>{}); return; }
@@ -5218,9 +5507,9 @@ $('notionSyncAll').onclick=()=>notionSyncAll({report:true});
 $('notionDone').onclick=()=>$('ovNotion').classList.remove('show');
 $('saveSettings').onclick=()=>{const c=(v,a,b,d)=>{v=parseInt(v);return isNaN(v)?d:Math.min(b,Math.max(a,v));};
   settings.focus=c($('setFocus').value,1,120,50);settings.sessions=c($('setSessions').value,1,12,4);settings.short=c($('setShort').value,1,60,10);settings.long=c($('setLong').value,1,60,30);
-  settings.rounds=c($('setRounds').value,0,8,4);settings.goal=c($('setGoal').value,30,900,240);settings.examDate=$('setExam').value||'';settings.urgentDays=c($('setUrgent').value,0,30,3);
+  settings.rounds=c($('setRounds').value,0,8,4);settings.goal=c($('setGoal').value,30,900,240);settings.examDate=$('setExam').value||'';settings.urgentDays=c($('setUrgent').value,0,30,3);settings.xpGoal=c($('setXpGoal').value,20,2000,150);
   const npPrev=settings.notionProxy||''; settings.notionProxy=$('setNotionProxy').value.trim(); settings.notionKey=$('setNotionKey').value.trim();
-  save();$('ovSettings').classList.remove('show');if(!active&&workedMs===0)setMode(mode);refreshStats();refreshDplus();
+  save();$('ovSettings').classList.remove('show');if(!active&&workedMs===0)setMode(mode);refreshStats();refreshDplus();gameRefreshChip();if($('tab-quest').classList.contains('show'))renderQuest();
   if(settings.notionProxy&&settings.notionProxy!==npPrev) notionSyncAll();
   scheduleNotionPoll(); };   // (re)start or stop the near-realtime pull loop to match the new proxy setting
 $('resetAll').onclick=()=>askConfirm('Erase ALL data — subjects, sessions, to-dos, day-offs? Cannot be undone.',()=>{
@@ -5423,6 +5712,9 @@ async function boot(){
     if(Array.isArray(cloud.distractions)) distractions=cloud.distractions;
     if(Array.isArray(cloud.boards)) boards=cloud.boards;
     if(Array.isArray(cloud.inboxLists)) inboxLists=cloud.inboxLists;
+    if(Array.isArray(cloud.habits)) habits=cloud.habits;
+    if(Array.isArray(cloud.countdowns)) countdowns=cloud.countdowns;
+    if(cloud.game && typeof cloud.game==='object') game=cloud.game;
     if(cloud._updatedAt){ _lastSeenRemote=cloud._updatedAt; _lastLocalWrite=cloud._updatedAt; }
     store.set('fd_settings',JSON.stringify(settings));store.set('fd_subjects',JSON.stringify(subjects));
     store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
@@ -5439,6 +5731,7 @@ async function boot(){
   ensurePushSub();   // re-establish the push subscription after a reload (no-op until a VAPID key is set)
   document.querySelectorAll('#taskViews [data-v]').forEach(x=>x.classList.toggle('on',x.dataset.v===taskView)); // reflect the restored view
   renderSubjects(); refreshStats(); renderCalendar();
+  gameRollover(); gameRefreshChip();   // settle freezes/streak, then paint the rail flame
   // two-way cloud convergence: pull other-device / Notion-sync edits periodically and on refocus
   setInterval(pollCloud,6000);
   // capture the live timer the instant the tab is backgrounded — iOS Safari may reload it before we get another chance
@@ -5465,7 +5758,7 @@ console.log('%cFocus Den '+FD_VERSION,'color:#f5a623;font-weight:700','— type 
 
 /* re-render when the day rolls over so repeating tasks reset on schedule */
 let _dayKey=todayKey();
-setInterval(()=>{ const nk=todayKey(); if(nk!==_dayKey){ _dayKey=nk; renderSubjects(); refreshStats(); renderCalendar(); refreshDplus(); } },60000);
+setInterval(()=>{ const nk=todayKey(); if(nk!==_dayKey){ _dayKey=nk; renderSubjects(); refreshStats(); renderCalendar(); refreshDplus(); gameRollover(); gameRefreshChip(); } },60000);
 </script>
 
 <!-- PWA service worker. Registered only for the standalone app (not the Notion embed),
