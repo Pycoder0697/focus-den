@@ -3347,7 +3347,9 @@ function descendants(id){ const out=[]; (function walk(p){ childrenOf(p).forEach
 function leafProgress(t){ return isTaskDone(t)?1:0; }
 function progressOf(t){ const kids=childrenOf(t.id); return kids.length? kids.reduce((a,k)=>a+progressOf(k),0)/kids.length : leafProgress(t); }
 function rootGoals(){ return tasks.filter(t=>!t.parentId && childrenOf(t.id).length); }
-function validParents(task){ const banned=new Set(task?[task.id,...descendants(task.id).map(d=>d.id)]:[]); return tasks.filter(t=>!banned.has(t.id)); }
+/* a parent goal must itself be a longer-horizon goal (week/month/quarter/year) — never a day task or an unscheduled/inbox task */
+const PARENT_HORIZONS=['week','month','quarter','year'];
+function validParents(task){ const banned=new Set(task?[task.id,...descendants(task.id).map(d=>d.id)]:[]); return tasks.filter(t=>!banned.has(t.id) && PARENT_HORIZONS.includes(t.horizon)); }
 /* a child task is only ever shown nested under its parent — keep it out of flat/column lists */
 function topLevel(list){ return list.filter(t=>!t.parentId); }
 const expandedGoals=new Set();   // task ids whose nested subgoals are currently expanded
@@ -4905,8 +4907,12 @@ function setTaskView(v){ if(v!==taskView){ colsScrollX=0; colsScrollGoCur=true; 
   renderTasks(); }
 document.querySelectorAll('#taskViews [data-v]').forEach(b=>b.onclick=()=>setTaskView(b.dataset.v));
 
+/* you can't start a fresh focus block for a task/subject mid-break — finish (or skip) the break first */
+function onBreak(){ return mode==='pomo' && (phase==='short'||phase==='long'); }
+function breakBlocks(){ if(!onBreak()) return false;
+  flash(); const el=$('phaseLabel'); if(el) el.textContent='On a break — skip it to focus ☕'; return true; }
 /* start a pomodoro focus block bound to a task */
-function startTaskPomodoro(t,mins){ if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
+function startTaskPomodoro(t,mins){ if(breakBlocks()) return; if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
   if(t.subjectId) $('activeSubject').value=t.subjectId;
   currentTask=t.id; updateTimerTaskUI();
   mode='pomo'; document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='pomo'));
@@ -4938,7 +4944,7 @@ function startSubjectTimer(id){
   if(!active && subjBound(id) && workedMs>0){ resumeTimer(); reflectTimer(); return; }
   if(mode==='pomo') startSubjectPomodoro(id); else quickStopwatch(id);
   reflectTimer(); }
-function startSubjectPomodoro(id,mins){ if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
+function startSubjectPomodoro(id,mins){ if(breakBlocks()) return; if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
   currentTask=null; updateTimerTaskUI();
   $('activeSubject').value=id||''; renderClock();
   mode='pomo'; document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='pomo'));
