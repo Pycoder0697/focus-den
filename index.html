@@ -3393,8 +3393,8 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
 const completedOpen=new Set();                                   // group keys whose Completed section is expanded
 function renderTaskList(items, key){
   const active=items.filter(t=>!isTaskDone(t)), done=items.filter(isTaskDone);
-  if(!active.length) return items.map(taskCard).join('');         // nothing active → show as-is (e.g. the Done filter)
-  let html=active.map(taskCard).join('');
+  if(taskFilter==='done') return items.map(taskCard).join('');    // explicit "Completed" filter → flat list, no collapse
+  let html=active.map(taskCard).join('');                          // otherwise done tasks always sink into the collapsed "Completed" group below — even when nothing is active
   if(done.length){ const open=completedOpen.has(key);
     html += `<button class="tk-done-head" data-cdone="${esc(String(key))}">✓ Completed · ${done.length} <span class="cv">${open?'⌃':'⌄'}</span></button>`;
     if(open) html += done.map(taskCard).join(''); }
