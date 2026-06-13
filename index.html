@@ -4143,7 +4143,7 @@ function wireTlHours(scope,day){
 let _ctxAnchor=null;
 function closeCtx(){ const m=$('ctxMenu'),s=$('ctxSub'),s2=$('ctxSub2');
   if(m){m.classList.remove('show');m.innerHTML='';} if(s){s.classList.remove('show');s.innerHTML='';} if(s2){s2.classList.remove('show');s2.innerHTML='';}
-  document.removeEventListener('mousedown',_ctxOutside,true); _ctxAnchor=null; }
+  document.removeEventListener('mousedown',_ctxOutside,true); document.removeEventListener('touchstart',_ctxOutside,true); _ctxAnchor=null; }
 function closeCtxSub(){ const s=$('ctxSub'); if(s){s.classList.remove('show');s.innerHTML='';}
   closeCtxSub2(); $('ctxMenu').querySelectorAll('.ctx-item.subopen').forEach(x=>x.classList.remove('subopen')); }
 function closeCtxSub2(){ const s=$('ctxSub2'); if(s){s.classList.remove('show');s.innerHTML='';}
@@ -4167,30 +4167,43 @@ function positionFloat(el,anchor,mode){ el.style.visibility='hidden'; el.classLi
   else { left=r.left; top=r.bottom+6; if(left+w>innerWidth-M) left=innerWidth-M-w; if(top+h>innerHeight-M) top=r.top-6-h; }
   if(left<M)left=M; if(top<M)top=M; if(top+h>innerHeight-M)top=Math.max(M,innerHeight-M-h);
   el.style.left=left+'px'; el.style.top=top+'px'; el.style.visibility=''; }
+/* Wire one ctx-menu button for BOTH mouse and touch. On touch we act on
+   `touchend` + preventDefault: that fires on the FIRST tap (the synthetic
+   `click` is flaky/suppressed on iOS — the old "have to tap a 2nd time" bug)
+   AND it cancels the ghost click so the action never falls through to the
+   card/control underneath the menu. Mouse keeps click + hover-to-open. */
+function _ctxBind(b, activate, hover){
+  if(hover) b.addEventListener('mouseenter',()=>{ if(matchMedia('(hover:hover)').matches) hover(); });
+  let moved=false,sx=0,sy=0,tEnd=0;
+  b.addEventListener('touchstart',e=>{ moved=false; const p=e.touches[0]; if(p){sx=p.clientX;sy=p.clientY;} },{passive:true});
+  b.addEventListener('touchmove',e=>{ const p=e.touches[0]; if(p&&Math.hypot(p.clientX-sx,p.clientY-sy)>8) moved=true; },{passive:true});
+  b.addEventListener('touchend',e=>{ if(moved)return; e.preventDefault(); tEnd=Date.now(); activate(); },{passive:false});
+  b.addEventListener('click',()=>{ if(Date.now()-tEnd<600)return; activate(); });   // dedupe: ignore the synthetic click after a touch
+}
 function openCtxMenu(anchor,page){ closeCtx(); closeDatePicker&&closeDatePicker(); closeTimePicker&&closeTimePicker(); _ctxAnchor=anchor;
   const m=$('ctxMenu');
   m.innerHTML = ctxColorsHTML(page.colors) + page.items.map((it,i)=>ctxItemHTML(it,i)).join('');
-  if(page.colors) m.querySelectorAll('[data-ci]').forEach(b=>b.onclick=()=>{ page.colors.pick(+b.dataset.ci); if(page.rebuild) openCtxMenu(anchor,page.rebuild()); });
+  if(page.colors) m.querySelectorAll('[data-ci]').forEach(b=>_ctxBind(b,()=>{ page.colors.pick(+b.dataset.ci); if(page.rebuild) openCtxMenu(anchor,page.rebuild()); }));
   m.querySelectorAll('.ctx-item').forEach(b=>{ const it=page.items[+b.dataset.i]; if(!it)return;
     if(it.sub){ const open=()=>{ closeCtxSub(); b.classList.add('subopen'); openCtxSub(b,it.sub); };
-      b.onclick=open; b.onmouseenter=open; }
-    else { b.onmouseenter=closeCtxSub; b.onclick=()=>{ const a=_ctxAnchor; closeCtx(); it.run&&it.run(a); }; } });
+      _ctxBind(b, open, open); }
+    else _ctxBind(b, ()=>{ const a=_ctxAnchor; closeCtx(); it.run&&it.run(a); }, closeCtxSub); });
   positionFloat(m,anchor,'below');
-  setTimeout(()=>document.addEventListener('mousedown',_ctxOutside,true),0); }
+  setTimeout(()=>{ document.addEventListener('mousedown',_ctxOutside,true); document.addEventListener('touchstart',_ctxOutside,true); },0); }
 function openCtxSub(itemEl,subArg){ const s=$('ctxSub'); closeCtxSub2();
   const sub = (typeof subArg==='function') ? subArg() : subArg;   // builder ⇒ re-evaluated each open (live ✓ for multi-toggles)
   s.innerHTML = sub.items.map((it,i)=>ctxItemHTML(it,i)).join('');
   s.querySelectorAll('.ctx-item').forEach(b=>{ const it=sub.items[+b.dataset.i]; if(!it||it.sep)return;
     if(it.sub){ const open=()=>{ closeCtxSub2(); b.classList.add('subopen'); openCtxSub2(b,it.sub()); };
-      b.onclick=open; b.onmouseenter=open; }
-    else if(it.keepOpen){ b.onmouseenter=closeCtxSub2; b.onclick=()=>{ it.run&&it.run(); openCtxSub(itemEl,subArg); }; }  // toggle + re-render the submenu in place
-    else { b.onmouseenter=closeCtxSub2; b.onclick=()=>{ const a=_ctxAnchor; closeCtx(); it.run&&it.run(a); }; } });
+      _ctxBind(b, open, open); }
+    else if(it.keepOpen) _ctxBind(b, ()=>{ it.run&&it.run(); openCtxSub(itemEl,subArg); }, closeCtxSub2);  // toggle + re-render the submenu in place
+    else _ctxBind(b, ()=>{ const a=_ctxAnchor; closeCtx(); it.run&&it.run(a); }, closeCtxSub2); });
   positionFloat(s,itemEl,'beside'); }
 /* third menu layer — e.g. Add to board → board → its lists (TimeStripe-style) */
 function openCtxSub2(itemEl,sub){ const s=$('ctxSub2');
   s.innerHTML = sub.items.map((it,i)=>ctxItemHTML(it,i)).join('');
   s.querySelectorAll('.ctx-item').forEach(b=>{ const it=sub.items[+b.dataset.i]; if(!it||it.sep)return;
-    b.onclick=()=>{ const a=_ctxAnchor; closeCtx(); it.run&&it.run(a); }; });
+    _ctxBind(b, ()=>{ const a=_ctxAnchor; closeCtx(); it.run&&it.run(a); }); });
   positionFloat(s,itemEl,'beside'); }
 window.addEventListener('resize',()=>closeCtx());
 
