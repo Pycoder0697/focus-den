@@ -56,7 +56,8 @@ One file only: `index.html`
 - `renderFocusHeader()` — fills the timer's `.focus-pick` header from `currentTask`/`currentHabit`/`$('activeSubject')`; `openFocusPicker()`/`renderFocusPicker()` drive the picker popover; `selectFocusTask`/`selectFocusSubject`/`selectFocusHabit`/`clearFocus` set the binding (selection only)
 - `renderTasks()` — renders the Tasks tab (dispatches to board/matrix/timeline/list)
 - `refreshTaskSurfaces()` — re-renders both tabs if visible (call after any task mutation)
-- `applyFilter(list, mode)` — filters tasks by all/active/done
+- `applyFilter(list, mode)` — filters tasks by all/active/done/wontdo. The default **`all`** (working) branch drops `staleDone(t)` tasks so completed/abandoned clutter doesn't carry into the next day (TickTick-style); since nearly every view pool funnels through `applyFilter(...,taskFilter)`, this clears old completions across all views at once. The explicit **Completed**/**Won't Do** filters skip the stale drop and show the full archive (as do the Log/Stats, which read `tasks`/`doneOn` directly).
+- `staleDone(t)` — a finished one-off task whose completion day has passed (`done`+`doneOn<today`, or `wontDo`+`wontDoOn<today`). Repeating tasks reset through `isTaskDone()` and are never stale. Used by `applyFilter`'s default branch + the Subjects-page done/won't groups (they build their own lists). Tasks completed *today* stay visible in the collapsed "✓ Completed" group; previous days' completions drop out of working views.
 - `taskSort(a,b)` — sorts done tasks to bottom, then by priority/due
 - `isTaskDone(t)` — respects repeat logic (daily/weekdays/weekly); also returns true for **"Won't Do"** tasks (`t.wontDo`), so abandoned tasks leave the active pool everywhere. `toggleWontDo(t)` abandons/reactivates (mutually exclusive with `done`); `renderTaskList` files them in a separate collapsed **"✗ Won't Do · N"** group (key `…·wd`) below Completed, the card shows a muted ✗ (`.tk-check.wd`), and the Show-tasks filter has a **Won't Do** segment (`applyFilter` mode `wontdo`; `done` excludes won't-do). App-only (not synced to Notion).
 - `toggleTask(t)` — toggles done/doneOn respecting repeat
@@ -105,7 +106,7 @@ Repeat can't be finer than the task's horizon (`repeatOptsFor`/`clampRepeat`); t
 - **horizon** — broad→narrow horizons; stacked sections (`horizonHTML`) or columns (`horizonColsHTML`) via the layout toggle
 - **boards** — user kanban boards (`boardsHTML`/`wireBoards`): board tabs, per-board lists, list/column layout, drag tasks between lists
 - **board** — the date-kanban "Agenda": Overdue, Today, Next 7 days, Inbox
-- **matrix** — Eisenhower grid (Important×Urgent). Important = priority ≥ 2. Urgent = due today/overdue or within `settings.urgentDays` days.
+- **matrix** — its own page (`#tab-matrix`), two interchangeable kinds (`settings.matrixKind` eisenhower⇄impact, toggled by the visible header switch). Eisenhower = Important×Urgent (Important = priority ≥ 2; Urgent = due today/overdue or within `settings.urgentDays` days); Impact = Productive×Attractive. **Moving a card between quadrants rewrites the properties that quadrant stands for** via `_matrixApplyDrop(t,qEl)` (Eisenhower → priority + due date; Impact → `t.impact`). Drag uses the pointer-gesture engine (`_startMatrixGesture`, mirroring `wireTaskGestures`) so it works on touch too — mouse drags immediately, touch long-presses to arm; tap/long-press opens the task ⋯ menu. Cards are intentionally plain (no drag-handle dots).
 - **timeline** — Gantt chart. Drag bar to reschedule, drag right edge to extend span. Split into To-do / Done sections.
 
 ## Coding conventions
