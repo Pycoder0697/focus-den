@@ -1789,6 +1789,7 @@
   <div class="field" style="flex-direction:column;align-items:stretch;gap:6px"><label>Note</label><textarea id="tdDesc" rows="3" placeholder="Add a description…"></textarea></div>
   <div class="field"><label>When</label><button type="button" class="tk-when" id="tdWhen" style="flex:0 1 auto;max-width:210px">No date</button></div>
   <div class="field"><label>Subject</label><select id="tdSubject"></select></div>
+  <div class="field"><label>Impact</label><select id="tdImpact"><option value="unnecessary">Unnecessary</option><option value="necessary">Necessary</option><option value="purposeful">Purposeful</option><option value="distracting">Distracting</option></select></div>
   <div class="field"><label>Parent goal</label><select id="tdParent"></select></div>
   <div class="field"><label>Priority</label><select id="tdPri"><option value="0">None</option><option value="1">Low</option><option value="2">Medium</option><option value="3">High</option></select></div>
   <div class="field"><label>Repeat</label><select id="tdRepeat"></select></div>
@@ -2168,6 +2169,7 @@ function normalizeData(){
     if(typeof t.boardId!=='string') t.boardId='';    // board membership (independent of schedule)
     if(typeof t.listId!=='string') t.listId='';
     if(typeof t.desc!=='string') t.desc='';            // free-text task description / notes (TickTick-style, syncs to a Notion text prop)
+    if(typeof t.impact!=='string') t.impact='';        // Impact-matrix category: purposeful/necessary/distracting/unnecessary ('' ⇒ unnecessary)
     if(typeof t.notionSourceId!=='string') t.notionSourceId=''; // set ⇒ this task mirrors a Notion DB row (lives only in its board list)
     if(typeof t.notionPageId!=='string') t.notionPageId='';
     if(!Array.isArray(t.notionProps)) t.notionProps=[]; // up-to-4 read-only Notion data points (TickTick-style)
@@ -2839,6 +2841,7 @@ function openTodo(defaultSubjectId,task){ _tdCtx={task};
                   : {horizon:'', due:'', dueEnd:'', hkey:'', repeat:'none', start:'', dur:0};
   $('todoTitle').textContent=task?'Edit task':'New task';
   $('tdName').value=task?task.name:''; $('tdDesc').value=task?(task.desc||''):''; $('tdPri').value=task?(task.priority||0):0;
+  $('tdImpact').value=task?taskImpact(task):'unnecessary';
   $('tdStart').value=_tdDraft.start||''; $('tdDur').value=_tdDraft.dur||'';
   $('tdActions').style.display=task?'flex':'none';   // Delete/Duplicate only when editing an existing task
   tdRenderSched();
@@ -2853,7 +2856,7 @@ $('tdDur').onchange=e=>{ _tdDraft.dur=parseInt(e.target.value)||0; };
 $('tdSave').onclick=()=>{ if(!_tdCtx||!_tdDraft)return; const {task}=_tdCtx;
   const name=$('tdName').value.trim(); if(!name)return;
   const target = task || newTask(name,'');
-  Object.assign(target,{ name, desc:$('tdDesc').value.replace(/\s+$/,''), subjectId:$('tdSubject').value||'', priority:parseInt($('tdPri').value)||0,
+  Object.assign(target,{ name, desc:$('tdDesc').value.replace(/\s+$/,''), subjectId:$('tdSubject').value||'', impact:$('tdImpact').value||'', priority:parseInt($('tdPri').value)||0,
     horizon:_tdDraft.horizon||'', due:_tdDraft.due||'', dueEnd:_tdDraft.dueEnd||'', hkey:_tdDraft.hkey||'',
     repeat:_tdDraft.repeat||'none', parentId:$('tdParent').value||'' });
   if(target.horizon==='day' && !target.due) target.due=todayKey();
@@ -3885,8 +3888,32 @@ function wireSmartAdd(scope,view){ const inp=scope.querySelector('.sl-add'), btn
     tasks.push(t); inp.value=''; save(); renderTasks(); };
   if(btn)btn.onclick=add; inp.onkeydown=e=>{ if(e.key==='Enter')add(); }; }
 
+/* ---- Matrix page: two interchangeable views (Eisenhower · Impact), switched in the ⋯ ---- */
+const matrixKind=()=>settings.matrixKind==='impact'?'impact':'eisenhower';
+function matrixHTML(){ return matrixKind()==='impact'?impactHTML():eisenhowerHTML(); }
+function wireMatrix(scope){ return matrixKind()==='impact'?wireImpact(scope):wireEisenhower(scope); }
+/* visible Eisenhower ⇄ Impact switch on the matrix header (segmented toggle, app's standard inline-switch pattern) */
+function matrixSwitchHTML(){ const k=matrixKind();
+  return `<div class="view-filter matrix-switch" id="matrixSwitch"><button data-mk="eisenhower" class="${k==='eisenhower'?'on':''}">Eisenhower</button><button data-mk="impact" class="${k==='impact'?'on':''}">Impact</button></div>`; }
+function _wireMatrixSwitch(scope){ scope.querySelectorAll('#matrixSwitch [data-mk]').forEach(b=>b.onclick=()=>{ settings.matrixKind=b.dataset.mk; save(); renderTasks(); }); }
+/* shared mini-card markup + the check/open-menu wiring used by both matrix kinds */
+function _matrixMini(t){ const d=isTaskDone(t); return `<div class="ei-mini ${d?'done':''}" draggable="true" data-id="${t.id}"><span class="mc tk-check ${d?'on':''}" data-act="check">${CHK}</span><span class="mn">${esc(t.name)}</span></div>`; }
+function _wireMatrixMinis(scope){
+  scope.querySelectorAll('.ei-mini [data-act="check"]').forEach(n=>{ n.onclick=e=>{ e.stopPropagation(); const t=tasks.find(x=>x.id===n.closest('.ei-mini').dataset.id); if(t){toggleTask(t);save();renderTasks();} }; });
+  scope.querySelectorAll('.ei-mini').forEach(m=>{
+    m.addEventListener('dragstart',()=>{_matrixDragId=m.dataset.id;});
+    let mDown=null;
+    m.addEventListener('pointerdown',e=>{mDown=[e.clientX,e.clientY];});
+    m.addEventListener('click',e=>{ if(e.target.closest('[data-act="check"]'))return;
+      if(mDown){const dx=Math.abs(e.clientX-mDown[0]),dy=Math.abs(e.clientY-mDown[1]); if(dx>4||dy>4)return;}
+      const id=m.dataset.id; const t=tasks.find(x=>x.id===id);
+      if(t) openCtxMenu(m, buildTaskMenu(t, ()=>renderTasks())); });   // full task menu in place — no redirect to Inbox
+  });
+}
+let _matrixDragId=null;
+
 /* ---- Eisenhower matrix (priority → important, due proximity → urgent) ---- */
-function matrixHTML(){
+function eisenhowerHTML(){
   const quads=[
     {q:3,t:'Do first',sub:'Urgent · Important',c:'var(--rose)'},
     {q:2,t:'Schedule',sub:'Important · Not urgent',c:'var(--teal)'},
@@ -3896,33 +3923,52 @@ function matrixHTML(){
   const pool=topLevel(applyFilter(tasks,taskFilter));
   const cells=quads.map(qd=>{ const items=sortTasks(pool.filter(t=>quadrant(t)===qd.q));
     const activeN=items.filter(t=>!isTaskDone(t)).length;
-    const mini=items.map(t=>{const d=isTaskDone(t);return `<div class="ei-mini ${d?'done':''}" draggable="true" data-id="${t.id}"><span class="mc tk-check ${d?'on':''}" data-act="check">${CHK}</span><span class="mn">${esc(t.name)}</span></div>`;}).join('')||'<div class="ei-empty">No tasks</div>';
+    const mini=items.map(_matrixMini).join('')||'<div class="ei-empty">No tasks</div>';
     return `<div class="ei-q" data-q="${qd.q}" style="--qc:${qd.c}"><div class="ei-qh"><span class="ei-qdot"></span><span class="ei-qt">${qd.t}</span><span class="ei-qsub">${qd.sub}</span><span class="n">${activeN}</span></div><div class="ei-qbody">${mini}</div></div>`;
   }).join('');
   const win=(settings.urgentDays==null?3:settings.urgentDays);
-  return `<div class="view-ctl">${groupSortBar(false)}</div><div class="ei-grid">${cells}</div><div class="ei-note"><b>Important</b> = priority Medium/High · <b>Urgent</b> = due today/overdue or within ${win} day(s). Drag a card into another quadrant to set its priority &amp; due date to match.</div>`;
+  return `<div class="view-ctl">${matrixSwitchHTML()}${groupSortBar(false)}</div><div class="ei-grid">${cells}</div><div class="ei-note"><b>Important</b> = priority Medium/High · <b>Urgent</b> = due today/overdue or within ${win} day(s). Drag a card into another quadrant to set its priority &amp; due date to match.</div>`;
 }
-function wireMatrix(scope){ wireGroupSort(scope);
-  scope.querySelectorAll('.ei-mini [data-act="check"]').forEach(n=>{ n.onclick=e=>{ e.stopPropagation(); const t=tasks.find(x=>x.id===n.closest('.ei-mini').dataset.id); if(t){toggleTask(t);save();renderTasks();} }; });
-  let dragId=null;
-  scope.querySelectorAll('.ei-mini').forEach(m=>{
-    m.addEventListener('dragstart',()=>{dragId=m.dataset.id;});
-    let mDown=null;
-    m.addEventListener('pointerdown',e=>{mDown=[e.clientX,e.clientY];});
-    m.addEventListener('click',e=>{ if(e.target.closest('[data-act="check"]'))return;
-      if(mDown){const dx=Math.abs(e.clientX-mDown[0]),dy=Math.abs(e.clientY-mDown[1]); if(dx>4||dy>4)return;}
-      const id=m.dataset.id; const t=tasks.find(x=>x.id===id);
-      if(t) openCtxMenu(m, buildTaskMenu(t, ()=>renderTasks())); });   // full task menu in place — no redirect to Inbox
-  });
+function wireEisenhower(scope){ wireGroupSort(scope); _wireMatrixSwitch(scope); _matrixDragId=null; _wireMatrixMinis(scope);
   scope.querySelectorAll('.ei-q').forEach(q=>{
     q.addEventListener('dragover',e=>{e.preventDefault();q.classList.add('drop');});
     q.addEventListener('dragleave',()=>q.classList.remove('drop'));
-    q.addEventListener('drop',e=>{e.preventDefault();q.classList.remove('drop'); if(!dragId)return;
-      const t=tasks.find(x=>x.id===dragId); if(!t)return; const tq=+q.dataset.q; const today=todayKey();
+    q.addEventListener('drop',e=>{e.preventDefault();q.classList.remove('drop'); if(!_matrixDragId)return;
+      const t=tasks.find(x=>x.id===_matrixDragId); if(!t)return; const tq=+q.dataset.q; const today=todayKey();
       const win=(settings.urgentDays==null?3:settings.urgentDays);
       const important=(tq&2)>0, urgent=(tq&1)>0;
       t.priority=important?3:1; t.dueEnd='';
       t.due = urgent ? today : (important ? addDays(today,win+1) : '');
+      save(); renderTasks();
+    });
+  });
+}
+
+/* ---- Impact matrix (Productive×Attractive). Uncategorised ⇒ Unnecessary. ---- */
+const IMPACT_QUADS=[                                              // row-major: top-left, top-right, bottom-left, bottom-right
+  {k:'necessary',  t:'Necessary Work',  sub:'Productive · Unattractive',  c:'var(--amber)'},
+  {k:'purposeful', t:'Purposeful Work', sub:'Productive · Attractive',    c:'var(--teal)'},
+  {k:'unnecessary',t:'Unnecessary Work',sub:'Unproductive · Unattractive',c:'var(--faint)'},
+  {k:'distracting',t:'Distracting Work',sub:'Unproductive · Attractive',  c:'var(--rose)'}
+];
+const IMPACT_OPTS=[['purposeful','Purposeful'],['necessary','Necessary'],['distracting','Distracting'],['unnecessary','Unnecessary']];
+const taskImpact=t=>{ const v=t&&t.impact; return (v==='purposeful'||v==='necessary'||v==='distracting')?v:'unnecessary'; };
+const impactLabel=t=>{ const v=t&&t.impact; return (v==='purposeful'||v==='necessary'||v==='distracting')?(v[0].toUpperCase()+v.slice(1)):''; };
+function impactHTML(){
+  const pool=topLevel(applyFilter(tasks,taskFilter));
+  const cells=IMPACT_QUADS.map(qd=>{ const items=sortTasks(pool.filter(t=>taskImpact(t)===qd.k));
+    const activeN=items.filter(t=>!isTaskDone(t)).length;
+    const mini=items.map(_matrixMini).join('')||'<div class="ei-empty">No tasks</div>';
+    return `<div class="ei-q" data-impact="${qd.k}" style="--qc:${qd.c}"><div class="ei-qh"><span class="ei-qdot"></span><span class="ei-qt">${qd.t}</span><span class="ei-qsub">${qd.sub}</span><span class="n">${activeN}</span></div><div class="ei-qbody">${mini}</div></div>`;
+  }).join('');
+  return `<div class="view-ctl">${matrixSwitchHTML()}${groupSortBar(false)}</div><div class="ei-grid">${cells}</div><div class="ei-note"><b>Productive</b> moves you forward · <b>Attractive</b> feels good to do. Uncategorised tasks sit in <b>Unnecessary</b> — right-click a task (or open its ⋯) to set its impact, or drag a card into another quadrant.</div>`;
+}
+function wireImpact(scope){ wireGroupSort(scope); _wireMatrixSwitch(scope); _matrixDragId=null; _wireMatrixMinis(scope);
+  scope.querySelectorAll('.ei-q').forEach(q=>{
+    q.addEventListener('dragover',e=>{e.preventDefault();q.classList.add('drop');});
+    q.addEventListener('dragleave',()=>q.classList.remove('drop'));
+    q.addEventListener('drop',e=>{e.preventDefault();q.classList.remove('drop'); if(!_matrixDragId)return;
+      const t=tasks.find(x=>x.id===_matrixDragId); if(!t)return; t.impact=q.dataset.impact||'unnecessary';
       save(); renderTasks();
     });
   });
@@ -4236,7 +4282,8 @@ function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
       {ic:'🔁',label:'Repeat',gloss:(t.repeat&&t.repeat!=='none')?t.repeat:'',sub:()=>({items:repItems})},
       {ic:'＋',label:'Add subtask',gloss:kidN?String(kidN):'',run:()=>{ expandedGoals.add(t.id); _pendingAddReopen='sub|'+t.id; re(); }},
       {ic:'▤',label:'Add to board',sub:()=>({items:boardItems})},
-      {ic:'●',label:'Subject',gloss:subjGloss,sub:subjectSub}];
+      {ic:'●',label:'Subject',gloss:subjGloss,sub:subjectSub},
+      {ic:'◈',label:'Impact',gloss:impactLabel(t),sub:()=>({items:IMPACT_OPTS.map(o=>({ic:(taskImpact(t)===o[0])?'✓':'',label:o[1],run:()=>{t.impact=o[0];save();re();}}))})}];
   if(dayLvl) items.splice(2,0,{ic:'⏱',label:'Time',gloss:timeGloss,run:(a)=>openTimePicker(a||document.body,t,()=>{save();re();})});
   if(elsewhere) items.push({ic:'⮈',label:'Move to No date',run:()=>{assignHorizon(t,'','');t.boardId='';t.listId='';t.inboxListId='';clampRepeat(t);save();refreshTaskSurfaces();}});
   items.push(
