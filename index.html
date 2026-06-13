@@ -3939,7 +3939,7 @@ function _addQuadTaskEisen(q,name){ name=(name||'').trim(); if(!name)return;
   const today=todayKey(), win=(settings.urgentDays==null?3:settings.urgentDays);
   const important=(q&2)>0, urgent=(q&1)>0;
   const t=smartTask(name);                                   // parse the name, then the quadrant forces priority/urgency
-  t.priority=important?3:1; t.dueEnd='';
+  t.priority=q; t.dueEnd='';                                 // Do first⇒High(3), Schedule⇒Medium(2), Delegate⇒Low(1), Don't do⇒None(0)
   if(urgent){ t.due=today; t.horizon='day'; t.hkey=''; }
   else if(important){ t.due=addDays(today,win+1); t.horizon='day'; t.hkey=''; }
   else { t.due=''; t.horizon=''; t.hkey=''; }
@@ -3956,12 +3956,12 @@ function _wireQuadAdds(scope,kind){ scope.querySelectorAll('.ei-q').forEach(q=>{
 
 /* ---- Eisenhower matrix (priority → important, due proximity → urgent) ---- */
 function eisenhowerHTML(){
-  // strip colour = the priority colour each quadrant assigns its tasks (important⇒High, else Low — mirrors the add/drop logic)
+  // strip colour = the priority colour each quadrant assigns its tasks (Do first⇒High, Schedule⇒Medium, Delegate⇒Low, Don't do⇒None)
   const quads=[
     {q:3,t:'Do first',sub:'Urgent · Important',c:PRI_COL[3]},
-    {q:2,t:'Schedule',sub:'Important · Not urgent',c:PRI_COL[3]},
+    {q:2,t:'Schedule',sub:'Important · Not urgent',c:PRI_COL[2]},
     {q:1,t:'Delegate',sub:'Urgent · Not important',c:PRI_COL[1]},
-    {q:0,t:"Don't do",sub:'Neither',c:PRI_COL[1]}
+    {q:0,t:"Don't do",sub:'Neither',c:'var(--faint)'}
   ];
   const pool=topLevel(applyFilter(tasks,taskFilter));
   const cells=quads.map(qd=>{ const items=sortTasks(pool.filter(t=>quadrant(t)===qd.q));
@@ -3980,7 +3980,7 @@ function wireEisenhower(scope){ wireGroupSort(scope); _wireMatrixSwitch(scope); 
       const t=tasks.find(x=>x.id===_matrixDragId); if(!t)return; const tq=+q.dataset.q; const today=todayKey();
       const win=(settings.urgentDays==null?3:settings.urgentDays);
       const important=(tq&2)>0, urgent=(tq&1)>0;
-      t.priority=important?3:1; t.dueEnd='';
+      t.priority=tq; t.dueEnd='';                            // Do first⇒High(3), Schedule⇒Medium(2), Delegate⇒Low(1), Don't do⇒None(0)
       t.due = urgent ? today : (important ? addDays(today,win+1) : '');
       save(); renderTasks();
     });
