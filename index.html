@@ -486,6 +486,43 @@
   .view-filter button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
   .hz-subnav{max-width:100%;overflow-x:auto}
   .hz-pane{min-height:40px}
+  /* Prime — pre-day mindset ritual */
+  .prime{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  .prime-intro{color:var(--faint);font-size:13.5px;text-align:center;padding:2px 0 4px}
+  .prime-sec{background:var(--card-bg);border:1px solid var(--stroke);border-radius:var(--r);overflow:hidden}
+  .prime-sec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;
+    padding:15px 18px;font-size:16px;font-weight:600;color:var(--ink);user-select:none}
+  .prime-sec>summary::-webkit-details-marker{display:none}
+  .prime-sec>summary::after{content:"▾";margin-left:auto;color:var(--faint);font-size:13px;transition:transform .18s}
+  .prime-sec:not([open])>summary::after{transform:rotate(-90deg)}
+  .prime-sec>summary:hover{background:var(--glass)}
+  .ps-ic{font-size:18px;line-height:1}
+  .ps-body{padding:2px 18px 18px;display:flex;flex-direction:column;gap:14px}
+  .pr-note{color:var(--muted);font-size:13.5px;font-style:italic}
+  .pr-grp-t{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);margin-bottom:7px}
+  .pr-list{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+  .pr-list li{color:var(--muted);font-size:14.5px;line-height:1.5}
+  .pr-phase,.pr-grp{padding-top:2px}
+  .pr-phase+.pr-phase,.pr-grp+.pr-grp{border-top:1px solid var(--stroke-soft);padding-top:14px}
+  .pr-mantra{margin-top:10px;padding:10px 14px;border-left:3px solid var(--accent);background:var(--glass);
+    border-radius:0 10px 10px 0;font-family:'Fraunces',serif;font-style:italic;font-size:15px;color:var(--ink)}
+  .pr-mantra::before{content:"“"}.pr-mantra::after{content:"”"}
+  /* Vision board */
+  .vb-wrap{border-radius:14px;overflow:hidden;border:1px solid var(--stroke-soft);background:var(--glass)}
+  .vb-img{display:block;width:100%;height:auto}
+  .vb-fallback{display:none;padding:34px 22px;text-align:center;color:var(--faint);font-size:13.5px;line-height:1.6}
+  .vb-fallback code{background:var(--glass-2);padding:2px 6px;border-radius:6px;color:var(--muted)}
+  .vb-missing .vb-img{display:none}.vb-missing .vb-fallback{display:block}
+  .vb-actions{display:flex;gap:8px;margin-top:4px}
+  .pr-btn{font-family:inherit;font-size:13px;color:var(--ink);background:var(--glass-2);border:1px solid var(--stroke);
+    padding:7px 14px;border-radius:999px;cursor:pointer;transition:.15s}
+  .pr-btn:hover{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+  .pr-btn.ghost{background:transparent;color:var(--muted)}
+  /* Daily mission — write over the faded background prompt */
+  .pr-mission textarea{width:100%;box-sizing:border-box;resize:vertical;font-family:'Fraunces',serif;font-size:17px;
+    line-height:1.6;color:var(--ink);background:var(--field-bg);border:1px solid var(--stroke);border-radius:12px;padding:14px 16px}
+  .pr-mission textarea::placeholder{color:var(--faint);opacity:.7;font-style:italic}
+  .pr-mission textarea:focus{outline:none;border-color:var(--accent)}
   .view-ctl.cz-bar{justify-content:flex-end}
   /* Countdown page (TickTick-style cards) */
   .cd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
@@ -4846,14 +4883,15 @@ function renderPeriodView(body,hview){ const h=hview||taskView, key=curKey(h);
 }
 
 /* ---- Horizon tab: a sub-nav (Snapshot + Day/Week/Month/Quarter/Year), each pane rendered in-place ---- */
-const HZ_PANES=[['snapshot','Snapshot'],['day','Day'],['week','Week'],['month','Month'],['quarter','Quarter'],['year','Year']];
+const HZ_PANES=[['prime','Prime'],['snapshot','Snapshot'],['day','Day'],['week','Week'],['month','Month'],['quarter','Quarter'],['year','Year']];
 /* Horizon is its own top-level page (#tab-horizon) — its header (filter·sort, layout·panes) lives in .tv-head */
 function renderHorizonTab(){ const b=$('hzBody'); if(!b)return; applyTaskWidth(); renderHorizon(b); }
 function renderHorizon(body){
   const nav=HZ_PANES.map(([v,l])=>`<button data-hzp="${v}" class="${horizonPane===v?'on':''}">${esc(l)}</button>`).join('');
   body.innerHTML=`<div class="view-filter hz-subnav">${nav}</div><div id="hzPane" class="hz-pane"></div>`;
   const host=body.querySelector('#hzPane');
-  if(horizonPane==='snapshot'){ if(taskLayout()==='columns'){ host.innerHTML=horizonColsHTML(); wireHorizonCols(host); } else { host.innerHTML=horizonHTML(); wireHorizon(host); } }
+  if(horizonPane==='prime'){ renderPrime(host); }
+  else if(horizonPane==='snapshot'){ if(taskLayout()==='columns'){ host.innerHTML=horizonColsHTML(); wireHorizonCols(host); } else { host.innerHTML=horizonHTML(); wireHorizon(host); } }
   else if(horizonPane==='day'){ if(taskLayout()==='columns') renderCarousel('day',host); else renderDayList(host); }
   else { if(taskLayout()==='columns') renderCarousel(horizonPane,host); else renderPeriodView(host,horizonPane); }
   body.querySelectorAll('[data-hzp]').forEach(b=>b.onclick=()=>{ horizonPane=b.dataset.hzp; settings.horizonPane=horizonPane; save(); renderTasks(); });
@@ -4915,6 +4953,186 @@ function wireHorizonCols(scope){ wireTasks(scope); wireTaskGestures(scope); wire
     col.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); col.classList.remove('drop');
       const t=tasks.find(x=>x.id===taskDragId); if(t){ assignHorizon(t,h,key); clampRepeat(t); save(); renderTasks(); } }); });
   enableHoverAdd(scope); keepColsScroll(scope);
+}
+
+/* ====================================================================
+   PRIME — the pre-day mindset ritual (Horizon ▸ Prime pane).
+   Vision board · Visualisation · Affirmations · Daily mission · Gratitude,
+   in that order — things to do before the day begins.
+   Read-mostly content; the daily mission is written into
+   settings.missions[todayKey()] (rides cloud sync via settings). The vision
+   image is settings.visionImg (a downscaled data URL) || the repo file
+   vision-board.jpg.
+   ==================================================================== */
+const PRIME_VIS=[
+  ['Phase 1 · Study session',[
+    'Sitting at your desk at 6 AM.',
+    'Opening your study schedule without procrastination.',
+    'Studying with complete focus for the next 2 hours.',
+    'Understanding concepts quickly and making crisp notes.',
+    "Finishing the day's targets with satisfaction."],
+   "I am the type of person who does what needs to be done, even when I don't feel like it."],
+  ['Phase 2 · Revision system',[
+    'Your Notion dashboard showing completed revisions.',
+    'Revision becoming easier each time.',
+    'Facts, concepts, committees, judgments, and current affairs becoming interconnected.',
+    'Walking into the exam hall knowing you have revised everything multiple times.'],
+   "Every revision compounds. Nothing I study is wasted."],
+  ['Phase 3 · The Mains examination hall',[
+    'Receiving the question paper.',
+    'Feeling calm while others panic.',
+    'Instantly identifying demand words.',
+    'Structuring answers clearly.',
+    'Filling page after page with balanced, analytical responses.',
+    'Completing all questions on time.'],
+   "I have prepared for this moment every single day."],
+  ['Phase 4 · The interview',[
+    'Entering the board room confidently.',
+    'Greeting the members with composure.',
+    'Listening carefully.',
+    'Answering honestly and thoughtfully.',
+    'Smiling when challenged.',
+    'Walking out knowing you gave your best.'],
+   "My personality reflects years of learning and growth."],
+  ['Phase 5 · The result day',[
+    'Opening the UPSC PDF.',
+    'Finding your roll number.',
+    'Calling your parents.',
+    'Feeling gratitude rather than excitement alone.',
+    'Remembering all the days you chose discipline over comfort.'],
+   "The result is a consequence. Today, I focus on the process that creates it."]
+];
+const PRIME_AFF=[
+  ['Identity-based',[
+    "I am a disciplined aspirant who completes today's study targets with full focus and consistency.",
+    'I am becoming a disciplined and consistent UPSC aspirant every day.',
+    'I enjoy the process of learning and improving.',
+    'I am capable of mastering the UPSC syllabus.',
+    'I think clearly, critically, and analytically.',
+    'I show up for my studies regardless of my mood.']],
+  ['Productivity & focus',[
+    'My concentration grows stronger with every study session.',
+    'I complete my planned tasks with focus and efficiency.',
+    'I manage my time wisely and use every study block effectively.',
+    'I learn faster because I study with attention and curiosity.',
+    'Every hour I invest today brings me closer to my goal.']],
+  ['Revision & retention',[
+    'I retain information easily through consistent revision.',
+    'Each revision strengthens my understanding and recall.',
+    'I remember relevant facts and concepts when I need them.',
+    'My knowledge becomes more interconnected every day.']],
+  ['Answer writing',[
+    'I express my thoughts clearly and logically.',
+    'My answers are balanced, analytical, and well-structured.',
+    'I improve with every answer I write.',
+    'Feedback helps me grow stronger as an aspirant.']],
+  ['Handling setbacks',[
+    'Temporary setbacks do not define my journey.',
+    'I learn from mistakes and move forward confidently.',
+    'I trust the process even when progress feels slow.',
+    'Consistency is creating results that I cannot yet see.']],
+  ['Examination confidence',[
+    'I remain calm, focused, and confident under pressure.',
+    'I recall information easily during tests and examinations.',
+    'I approach every question with clarity and composure.',
+    'I perform to the best of my preparation on exam day.']],
+  ['Success-oriented',[
+    'I am steadily moving toward success in UPSC.',
+    'My daily actions are aligned with my dream of public service.',
+    'I am worthy of success because I earn it through disciplined effort.',
+    'Every day, I become a stronger candidate for the Civil Services.']],
+  ['Today',[
+    'Today I will focus on what I can control.',
+    'I will study with discipline, revise consistently, and improve through deliberate practice.',
+    'Challenges will strengthen my resilience.',
+    'Every focused study session compounds into success.',
+    'I trust the process, I trust my preparation, and I am becoming the officer I aspire to be.']]
+];
+const PRIME_GRAT=[
+  ['Opportunity',[
+    'I am grateful to have another day to work toward my goal.',
+    'I am grateful to have the time and opportunity to prepare for UPSC.',
+    'I am grateful that I can invest in my future through study and self-improvement.']],
+  ['Resources',[
+    'I am grateful for access to books, notes, classes, and technology that support my preparation.',
+    'I am grateful for the knowledge and guidance available to me.',
+    'I am grateful for a study environment that allows me to focus.']],
+  ['Capability',[
+    'I am grateful for my ability to learn, think, and improve every day.',
+    'I am grateful for the discipline I am building through this journey.',
+    'I am grateful that I can choose consistent effort today.']],
+  ['Support system',[
+    'I am grateful for my family, mentors, and well-wishers.',
+    'I am grateful for everyone who believes in me and supports my aspirations.']],
+  ['Purpose',[
+    'I am grateful for the opportunity to prepare for a career in public service.',
+    'I am grateful for a goal that gives direction and meaning to my daily actions.']],
+  ['Today',[
+    'I am grateful for this new day.',
+    'I am grateful for the opportunity to prepare for UPSC.',
+    'I am grateful for my health, my mind, and the resources available to me.',
+    'I am grateful for the chance to learn, improve, and move one step closer to serving society.',
+    'Today, I will make good use of this opportunity.']]
+];
+function primeMission(){ return (settings.missions&&settings.missions[todayKey()])||''; }
+function primeGroupsHTML(groups){ return groups.map(([t,items])=>
+  `<div class="pr-grp"><div class="pr-grp-t">${esc(t)}</div><ul class="pr-list">${items.map(b=>`<li>${esc(b)}</li>`).join('')}</ul></div>`).join(''); }
+function renderPrime(host){
+  const img = settings.visionImg || 'vision-board.jpg';
+  const visSecs = PRIME_VIS.map(([t,bul,mantra])=>
+    `<div class="pr-phase"><div class="pr-grp-t">${esc(t)}</div><ul class="pr-list">${bul.map(b=>`<li>${esc(b)}</li>`).join('')}</ul>`+
+    `<div class="pr-mantra">${esc(mantra)}</div></div>`).join('');
+  host.innerHTML=`<div class="prime">
+    <div class="prime-intro">Before the day begins — move through each step in order.</div>
+
+    <details class="prime-sec" open>
+      <summary><span class="ps-ic">🪞</span> Vision board</summary>
+      <div class="ps-body">
+        <div class="vb-wrap">
+          <img class="vb-img" src="${esc(img)}" alt="Your vision board" onerror="this.closest('.vb-wrap').classList.add('vb-missing')">
+          <div class="vb-fallback">No vision board yet — drop <code>vision-board.jpg</code> into the app folder, or pick an image below.</div>
+        </div>
+        <div class="vb-actions"><button class="pr-btn" id="vbPick">Change image</button>${settings.visionImg?'<button class="pr-btn ghost" id="vbReset">Use default</button>':''}<input type="file" id="vbFile" accept="image/*" hidden></div>
+      </div>
+    </details>
+
+    <details class="prime-sec" open>
+      <summary><span class="ps-ic">🧘</span> Visualisation</summary>
+      <div class="ps-body"><div class="pr-note">Visualise each of these for 1 minute.</div>${visSecs}</div>
+    </details>
+
+    <details class="prime-sec" open>
+      <summary><span class="ps-ic">🔁</span> Affirmations</summary>
+      <div class="ps-body">${primeGroupsHTML(PRIME_AFF)}</div>
+    </details>
+
+    <details class="prime-sec" open>
+      <summary><span class="ps-ic">🎯</span> Daily mission statement</summary>
+      <div class="ps-body"><div class="pr-mission"><textarea id="prMission" rows="3" maxlength="600" placeholder="Today's mission is to study [topic], revise [topic] & write 5 answers."></textarea></div></div>
+    </details>
+
+    <details class="prime-sec" open>
+      <summary><span class="ps-ic">🙏</span> Gratitude</summary>
+      <div class="ps-body">${primeGroupsHTML(PRIME_GRAT)}</div>
+    </details>
+  </div>`;
+  const ta=host.querySelector('#prMission');
+  if(ta){ ta.value=primeMission();
+    ta.addEventListener('input',()=>{ settings.missions=settings.missions||{}; settings.missions[todayKey()]=ta.value; clearTimeout(ta._t); ta._t=setTimeout(save,500); }); }
+  const pick=host.querySelector('#vbPick'), file=host.querySelector('#vbFile');
+  if(pick&&file){ pick.onclick=()=>file.click(); file.onchange=()=>{ const f=file.files&&file.files[0]; if(f)loadVisionImg(f); }; }
+  const reset=host.querySelector('#vbReset'); if(reset)reset.onclick=()=>{ delete settings.visionImg; save(); renderHorizonTab(); };
+}
+/* Read an image file, downscale to keep the cloud-synced data URL light, store on settings. */
+function loadVisionImg(file){
+  const rd=new FileReader();
+  rd.onload=()=>{ const im=new Image();
+    im.onload=()=>{ const max=1400; let w=im.width,h=im.height;
+      if(w>max||h>max){ const s=max/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+      const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(im,0,0,w,h);
+      settings.visionImg=c.toDataURL('image/jpeg',0.82); save(); renderHorizonTab(); };
+    im.onerror=()=>alert('Could not read that image.'); im.src=rd.result; };
+  rd.readAsDataURL(file);
 }
 
 /* ====================================================================
