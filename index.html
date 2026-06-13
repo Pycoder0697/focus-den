@@ -267,7 +267,7 @@
   .task-views button{width:100%;text-align:left;font-family:inherit;font-size:14.3px;color:var(--muted);background:transparent;border:1px solid transparent;padding:7px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s}
   .task-views button:hover{background:var(--glass-2);color:var(--ink)}
   .task-views button.on{background:var(--amber);color:#3a1810;border-color:transparent;font-weight:600}
-  @media(max-width:720px){.tasks-split{flex-direction:column}.task-views{flex-direction:row;width:100%;overflow-x:auto}.task-views button{width:auto}}
+  @media(max-width:720px){.tasks-split{flex-direction:column}.task-views{flex-direction:row;width:100%;overflow-x:auto}.task-views button{width:auto}.tasks-main{width:100%}}
   .tv-more-btn{flex:none;font-family:inherit;font-size:13.8px;color:var(--muted);background:var(--track-bg);border:1px solid var(--stroke-soft);padding:8px 14px;border-radius:999px;cursor:pointer;white-space:nowrap}
   .tv-more-btn.on{background:var(--amber);color:#3a1810;border-color:transparent;font-weight:600}
   .tv-more-menu{position:fixed;z-index:60;display:none;flex-direction:column;gap:2px;background:var(--pop-bg);border:1px solid var(--stroke);border-radius:12px;padding:6px;box-shadow:var(--shadow);min-width:168px}
@@ -604,7 +604,7 @@
   .hb-cddow.big{font-size:12.1px;gap:5px;margin-bottom:5px}
   .hb-cdgrid.big{gap:5px}
   .hb-cdgrid.big .hb-cd{font-size:13.8px;border-radius:8px}
-  @media(max-width:880px){ .hb-split{flex-direction:column} .hb-split-detail{flex:none;width:100%;position:static} }
+  @media(max-width:880px){ .hb-split{flex-direction:column} .hb-split-list{width:100%} .hb-split-detail{flex:none;width:100%;position:static} }
   /* habit check rows embedded in Today / Next 7 / Horizon */
   .hb-sec .sl-body{display:flex;flex-direction:column;gap:1px}
   .hb-trow{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:9px}
@@ -657,6 +657,15 @@
   .ei-mini .mc{width:17px;height:17px;border-radius:5px;flex:none;display:grid;place-items:center}
   .ei-mini .mn{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ei-note{font-size:12.1px;color:var(--faint);margin-top:10px;line-height:1.5}
+  /* per-quadrant quick-add (adds a task already tagged for that quadrant) */
+  .ei-add{display:flex;gap:6px;flex:none;padding:8px 11px;border-top:1px solid var(--stroke-soft)}
+  .ei-add input{flex:1;min-width:0;font-family:inherit;font-size:13.2px;color:var(--ink);background:var(--field-bg);border:1px solid var(--stroke-soft);border-radius:8px;padding:6px 9px;outline:none}
+  .ei-add input::placeholder{color:var(--faint)}
+  .ei-add input:focus{border-color:var(--accent)}
+  .ei-add button{background:var(--glass-2);border:1px solid var(--stroke);border-radius:8px;color:var(--ink);cursor:pointer;padding:0 11px;font-size:15px;line-height:1}
+  .ei-add button:hover{border-color:var(--accent)}
+  /* matrix as its own page: the switch sits left, sort on the right */
+  .matrix-switch{margin-bottom:0}
 
   /* gantt timeline */
   .gantt-wrap{overflow-x:auto;border:1px solid var(--stroke-soft);border-radius:14px;background:var(--track-bg)}
@@ -1357,6 +1366,7 @@
     <button class="railtab active" data-tab="subjects"><svg class="rail-ring" viewBox="0 0 24 24" fill="none"><circle class="rr-track" cx="12" cy="12" r="9"/><circle class="rr-prog" cx="12" cy="12" r="9" pathLength="100" transform="rotate(-90 12 12)" stroke-dasharray="100" stroke-dashoffset="100"/></svg><span class="rail-tip" id="subjRailTip">Subjects</span></button>
     <button class="railtab" data-tab="tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6l1 1 2-2"/><path d="M4 12l1 1 2-2"/><circle cx="5" cy="18" r="1.2"/></svg><span class="rail-tip">Tasks</span></button>
     <button class="railtab" data-tab="calendar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg><span class="rail-tip">Calendar</span></button>
+    <button class="railtab" data-tab="matrix"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/></svg><span class="rail-tip">Matrix</span></button>
     <button class="railtab" data-tab="horizon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M6 12h12M9 18h6"/></svg><span class="rail-tip">Horizon</span></button>
     <button class="railtab" data-tab="countdown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12M7 3c0 5 4 6 5 9 1-3 5-4 5-9M7 21c0-5 4-6 5-9 1 3 5 4 5 9"/></svg><span class="rail-tip">Countdown</span></button>
     <button class="railtab" data-tab="habits"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg><span class="rail-tip">Habits</span></button>
@@ -1432,7 +1442,6 @@
           <button data-v="next7">Next 7 days</button>
           <button data-v="inbox">⮈ Inbox</button>
           <button data-v="boards">▤ Boards</button>
-          <button data-v="matrix">▥ Matrix</button>
           <button data-v="dashboard">◎ Dashboard</button>
         </div>
         <div class="tasks-main">
@@ -1451,6 +1460,14 @@
     <!-- CALENDAR -->
     <div class="tabview" id="tab-calendar">
       <div id="calBody"></div>
+    </div>
+
+    <!-- MATRIX (own page: Eisenhower ⇄ Impact) -->
+    <div class="tabview" id="tab-matrix">
+      <div class="tv-head">
+        <div class="tv-title">Matrix</div>
+      </div>
+      <div id="matrixBody"></div>
     </div>
 
     <!-- HORIZON (own page) -->
@@ -3142,7 +3159,7 @@ function addDays(key,n){ const [y,m,d]=key.split('-').map(Number); const dt=new 
 function daysBetween(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
 function prettyDate(key){ const [y,m,d]=key.split('-').map(Number); return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]; }
 const PRI_COL=['transparent','#5fc24a','#f5a623','#ff5a5a'];
-function newTask(name,due){ taskSound(); return {id:uid('t'),name,desc:'',due:due||'',dueEnd:'',priority:0,subjectId:'',subjectIds:[],checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
+function newTask(name,due){ taskSound(); return {id:uid('t'),name,desc:'',impact:'',due:due||'',dueEnd:'',priority:0,subjectId:'',subjectIds:[],checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
 
 /* ---- TeuxDeux-style smart entry: parse priority, date & repeat from free text ---- */
 const SMART_WD={sunday:0,sun:0,monday:1,mon:1,tuesday:2,tues:2,tue:2,wednesday:3,weds:3,wed:3,thursday:4,thurs:4,thur:4,thu:4,friday:5,fri:5,saturday:6,sat:6};
@@ -3536,6 +3553,7 @@ function tasksForSubject(id){ return tasks.filter(t=>subjectIdsOf(t).includes(id
 /* re-render whichever task surfaces are on screen (keeps both tabs in step) */
 function refreshTaskSurfaces(){ renderSubjects();
   if($('tab-tasks')&&$('tab-tasks').classList.contains('show')) renderTasks();
+  else if($('tab-matrix')&&$('tab-matrix').classList.contains('show')) renderMatrixTab();
   else if($('tab-horizon')&&$('tab-horizon').classList.contains('show')) renderHorizonTab(); }
 
 function taskCard(t,depth){ depth=depth||0; const today=todayKey();
@@ -3911,6 +3929,30 @@ function _wireMatrixMinis(scope){
   });
 }
 let _matrixDragId=null;
+let _matrixAddFocus=null;   // quadrant key whose quick-add input to refocus after a re-render
+/* the Matrix is its own page (#tab-matrix) — render + wire it here */
+function renderMatrixTab(){ const body=$('matrixBody'); if(!body)return; body.innerHTML=matrixHTML(); wireMatrix(body);
+  if(_matrixAddFocus!=null){ const a='[data-'+(matrixKind()==='impact'?'impact':'q')+'="'+_matrixAddFocus+'"]';
+    const inp=body.querySelector('.ei-q'+a+' .ei-add input'); _matrixAddFocus=null; if(inp){ inp.focus(); } } }
+/* per-quadrant quick-add: the task is auto-tagged for that quadrant (Eisenhower → priority + due; Impact → impact) */
+function _addQuadTaskEisen(q,name){ name=(name||'').trim(); if(!name)return;
+  const today=todayKey(), win=(settings.urgentDays==null?3:settings.urgentDays);
+  const important=(q&2)>0, urgent=(q&1)>0;
+  const t=smartTask(name);                                   // parse the name, then the quadrant forces priority/urgency
+  t.priority=important?3:1; t.dueEnd='';
+  if(urgent){ t.due=today; t.horizon='day'; t.hkey=''; }
+  else if(important){ t.due=addDays(today,win+1); t.horizon='day'; t.hkey=''; }
+  else { t.due=''; t.horizon=''; t.hkey=''; }
+  clampRepeat(t); tasks.push(t); _matrixAddFocus=String(q); save(); renderMatrixTab(); }
+function _addQuadTaskImpact(k,name){ name=(name||'').trim(); if(!name)return;
+  const t=smartTask(name); t.impact=k; clampRepeat(t); tasks.push(t); _matrixAddFocus=k; save(); renderMatrixTab(); }
+function _wireQuadAdds(scope,kind){ scope.querySelectorAll('.ei-q').forEach(q=>{
+  const inp=q.querySelector('.ei-add input'), btn=q.querySelector('.ei-add button'); if(!inp)return;
+  const key = kind==='impact' ? q.dataset.impact : q.dataset.q;
+  const add=via=>{ const v=inp.value.trim(); if(!v)return; inp.value=''; _taskVia=via; if(kind==='impact')_addQuadTaskImpact(key,v); else _addQuadTaskEisen(+key,v); };
+  inp.onclick=e=>e.stopPropagation();
+  inp.onkeydown=e=>{ e.stopPropagation(); if(e.key==='Enter'){ e.preventDefault(); add('enter'); } else if(e.key==='Escape'){ inp.blur(); } };
+  if(btn) btn.onmousedown=e=>{ e.preventDefault(); add('click'); }; }); }
 
 /* ---- Eisenhower matrix (priority → important, due proximity → urgent) ---- */
 function eisenhowerHTML(){
@@ -3924,12 +3966,12 @@ function eisenhowerHTML(){
   const cells=quads.map(qd=>{ const items=sortTasks(pool.filter(t=>quadrant(t)===qd.q));
     const activeN=items.filter(t=>!isTaskDone(t)).length;
     const mini=items.map(_matrixMini).join('')||'<div class="ei-empty">No tasks</div>';
-    return `<div class="ei-q" data-q="${qd.q}" style="--qc:${qd.c}"><div class="ei-qh"><span class="ei-qdot"></span><span class="ei-qt">${qd.t}</span><span class="ei-qsub">${qd.sub}</span><span class="n">${activeN}</span></div><div class="ei-qbody">${mini}</div></div>`;
+    return `<div class="ei-q" data-q="${qd.q}" style="--qc:${qd.c}"><div class="ei-qh"><span class="ei-qdot"></span><span class="ei-qt">${qd.t}</span><span class="ei-qsub">${qd.sub}</span><span class="n">${activeN}</span></div><div class="ei-qbody">${mini}</div><div class="ei-add"><input placeholder="Add to ${esc(qd.t)}…" maxlength="200"><button type="button" tabindex="-1">+</button></div></div>`;
   }).join('');
   const win=(settings.urgentDays==null?3:settings.urgentDays);
   return `<div class="view-ctl">${matrixSwitchHTML()}${groupSortBar(false)}</div><div class="ei-grid">${cells}</div><div class="ei-note"><b>Important</b> = priority Medium/High · <b>Urgent</b> = due today/overdue or within ${win} day(s). Drag a card into another quadrant to set its priority &amp; due date to match.</div>`;
 }
-function wireEisenhower(scope){ wireGroupSort(scope); _wireMatrixSwitch(scope); _matrixDragId=null; _wireMatrixMinis(scope);
+function wireEisenhower(scope){ wireGroupSort(scope); _wireMatrixSwitch(scope); _matrixDragId=null; _wireMatrixMinis(scope); _wireQuadAdds(scope,'eisenhower');
   scope.querySelectorAll('.ei-q').forEach(q=>{
     q.addEventListener('dragover',e=>{e.preventDefault();q.classList.add('drop');});
     q.addEventListener('dragleave',()=>q.classList.remove('drop'));
@@ -3959,11 +4001,11 @@ function impactHTML(){
   const cells=IMPACT_QUADS.map(qd=>{ const items=sortTasks(pool.filter(t=>taskImpact(t)===qd.k));
     const activeN=items.filter(t=>!isTaskDone(t)).length;
     const mini=items.map(_matrixMini).join('')||'<div class="ei-empty">No tasks</div>';
-    return `<div class="ei-q" data-impact="${qd.k}" style="--qc:${qd.c}"><div class="ei-qh"><span class="ei-qdot"></span><span class="ei-qt">${qd.t}</span><span class="ei-qsub">${qd.sub}</span><span class="n">${activeN}</span></div><div class="ei-qbody">${mini}</div></div>`;
+    return `<div class="ei-q" data-impact="${qd.k}" style="--qc:${qd.c}"><div class="ei-qh"><span class="ei-qdot"></span><span class="ei-qt">${qd.t}</span><span class="ei-qsub">${qd.sub}</span><span class="n">${activeN}</span></div><div class="ei-qbody">${mini}</div><div class="ei-add"><input placeholder="Add to ${esc(qd.t)}…" maxlength="200"><button type="button" tabindex="-1">+</button></div></div>`;
   }).join('');
   return `<div class="view-ctl">${matrixSwitchHTML()}${groupSortBar(false)}</div><div class="ei-grid">${cells}</div><div class="ei-note"><b>Productive</b> moves you forward · <b>Attractive</b> feels good to do. Uncategorised tasks sit in <b>Unnecessary</b> — right-click a task (or open its ⋯) to set its impact, or drag a card into another quadrant.</div>`;
 }
-function wireImpact(scope){ wireGroupSort(scope); _wireMatrixSwitch(scope); _matrixDragId=null; _wireMatrixMinis(scope);
+function wireImpact(scope){ wireGroupSort(scope); _wireMatrixSwitch(scope); _matrixDragId=null; _wireMatrixMinis(scope); _wireQuadAdds(scope,'impact');
   scope.querySelectorAll('.ei-q').forEach(q=>{
     q.addEventListener('dragover',e=>{e.preventDefault();q.classList.add('drop');});
     q.addEventListener('dragleave',()=>q.classList.remove('drop'));
@@ -4578,12 +4620,12 @@ function syncTimerRestore(){ /* manual collapse removed — no restore pill to m
 
 function renderTasks(){
   if($('tab-horizon')&&$('tab-horizon').classList.contains('show')){ renderHorizonTab(); return; }   // Horizon is its own page now; horizon sub-renders re-route here
+  if($('tab-matrix')&&$('tab-matrix').classList.contains('show')){ renderMatrixTab(); return; }   // Matrix is its own page; its wire-handlers call renderTasks() to refresh — re-route here
   if($('tab-calendar')&&$('tab-calendar').classList.contains('show')){ const cb=$('calBody'); if(cb){ cb.innerHTML=calendarHTML(); wireCalendar(cb); } return; }   // Calendar is its own page; its wire-handlers call renderTasks() to refresh — re-route here so view switch / pager / drag actually update
   const body=$('taskBody'); if(!body)return; const today=todayKey(); applyTaskWidth();
   taskView=migrateView(taskView); updateTvHead(taskView);
   if(SMART_VIEWS.includes(taskView)){ renderSmartList(taskView); return; }   // All · Today · Next 7 days · Inbox
   if(taskView==='boards'){ body.innerHTML=boardsHTML(); wireBoards(body); return; }
-  if(taskView==='matrix'){ body.innerHTML=matrixHTML(); wireMatrix(body); return; }
   if(taskView==='dashboard'){ body.innerHTML=dashboardHTML(); wireDashboard(body); return; }
   if(CAROUSEL_VIEWS.includes(taskView) && taskLayout()==='columns'){ renderCarousel(taskView); return; }
   if(taskView==='day'){ renderDayList(body); return; }   // Days list view = day strip + selected day's tasks
@@ -4591,7 +4633,7 @@ function renderTasks(){
   renderSmartList('all');   // fallback
 }
 /* obsolete view ids → new homes (Agenda board, standalone Kanban/Timeline pages are now All + a view mode) */
-function migrateView(v){ return ({board:'all',kanban:'all',timeline:'all',calendar:'all',day:'all',horizon:'all'})[v]||v; }
+function migrateView(v){ return ({board:'all',kanban:'all',timeline:'all',calendar:'all',day:'all',horizon:'all',matrix:'all'})[v]||v; }
 /* ---- Inbox: multiple named lists, each with its own quick-add ---- */
 function inboxHTML(){ const all=topLevel(applyFilter(tasksInHorizon(''),taskFilter).sort(taskSort));
   const def=inboxLists[0].id; const multi=inboxLists.length>1;
@@ -5473,6 +5515,7 @@ function switchTab(name){
   $('tab-'+name).classList.add('show');
   if(name==='stats')refreshStats();
   if(name==='calendar'){ const cb=$('calBody'); cb.innerHTML=calendarHTML(); wireCalendar(cb); }
+  if(name==='matrix')renderMatrixTab();
   if(name==='horizon')renderHorizonTab();
   if(name==='countdown')renderCountdownTab();
   if(name==='habits')renderHabitsTab();
