@@ -98,7 +98,10 @@ const DUR_WORDS = /(time spent|time|duration|hours?|hrs?|mins?|minutes?|elapsed|
 
 export default {
   async fetch(request, env) {
-    const origin = env.ALLOW_ORIGIN || '*';
+    // Default CORS to the live Focus Den origin so other websites can't make a visitor's
+    // browser drive this proxy. Override with the ALLOW_ORIGIN secret if you serve the app
+    // from a different origin (custom domain, localhost); set it to '*' to allow all.
+    const origin = env.ALLOW_ORIGIN || 'https://pycoder0697.github.io';
     const cors = {
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',

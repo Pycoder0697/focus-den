@@ -1,0 +1,10 @@
+# OS / editor cruft
+.DS_Store
+
+# Cloudflare Wrangler local state (can cache build artifacts)
+**/.wrangler/
+
+# Local secrets (also covered by per-folder .gitignores — belt & suspenders)
+**/.env
+**/.dev.vars
+**/vapid-private.json

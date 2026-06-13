@@ -58,7 +58,9 @@ wrangler secret put RTDB_KEY            # the app's CLOUD.key (currently 'Jacr06
 - Open the **installed** PWA → Settings → turn on **Session-end notifications** → Allow.
 - Start a short focus block, then fully close the app.
 - Within ~1 minute of the block ending you should get the banner.
-- Manual worker trigger (don't wait for cron): visit `https://<your-worker>.workers.dev/run`.
+- Manual worker trigger (don't wait for cron): set a key with `wrangler secret put RUN_KEY`,
+  then visit `https://<your-worker>.workers.dev/run?key=<RUN_KEY>`. Without `RUN_KEY` set the
+  `/run` endpoint is disabled (returns 404) so it can't be hit by anyone who learns the URL.
 
 ## Notes
 - **Timing:** cron granularity is 1 minute, so the closed-app push can be up to ~60 s late.

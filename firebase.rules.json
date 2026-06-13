@@ -1,0 +1,24 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "focusden": {
+      "$key": {
+        ".read": true,
+        ".write": true,
+        ".validate": "newData.hasChildren()"
+      }
+    },
+
+    "push": {
+      "$key": {
+        ".read": true,
+        ".write": true,
+        "$device": {
+          ".validate": "newData.hasChildren()"
+        }
+      }
+    }
+  }
+}

@@ -26,8 +26,14 @@ export default {
   async scheduled(event, env, ctx) { ctx.waitUntil(runCron(env)); },
   async fetch(req, env) {
     const u = new URL(req.url);
-    // Manual trigger for testing: GET /run  (handy before the cron's next minute)
+    // Manual trigger for testing, GATED by a secret so it can't be hit (or used to leak the
+    // _DBG diagnostics) by anyone who learns the worker URL. Set it once:
+    //   wrangler secret put RUN_KEY
+    // then call /run?key=<RUN_KEY>. With RUN_KEY unset the endpoint is disabled entirely.
+    // Normal closed-app push delivery is the cron `scheduled()` handler above and is unaffected.
     if (u.pathname === '/run') {
+      if (!env.RUN_KEY || u.searchParams.get('key') !== env.RUN_KEY)
+        return new Response('Not found', { status: 404 });
       try { const n = await runCron(env); return json({ ran: true, processed: n, debug: _DBG }); }
       catch (e) { return json({ error: String(e && e.stack ? e.stack : e), debug: _DBG }, 500); }
     }
