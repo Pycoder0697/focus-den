@@ -528,11 +528,16 @@
   .hb-calsech span{font-size:12.1px;font-weight:500;color:var(--faint)}
   .hb-row{display:flex;align-items:center;gap:12px;padding:11px 6px;border-bottom:1px solid var(--stroke-soft)}
   .hb-row:last-child{border-bottom:none}
-  .hb-check{width:24px;height:24px;border-radius:50%;border:2px solid var(--hc,var(--accent));background:transparent;color:transparent;display:grid;place-items:center;cursor:pointer;flex:none;padding:0;transition:.15s}
+  .hb-check{position:relative;width:24px;height:24px;border-radius:50%;border:2px solid var(--hc,var(--accent));background:transparent;color:transparent;display:grid;place-items:center;cursor:pointer;flex:none;padding:0;transition:.15s}
   .hb-check svg{width:12px;height:12px}
   .hb-check.on{background:var(--hc,var(--accent));color:#fff}
   .hb-check.sm{width:21px;height:21px}
   .hb-check:disabled{opacity:.3;cursor:default;border-color:var(--stroke)}
+  /* partly-logged amount goal: the static ring steps aside for a progress donut */
+  .hb-check.part{border-color:transparent}
+  .hb-check svg.hb-donut{position:absolute;inset:0;width:100%;height:100%}
+  .hb-donut-tr{fill:none;stroke:var(--hc,var(--accent));opacity:.25;stroke-width:2.4}
+  .hb-donut-fg{fill:none;stroke:var(--hc,var(--accent));stroke-width:2.4;stroke-linecap:round;transition:stroke-dashoffset .2s}
   .hb-emoji{font-size:22px;flex:none;line-height:1}
   .hb-emoji.sm{font-size:16.5px}
   .hb-meta{flex:1;min-width:0}
@@ -4781,6 +4786,14 @@ function checkHabit(h,k){ const goal=h.goal||1;
   setHabit(h,k, cur>=goal ? 0 : Math.min(goal,cur+step)); }
 /* the glyph shown in a checked cell — a tick, or the habit's own emoji ("Checked-in Style" in TickTick) */
 function habitTick(h){ return (h.checkStyle==='icon') ? esc(h.emoji||'✅') : '<span class="hb-tick">✓</span>'; }
+/* contents of an .hb-check button: a ✓ when the day's goal is met; for a multi-step amount goal
+   (goal>1) that's been partly logged, a progress donut filling toward the goal; else an empty ✓.
+   Pair with the `.part` class on the button (see habitPartOn) so the static ring becomes the track. */
+function habitCheckInner(h,k,done){ if(done) return CHK;
+  const goal=h.goal||1, v=habitVal(h,k);
+  if(goal>1 && v>0){ const r=10.6, C=2*Math.PI*r, off=C*(1-Math.min(1,v/goal));
+    return `<svg class="hb-donut" viewBox="0 0 24 24"><circle class="hb-donut-tr" cx="12" cy="12" r="${r}"/><circle class="hb-donut-fg" cx="12" cy="12" r="${r}" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" transform="rotate(-90 12 12)"/></svg>`; }
+  return CHK; }
 /* fixed-length challenges read "Day X / N"; daysBetween counts inclusively from the start */
 function habitDayIndex(h,k){ if(!h.start) return 0; return daysBetween(h.start,k)+1; }
 function habitDurLabel(h){ if(!(h.goalDays>0)) return ''; const i=Math.max(1,Math.min(h.goalDays,habitDayIndex(h,todayKey()))); return `Day ${i}/${h.goalDays}`; }
@@ -4835,7 +4848,7 @@ function habitListHTML(live){ const today=todayKey(); const start=addDays(today,
     const todayDue=habitDueOn(h,today), todayDone=habitDoneOn(h,today);
     const prog=(h.goal||1)>1&&todayDue&&!todayDone?` · ${habitVal(h,today)}/${h.goal}${h.unit?' '+esc(h.unit):''}`:'';
     return `<div class="hb-row ${h.id===habitSelId?'sel':''}" data-id="${h.id}">
-      <button class="hb-check ${todayDone?'on':''}" data-hb-toggle="${h.id}" style="--hc:${h.color||'var(--accent)'}" ${todayDue?'':'disabled'} title="${todayDue?'Check in for today':'Not scheduled today'}">${CHK}</button>
+      <button class="hb-check ${todayDone?'on':''} ${habitPartOn(h,today)?'part':''}" data-hb-toggle="${h.id}" style="--hc:${h.color||'var(--accent)'}" ${todayDue?'':'disabled'} title="${todayDue?'Check in for today':'Not scheduled today'}">${habitCheckInner(h,today,todayDone)}</button>
       <div class="hb-emoji">${esc(h.emoji||'✅')}</div>
       <div class="hb-meta"><div class="hb-name">${esc(h.name)}</div><div class="hb-sub">${esc(habitSubLabel(h))} · 🔥 ${habitStreak(h)}${prog}</div></div>
       <div class="hb-strip">${strip}</div>
@@ -4924,7 +4937,7 @@ function afterHabitChange(){ save(); gamePulse('habit');
 function habitTodaySectionHTML(){ const k=todayKey(); const due=habitsForDay(k); if(!due.length) return '';
   const rows=due.map(h=>{ const done=habitDoneOn(h,k); const prog=(h.goal||1)>1&&!done?`${habitVal(h,k)}/${h.goal}${h.unit?' '+esc(h.unit):''} · `:'';
     return `<div class="hb-trow ${done?'done':''}" data-id="${h.id}">
-      <button class="hb-check sm ${done?'on':''}" data-hb-toggle="${h.id}" style="--hc:${h.color||'var(--accent)'}">${CHK}</button>
+      <button class="hb-check sm ${done?'on':''} ${habitPartOn(h,k)?'part':''}" data-hb-toggle="${h.id}" style="--hc:${h.color||'var(--accent)'}">${habitCheckInner(h,k,done)}</button>
       <span class="hb-emoji sm">${esc(h.emoji||'✅')}</span><span class="hb-tname">${esc(h.name)}</span>
       <span class="hb-tstreak">${prog}🔥 ${habitStreak(h)}</span></div>`; }).join('');
   const left=due.filter(h=>!habitDoneOn(h,k)).length;
