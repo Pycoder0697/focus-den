@@ -3915,13 +3915,24 @@ function _scrollParentAt(y){ const x=(window.innerWidth/2); const el=document.el
   for(let z=el; z; z=z.parentElement){ const o=getComputedStyle(z).overflowY; if((o==='auto'||o==='scroll') && z.scrollHeight>z.clientHeight+4) return z; } return null; }
 function _stopScroll(){ if(_scrTimer){ clearInterval(_scrTimer); _scrTimer=null; } }
 
+/* Tap binder for in-card controls (check / ⋯ / subtoggle / calendar+matrix chip buttons).
+   iOS suppresses or delays the synthetic `click` on these (the "have to tap twice/thrice"
+   bug) — so act on `touchend` of the FIRST tap (preventing the ghost click), and keep a
+   deduped `click` for mouse. Mirrors _ctxBind, which already fixed this for menu items. */
+function _tapBind(node, run){
+  let moved=false,sx=0,sy=0,tEnd=0;
+  node.addEventListener('touchstart',e=>{ moved=false; const p=e.touches[0]; if(p){sx=p.clientX;sy=p.clientY;} },{passive:true});
+  node.addEventListener('touchmove',e=>{ const p=e.touches[0]; if(p&&Math.hypot(p.clientX-sx,p.clientY-sy)>8) moved=true; },{passive:true});
+  node.addEventListener('touchend',e=>{ if(moved)return; e.preventDefault(); e.stopPropagation(); tEnd=Date.now(); run(e); },{passive:false});
+  node.addEventListener('click',e=>{ if(Date.now()-tEnd<600)return; run(e); });   // mouse + dedupe the synthetic click after a touch
+}
 function wireTasks(scope, re){ re=re||(()=>renderTasks());
   scope.querySelectorAll('.tk').forEach(el=>{ const id=el.dataset.id; const t=tasks.find(x=>x.id===id); if(!t)return;
   el.querySelectorAll('[data-act]').forEach(node=>{ if(node.closest('.tk')!==el)return; // skip nested-child controls
     const act=node.dataset.act;
-    if(act==='check') node.onclick=(e)=>{e.stopPropagation();toggleTask(t);save();re();};
-    else if(act==='menu') node.onclick=(e)=>{e.stopPropagation();openCtxMenu(el.querySelector('.tk-menu')||node,buildTaskMenu(t,re));};
-    else if(act==='subtoggle') node.onclick=(e)=>{e.stopPropagation(); if(expandedGoals.has(t.id)){expandedGoals.delete(t.id);collapseSound();} else {expandedGoals.add(t.id);expandSound();} re();};
+    if(act==='check') _tapBind(node,(e)=>{e.stopPropagation();toggleTask(t);save();re();});
+    else if(act==='menu') _tapBind(node,(e)=>{e.stopPropagation();openCtxMenu(el.querySelector('.tk-menu')||node,buildTaskMenu(t,re));});
+    else if(act==='subtoggle') _tapBind(node,(e)=>{e.stopPropagation(); if(expandedGoals.has(t.id)){expandedGoals.delete(t.id);collapseSound();} else {expandedGoals.add(t.id);expandSound();} re();});
   });
   // inline add-subtask row (only the one belonging to this card)
   const sa=el.querySelector(':scope > .tk-subs > .tk-children > .tk-subadd'); if(sa){ const inp=sa.querySelector('.tk-subinp'), ent=sa.querySelector('.tk-subent');
@@ -4164,7 +4175,7 @@ function _startMatrixGesture(e,mini,t){
   document.addEventListener('pointercancel',onUp);
 }
 function _wireMatrixMinis(scope){
-  scope.querySelectorAll('.ei-mini [data-act="check"]').forEach(n=>{ n.onclick=e=>{ e.stopPropagation(); const t=tasks.find(x=>x.id===n.closest('.ei-mini').dataset.id); if(t){toggleTask(t);save();renderTasks();} }; });
+  scope.querySelectorAll('.ei-mini [data-act="check"]').forEach(n=>{ _tapBind(n,e=>{ e.stopPropagation(); const t=tasks.find(x=>x.id===n.closest('.ei-mini').dataset.id); if(t){toggleTask(t);save();renderTasks();} }); });
   scope.querySelectorAll('.ei-mini').forEach(m=>{ const t=tasks.find(x=>x.id===m.dataset.id); if(!t)return;
     m.addEventListener('contextmenu',e=>{ e.preventDefault(); openCtxMenu(m, buildTaskMenu(t,()=>renderTasks())); });
     m.addEventListener('pointerdown',e=>{ if(e.button===2)return; if(e.target.closest('[data-act="check"]'))return; _startMatrixGesture(e,m,t); });
@@ -4694,8 +4705,8 @@ function calAddInput(holder,assign){ if(holder.querySelector('.cv2-newinp'))retu
 function wireMonth(scope){
   scope.querySelectorAll('.cv2-chip').forEach(ch=>{ const t=tasks.find(x=>x.id===ch.dataset.id); if(!t)return;
     ch.querySelectorAll('[data-cact]').forEach(node=>{ const a=node.dataset.cact;
-      if(a==='check') node.onclick=e=>{e.stopPropagation();toggleTask(t);save();renderTasks();};
-      else if(a==='menu') node.onclick=e=>{e.stopPropagation(); const anc=ch.querySelector('.cv2-cm')||node; openCtxMenu(anc,buildTaskMenu(t,()=>renderTasks()));}; });
+      if(a==='check') _tapBind(node,e=>{e.stopPropagation();toggleTask(t);save();renderTasks();});
+      else if(a==='menu') _tapBind(node,e=>{e.stopPropagation(); const anc=ch.querySelector('.cv2-cm')||node; openCtxMenu(anc,buildTaskMenu(t,()=>renderTasks()));}); });
     ch.addEventListener('dragstart',e=>{ taskDragId=t.id; ch.classList.add('tkdrag'); try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',t.id);}catch(_){}});
     ch.addEventListener('dragend',()=>{ taskDragId=null; ch.classList.remove('tkdrag'); }); });
   scope.querySelectorAll('.cv2-cell').forEach(cell=>{ const k=cell.dataset.day;
@@ -4787,8 +4798,8 @@ function openWeekAdd(canvas,day,di,mins){ if(canvas.querySelector('.wk-newinp'))
 function wireWeekGrid(scope){ const wk=weekStartMon(calAnchor);
   scope.querySelectorAll('.wk-adchip').forEach(ch=>{ const t=tasks.find(x=>x.id===ch.dataset.id); if(!t)return;
     ch.querySelectorAll('[data-wact]').forEach(node=>{ const a=node.dataset.wact;
-      if(a==='check')node.onclick=e=>{e.stopPropagation();toggleTask(t);save();renderTasks();};
-      else node.onclick=e=>{e.stopPropagation();openCtxMenu(node,buildTaskMenu(t,()=>renderTasks()));}; });
+      if(a==='check')_tapBind(node,e=>{e.stopPropagation();toggleTask(t);save();renderTasks();});
+      else _tapBind(node,e=>{e.stopPropagation();openCtxMenu(node,buildTaskMenu(t,()=>renderTasks()));}); });
     ch.addEventListener('dragstart',e=>{ taskDragId=t.id; try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',t.id);}catch(_){}});
     ch.addEventListener('dragend',()=>{ taskDragId=null; }); });
   scope.querySelectorAll('.wk-adcell').forEach(cell=>{ const k=cell.dataset.day;
