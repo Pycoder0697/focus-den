@@ -1735,6 +1735,9 @@
   <div class="field"><label>Exam date (D-counter)</label><input type="date" id="setExam"></div>
   <div class="field"><label>Matrix: "urgent" within (days)</label><input type="number" id="setUrgent" min="0" max="30"></div>
   <div class="field"><label>Daily XP goal (Quest streak)</label><input type="number" id="setXpGoal" min="20" max="2000"></div>
+  <div class="pref-row" style="padding:6px 0"><span>Task discipline (friction)<br><small style="color:var(--faint);font-weight:400">Windows, daily cap, the "why" + spoken oath on every manual add</small></span><div class="toggle" id="setFriction"></div></div>
+  <div class="field"><label>Max tasks / day</label><input type="number" id="setMaxTasks" min="1" max="50"></div>
+  <div class="field" style="flex-direction:column;align-items:stretch;gap:6px"><label>Add-task windows</label><input id="setAddWindows" placeholder="06:00-08:00, 21:00-23:00" autocapitalize="off" autocorrect="off" spellcheck="false"><small style="color:var(--faint);font-weight:400">24h times, dash-separated pairs; comma between windows. Blank = no restriction.</small></div>
   <div class="pref-row" style="padding:6px 0"><span>Session-end notifications<br><small style="color:var(--faint);font-weight:400">Banner when a focus block or break ends</small></span><div class="toggle" id="setNotify"></div></div>
   <div class="field"><label>Background image</label><div style="display:flex;gap:8px"><input type="file" id="bgFile" accept="image/*" style="display:none"><button class="minor" id="bgPick">Upload</button><button class="minor" id="bgReset">Reset</button></div></div>
   <div class="field" style="border:none"><label>Data backup</label><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="minor" id="exportJson">Export JSON</button><input type="file" id="importFile" accept="application/json,.json" style="display:none"><button class="minor" id="importJson">Import JSON</button></div></div>
@@ -1814,6 +1817,9 @@
   <div id="tdActions" style="display:none;gap:8px;margin-top:4px"><button class="minor" id="tdDuplicate">⧉ Duplicate</button><button class="minor" id="tdDelete" style="color:var(--rose)">🗑 Delete</button></div>
   <button class="save" id="tdSave">Save task</button>
 </div></div>
+
+<!-- TASK-ADD FRICTION MODAL (content built in JS; manual tasks only) -->
+<div class="overlay" id="ovFriction"><div class="modal"></div></div>
 
 <!-- TIMESTRIPE-STYLE DATE PICKER (shared by task cards + new-task modal) -->
 <div id="dpPop" class="dp-pop"></div>
@@ -2120,7 +2126,7 @@ const todayKey=()=>dateKey(Date.now());
 /* ---------- state ---------- */
 const PALETTE=['#f5a623','#ff7a33','#2f9bff','#e0218a','#ff6b4a','#4f8cff','#c026d3','#5fc24a','#3fb36b','#a78bfa','#5fd3c4'];
 const FD_VERSION='2.10.0';
-const DEF={focus:50,short:10,long:30,sessions:4,rounds:4,goal:240,autostart:false,examDate:'',urgentDays:3,theme:'dark',notify:false,xpGoal:150};
+const DEF={focus:50,short:10,long:30,sessions:4,rounds:4,goal:240,autostart:false,examDate:'',urgentDays:3,theme:'dark',notify:false,xpGoal:150,frictionOn:true,maxTasksPerDay:7,addWindows:[{s:'06:00',e:'08:00'},{s:'21:00',e:'23:00'}]};
 let settings=Object.assign({...DEF}, JSON.parse(store.get('fd_settings')||'{}'));
 let subjects=JSON.parse(store.get('fd_subjects')||'null');
 if(!subjects){ // 📎 default subjects seeded from your YPT screenshots — edit/delete freely
@@ -2756,7 +2762,7 @@ function renderSubjects(){
       const add=document.createElement('div'); add.className='add-todo';
       add.innerHTML=`<input placeholder="Add task…" maxlength="200"><button title="Quick add">Add</button><button class="adv" title="Add with date, time, repeat">⚙</button>`;
       const inp=add.querySelector('input');
-      const doAdd=()=>{const v=inp.value.trim();if(!v)return;const t=newTask(v,'');setTaskSubjects(t,[s.id]);tasks.push(t);save();renderSubjects();};
+      const doAdd=()=>{const v=inp.value.trim();if(!v)return;const t=newTask(v,'');setTaskSubjects(t,[s.id]);gateAddTask(t,()=>{tasks.push(t);inp.value='';save();renderSubjects();});};
       add.querySelector('button:not(.adv)').onclick=doAdd; inp.addEventListener('keydown',e=>{if(e.key==='Enter')doAdd();});
       add.querySelector('.adv').onclick=()=>openTodo(s.id,null);
       td.appendChild(add);
@@ -2880,7 +2886,9 @@ $('tdSave').onclick=()=>{ if(!_tdCtx||!_tdDraft)return; const {task}=_tdCtx;
   const day=schedHorizon(target)==='day';
   target.start = day ? (_tdDraft.start||'') : ''; target.dur = day ? (_tdDraft.dur||0) : 0;
   clampRepeat(target);
-  if(!task) tasks.push(target);
+  if(!task){   // brand-new task built in the detail modal → run the add-friction gate before it lands
+    $('ovTodo').classList.remove('show'); _tdCtx=null; _tdDraft=null;
+    gateAddTask(target, ()=>{ tasks.push(target); save(); refreshTaskSurfaces(); }); return; }
   save(); $('ovTodo').classList.remove('show'); _tdCtx=null; _tdDraft=null; refreshTaskSurfaces(); };
 function quickStopwatch(subjectId){
   const sameRun = active && mode==='stopwatch' && $('activeSubject').value===subjectId;
@@ -3159,7 +3167,7 @@ function addDays(key,n){ const [y,m,d]=key.split('-').map(Number); const dt=new 
 function daysBetween(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
 function prettyDate(key){ const [y,m,d]=key.split('-').map(Number); return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]; }
 const PRI_COL=['transparent','#5fc24a','#f5a623','#ff5a5a'];
-function newTask(name,due){ taskSound(); return {id:uid('t'),name,desc:'',impact:'',due:due||'',dueEnd:'',priority:0,subjectId:'',subjectIds:[],checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
+function newTask(name,due){ taskSound(); return {id:uid('t'),name,desc:'',why:'',impact:'',due:due||'',dueEnd:'',priority:0,subjectId:'',subjectIds:[],checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
 
 /* ---- TeuxDeux-style smart entry: parse priority, date & repeat from free text ---- */
 const SMART_WD={sunday:0,sun:0,monday:1,mon:1,tuesday:2,tues:2,tue:2,wednesday:3,weds:3,wed:3,thursday:4,thurs:4,thur:4,thu:4,friday:5,fri:5,saturday:6,sat:6};
@@ -3203,6 +3211,96 @@ function smartTask(raw, ctxAssign){ const p=parseSmart(raw); const t=newTask(p.n
   if(p.priority) t.priority=p.priority;
   if(p.repeat!=='none'){ if(!schedHorizon(t)){ t.horizon='day'; t.hkey=''; t.due=todayKey(); t.dueEnd=''; } t.repeat=p.repeat; }
   clampRepeat(t); return t; }
+
+/* ================= TASK-ADD FRICTION =================================================
+   Five intentional brakes on MANUAL task creation. Notion-pulled rows always bypass
+   (the gate is only reached from hand-built add inputs, and short-circuits on a
+   notionSourceId / when settings.frictionOn is off). Every manual add funnels through
+   gateAddTask(t, finalize): finalize() pushes + saves + re-renders only once cleared.
+     1. require a priority, due date OR estimated time
+     2. ask "Why does this matter today?" (placeholder hint, not pre-filled text)
+     3. read an "I will … by … because …" oath out loud before it lands
+     4. cap manual tasks per day (settings.maxTasksPerDay; remove one to free a slot)
+     5. only inside the add-windows (settings.addWindows; editable in Settings)
+   ==================================================================================== */
+function fricMin(s){ const [h,m]=String(s||'').split(':').map(Number); return (h||0)*60+(m||0); }
+function fricNowMin(){ const p=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date());
+  const h=+(p.find(x=>x.type==='hour').value), m=+(p.find(x=>x.type==='minute').value); return (h%24)*60+m; }
+function addWindows(){ return (Array.isArray(settings.addWindows)?settings.addWindows:[]).filter(w=>w&&w.s&&w.e); }
+function inAddWindow(){ const ws=addWindows(); if(!ws.length) return true; const now=fricNowMin();
+  return ws.some(w=>{ const a=fricMin(w.s),b=fricMin(w.e); return a<=b ? (now>=a&&now<b) : (now>=a||now<b); }); }   // a>b ⇒ window wraps midnight
+function addWindowsLabel(){ const ws=addWindows(); return ws.length? ws.map(w=>to12(w.s)+'–'+to12(w.e)).join(' or ') : ''; }
+function addCap(){ const n=parseInt(settings.maxTasksPerDay); return isNaN(n)?7:Math.max(1,n); }
+function manualTasksToday(){ const k=todayKey(); return tasks.filter(t=>!t.notionSourceId && dateKey(t.created||Date.now())===k).length; }   // habits live in their own array, so they never count here
+
+function canAddNow(){
+  if(!settings.frictionOn) return true;
+  if(!inAddWindow()){ frictionBlock('🚪 Outside your add-task window', `Tasks can only be added during ${addWindowsLabel()||'your set windows'}. Come back then, or change the windows under Settings → Task discipline.`); return false; }
+  if(manualTasksToday()>=addCap()){ frictionBlock('🧱 Daily task limit reached', `You've already added ${addCap()} tasks today. To add another, remove one first — the cap resets tomorrow.`); return false; }
+  return true;
+}
+/* Notion-mirror tasks and friction-off both short-circuit straight to finalize. */
+function gateAddTask(t, finalize){
+  if(!settings.frictionOn || (t&&t.notionSourceId)){ finalize&&finalize(); return; }
+  if(!canAddNow()) return;
+  openFrictionModal(t, finalize);
+}
+
+let _fricTask=null, _fricFinalize=null;
+function frictionBlock(title,msg){
+  _fricTask=null; _fricFinalize=null;
+  $('ovFriction').querySelector('.modal').innerHTML =
+    `<h2 style="line-height:1.3">${esc(title)}</h2>
+     <p style="color:var(--muted);font-size:15px;line-height:1.5;margin:6px 0 16px">${esc(msg)}</p>
+     <button class="save" id="fricClose">OK</button>`;
+  $('ovFriction').classList.add('show');
+  $('fricClose').onclick=()=>$('ovFriction').classList.remove('show');
+}
+function closeFriction(){ $('ovFriction').classList.remove('show'); _fricTask=null; _fricFinalize=null; }
+function openFrictionModal(t, finalize){ _fricTask=t; _fricFinalize=finalize; renderFrictionForm(); $('ovFriction').classList.add('show'); }
+
+function renderFrictionForm(){ const t=_fricTask; if(!t) return;
+  $('ovFriction').querySelector('.modal').innerHTML = `
+    <h2 style="line-height:1.3">Add with intention</h2>
+    <p style="color:var(--muted);font-size:13.5px;margin:2px 0 12px">“${esc(t.name||'New task')}”</p>
+    <div class="field"><label>Priority</label><select id="fricPri"><option value="0">None</option><option value="1">Low</option><option value="2">Medium</option><option value="3">High</option></select></div>
+    <div class="field"><label>Due date</label><input type="date" id="fricDue"></div>
+    <div class="field"><label>Estimated time (min)</label><input type="number" id="fricDur" min="0" max="600" placeholder="min" style="width:90px"></div>
+    <div class="field" style="flex-direction:column;align-items:stretch;gap:6px;border:none"><label>Why does this matter today?</label><textarea id="fricWhy" rows="3" placeholder="Moves needle on top weekly goal?"></textarea></div>
+    <p id="fricErr" style="color:var(--rose);font-size:12.5px;min-height:15px;margin:0 0 6px"></p>
+    <button class="save" id="fricNext">Next →</button>
+    <button class="minor" id="fricCancel" style="width:100%;margin-top:8px">Cancel</button>`;
+  $('fricPri').value=String(t.priority||0);
+  $('fricDue').value=t.due||'';
+  $('fricDur').value=t.dur?t.dur:'';
+  $('fricWhy').value=t.why||'';
+  $('fricCancel').onclick=closeFriction;
+  $('fricNext').onclick=()=>{
+    const pri=+($('fricPri').value)||0, due=$('fricDue').value||'', dur=parseInt($('fricDur').value)||0, why=$('fricWhy').value.trim();
+    if(!pri && !due && !dur){ $('fricErr').textContent='Set at least one: priority, due date, or estimated time.'; return; }
+    if(!why){ $('fricErr').textContent='Write why this matters today.'; return; }
+    t.priority=pri; t.dur=dur; t.why=why;
+    if(due){ t.due=due; t.dueEnd=''; if(!t.horizon){ t.horizon='day'; t.hkey=''; } }
+    renderFrictionOath();
+  };
+  setTimeout(()=>{ const w=$('fricWhy'); if(w&&!w.value) w.focus(); },60);
+}
+function renderFrictionOath(){ const t=_fricTask; if(!t) return;
+  let when='today'; if(t.due) when='by '+prettyDate(t.due); else if(t.dur) when='in '+t.dur+' min';
+  const sentence=`I will ${t.name||'do this'} ${when} because ${t.why}`;
+  $('ovFriction').querySelector('.modal').innerHTML = `
+    <h2 style="line-height:1.3">Say it out loud</h2>
+    <p style="color:var(--muted);font-size:13.5px;margin:2px 0 10px">Read this aloud before it goes on your list:</p>
+    <blockquote style="font-size:18px;line-height:1.5;font-weight:600;border-left:3px solid var(--accent);padding:8px 0 8px 14px;margin:0 0 16px;color:var(--ink)">${esc(sentence)}</blockquote>
+    <label id="fricSaidRow" style="display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--muted);margin-bottom:16px;cursor:pointer"><input type="checkbox" id="fricSaid" style="margin-top:2px;width:18px;height:18px;flex:0 0 auto"> I said it out loud.</label>
+    <button class="save" id="fricAdd">Add task</button>
+    <button class="minor" id="fricBack" style="width:100%;margin-top:8px">← Back</button>`;
+  $('fricBack').onclick=renderFrictionForm;
+  $('fricAdd').onclick=()=>{
+    if(!$('fricSaid').checked){ $('fricSaidRow').style.color='var(--rose)'; return; }
+    const fin=_fricFinalize; closeFriction(); if(fin) fin();
+  };
+}
 /* ---- UI sounds: soft, warm, rounded WebAudio voices (TimeStripe-like). All respect settings.taskSound. ----
    One shared `_tone` voice gives every sound the same character: a lowpass-filtered sine/triangle with a
    gentle pitch glide and a soft attack — pleasant and pillowy rather than a hard click. `_taskVia` (set by
@@ -3289,7 +3387,8 @@ function installHoverAdd(body, addTask, reopenKey){
 }
 function enableHoverAdd(scope){
   scope.querySelectorAll('.ccol').forEach(col=>{ if(col._addTask) installHoverAdd(col.querySelector('.ccol-body'), col._addTask, col.dataset.addkey||null); }); }
-function duplicateTask(t){ const c=JSON.parse(JSON.stringify(t)); c.id=uid('t'); c.created=Date.now(); c.done=false; c.doneOn='';
+function duplicateTask(t){ if(!canAddNow()) return null;   // a clone still costs a slot + must be inside the add window
+  const c=JSON.parse(JSON.stringify(t)); c.id=uid('t'); c.created=Date.now(); c.done=false; c.doneOn='';
   c.checklist=(t.checklist||[]).map(x=>({id:uid('c'),text:x.text,done:false}));
   c.notionSourceId=''; c.notionPageId='';   // a copy isn't the same Notion row — it gets its own (created below if it's in a synced list)
   const i=tasks.indexOf(t); if(i>=0) tasks.splice(i+1,0,c); else tasks.push(c); taskSound(); save(); notionMaybeCreate(c); return c; }
@@ -3607,7 +3706,7 @@ function renderTaskList(items, key){
   return html;
 }
 /* create a child (subtask) of `parent`, inheriting its schedule so it sits in the same column */
-function addSubtask(parent,name){ name=(name||'').trim(); if(!name)return null; expandedGoals.add(parent.id);
+function addSubtask(parent,name){ name=(name||'').trim(); if(!name)return null; if(!canAddNow()) return null; expandedGoals.add(parent.id);
   const c=newTask(name,''); c.parentId=parent.id; c.horizon=parent.horizon||''; c.hkey=parent.hkey||'';
   c.due=parent.due||''; c.dueEnd=''; setTaskSubjects(c,[...subjectIdsOf(parent)]); clampRepeat(c); tasks.push(c); save(); return c; }
 
@@ -3893,7 +3992,7 @@ function renderSmartList(view){ const body=$('taskBody');
     node.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); node.classList.remove('drop');
       const t=tasks.find(x=>x.id===taskDragId); if(t){ desc.drop(t); clampRepeat(t); save(); renderTasks(); } });
     // in-column quick-add (kanban): create a task that lands in this bucket, at the top
-    if(mode==='kanban'){ node._addTask=(v)=>{ if(!v)return; const t=smartTask(v); desc.drop(t); clampRepeat(t); tasks.push(t); save(); renderTasks(); };
+    if(mode==='kanban'){ node._addTask=(v)=>{ if(!v)return; const t=smartTask(v); desc.drop(t); clampRepeat(t); gateAddTask(t,()=>{ tasks.push(t); save(); renderTasks(); }); };
       node.dataset.addkey='ka|'+view+'|'+desc.key; installHoverAdd(node.querySelector('.ccol-body'), node._addTask, node.dataset.addkey); } });
 }
 function setSmartMode(m){ settings.smartMode=m;
@@ -3903,7 +4002,7 @@ function wireViewMode(scope){ scope.querySelectorAll('[data-vm]').forEach(b=>b.o
 function wireSmartAdd(scope,view){ const inp=scope.querySelector('.sl-add'), btn=scope.querySelector('.sl-addbtn'); if(!inp)return; const today=todayKey();
   const add=()=>{ const v=inp.value.trim(); if(!v)return;
     const t=smartTask(v, x=>{ if(view==='today'){ x.due=today; x.horizon='day'; x.hkey=''; } else if(view==='next7'){ x.due=addDays(today,1); x.horizon='day'; x.hkey=''; } });
-    tasks.push(t); inp.value=''; save(); renderTasks(); };
+    gateAddTask(t,()=>{ tasks.push(t); inp.value=''; save(); renderTasks(); }); };
   if(btn)btn.onclick=add; inp.onkeydown=e=>{ if(e.key==='Enter')add(); }; }
 
 /* ---- Matrix page: two interchangeable views (Eisenhower · Impact), switched in the ⋯ ---- */
@@ -3943,9 +4042,9 @@ function _addQuadTaskEisen(q,name){ name=(name||'').trim(); if(!name)return;
   if(urgent){ t.due=today; t.horizon='day'; t.hkey=''; }
   else if(important){ t.due=addDays(today,win+1); t.horizon='day'; t.hkey=''; }
   else { t.due=''; t.horizon=''; t.hkey=''; }
-  clampRepeat(t); tasks.push(t); _matrixAddFocus=String(q); save(); renderMatrixTab(); }
+  clampRepeat(t); gateAddTask(t,()=>{ tasks.push(t); _matrixAddFocus=String(q); save(); renderMatrixTab(); }); }
 function _addQuadTaskImpact(k,name){ name=(name||'').trim(); if(!name)return;
-  const t=smartTask(name); t.impact=k; clampRepeat(t); tasks.push(t); _matrixAddFocus=k; save(); renderMatrixTab(); }
+  const t=smartTask(name); t.impact=k; clampRepeat(t); gateAddTask(t,()=>{ tasks.push(t); _matrixAddFocus=k; save(); renderMatrixTab(); }); }
 function _wireQuadAdds(scope,kind){ scope.querySelectorAll('.ei-q').forEach(q=>{
   const inp=q.querySelector('.ei-add input'), btn=q.querySelector('.ei-add button'); if(!inp)return;
   const key = kind==='impact' ? q.dataset.impact : q.dataset.q;
@@ -4177,7 +4276,7 @@ function openHourAdd(canvas,day,mins){ if(canvas.querySelector('.tlh-newinp'))re
   inp.style.top=(mins/60*TLH_H)+'px'; inp.style.left='4px'; inp.style.right='4px'; canvas.appendChild(inp); inp.focus();
   let done=false;
   const fin=add=>{ if(done)return; done=true; const v=inp.value.trim();
-    if(add&&v){ const t=newTask(v,day); t.horizon='day'; t.hkey=''; t.start=minToHHMM(mins); t.dur=30; tasks.push(t); save(); renderTasks(); }
+    if(add&&v){ const t=newTask(v,day); t.horizon='day'; t.hkey=''; t.start=minToHHMM(mins); t.dur=30; gateAddTask(t,()=>{ tasks.push(t); save(); renderTasks(); }); }
     else inp.remove(); };
   inp.onkeydown=e=>{ if(e.key==='Enter')fin(true); else if(e.key==='Escape')fin(false); };
   inp.onblur=()=>fin(true);
@@ -4195,7 +4294,7 @@ function wireTlHours(scope,day){
   if(adAdd)adAdd.onclick=e=>{ e.stopPropagation(); const row=adAdd.parentElement; if(row.querySelector('.tlh-ad-newinp'))return;
     const inp=document.createElement('input'); inp.className='tlh-ad-newinp'; inp.placeholder='All-day task…'; inp.maxLength=200; row.appendChild(inp); inp.focus();
     let done=false; const fin=add=>{ if(done)return; done=true; const v=inp.value.trim();
-      if(add&&v){ const nt=newTask(v,day); nt.horizon='day'; nt.hkey=''; nt.start=''; nt.dur=0; tasks.push(nt); save(); renderTasks(); } else inp.remove(); };
+      if(add&&v){ const nt=newTask(v,day); nt.horizon='day'; nt.hkey=''; nt.start=''; nt.dur=0; gateAddTask(nt,()=>{ tasks.push(nt); save(); renderTasks(); }); } else inp.remove(); };
     inp.onkeydown=ev=>{ if(ev.key==='Enter')fin(true); else if(ev.key==='Escape')fin(false); }; inp.onblur=()=>fin(true); };
   const canvas=scope.querySelector('.tlh-canvas'); if(!canvas)return;
   canvas.addEventListener('dragover',e=>{ if(taskDragId)e.preventDefault(); });
@@ -4469,7 +4568,7 @@ function calAddInput(holder,assign){ if(holder.querySelector('.cv2-newinp'))retu
   const inp=document.createElement('input'); inp.className='cv2-newinp'; inp.placeholder='Task…'; inp.maxLength=200; holder.appendChild(inp); inp.focus();
   let committed=false;
   const fin=(add)=>{ if(committed)return; committed=true; const v=inp.value.trim();
-    if(add&&v){ const t=newTask(v,''); assign(t); clampRepeat(t); tasks.push(t); save(); renderTasks(); } else { inp.remove(); } };
+    if(add&&v){ const t=newTask(v,''); assign(t); clampRepeat(t); gateAddTask(t,()=>{ tasks.push(t); save(); renderTasks(); }); } else { inp.remove(); } };
   inp.onkeydown=e=>{ if(e.key==='Enter'){fin(true);} else if(e.key==='Escape'){fin(false);} };
   inp.onblur=()=>fin(true); }
 function wireMonth(scope){
@@ -4563,7 +4662,7 @@ function openWeekAdd(canvas,day,di,mins){ if(canvas.querySelector('.wk-newinp'))
   inp.style.top=(mins/60*TLH_H)+'px'; inp.style.left=`calc(var(--gut) + ${di}*var(--colw) + 1px)`; inp.style.width='calc(var(--colw) - 2px)';
   canvas.appendChild(inp); inp.focus();
   let done=false; const fin=add=>{ if(done)return; done=true; const v=inp.value.trim();
-    if(add&&v){ const t=newTask(v,day); t.horizon='day';t.hkey='';t.start=minToHHMM(mins);t.dur=30; tasks.push(t); save(); renderTasks(); } else inp.remove(); };
+    if(add&&v){ const t=newTask(v,day); t.horizon='day';t.hkey='';t.start=minToHHMM(mins);t.dur=30; gateAddTask(t,()=>{ tasks.push(t); save(); renderTasks(); }); } else inp.remove(); };
   inp.onkeydown=e=>{ if(e.key==='Enter')fin(true); else if(e.key==='Escape')fin(false); }; inp.onblur=()=>fin(true); }
 function wireWeekGrid(scope){ const wk=weekStartMon(calAnchor);
   scope.querySelectorAll('.wk-adchip').forEach(ch=>{ const t=tasks.find(x=>x.id===ch.dataset.id); if(!t)return;
@@ -4646,7 +4745,7 @@ function inboxHTML(){ const all=topLevel(applyFilter(tasksInHorizon(''),taskFilt
 function wireInbox(scope){
   scope.querySelectorAll('.inbox-list').forEach(sec=>{ const lid=sec.dataset.list;
     const inp=sec.querySelector('.il-add'), btn=sec.querySelector('.il-addbtn');
-    const add=(reopen)=>{ const v=inp.value.trim(); if(!v)return; tasks.push(smartTask(v, x=>{x.inboxListId=lid;})); if(reopen)_pendingAddReopen='inbox|'+lid; inp.value=''; save(); renderTasks(); };
+    const add=(reopen)=>{ const v=inp.value.trim(); if(!v)return; const t=smartTask(v, x=>{x.inboxListId=lid;}); gateAddTask(t,()=>{ tasks.push(t); if(reopen)_pendingAddReopen='inbox|'+lid; inp.value=''; save(); renderTasks(); }); };
     if(btn)btn.onclick=()=>add(false); if(inp){ inp.onkeydown=e=>{ if(e.key==='Enter')add(true); }; consumeReopen('inbox|'+lid,inp); }
     sec._taskDrop=(t)=>{ assignHorizon(t,'',''); t.boardId='';t.listId=''; t.inboxListId=lid; clampRepeat(t); };
     sec.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();sec.classList.add('drop');} });
@@ -4692,7 +4791,7 @@ function renderDayList(body){ const key=dayListKey||todayKey();
   out+=`<div class="qadd qadd-bottom"><input id="qaddInput" placeholder="Add a task for ${esc(prettyDate(key))}…" maxlength="200"><button id="qaddBtn">+</button></div>`;
   body.innerHTML=out; wireTasks(body); wireTaskGestures(body); wireLayoutToggle(body); wirePeriodStrip(body,'day',key);
   const qi=$('qaddInput'),qb=$('qaddBtn');
-  const add=(reopen)=>{const v=qi.value.trim();if(!v)return;const t=smartTask(v, x=>{x.horizon='day'; x.hkey=''; x.due=key;}); tasks.push(t); if(reopen)_pendingAddReopen='qadd'; qi.value='';save();renderTasks();};
+  const add=(reopen)=>{const v=qi.value.trim();if(!v)return;const t=smartTask(v, x=>{x.horizon='day'; x.hkey=''; x.due=key;}); gateAddTask(t,()=>{ tasks.push(t); if(reopen)_pendingAddReopen='qadd'; qi.value=''; save(); renderTasks(); });};
   qb.onclick=()=>add(false); qi.onkeydown=e=>{if(e.key==='Enter')add(true);}; consumeReopen('qadd',qi); }
 
 /* ---- carousel: scrollable consecutive-period columns (TimeStripe-style) ---- */
@@ -4720,7 +4819,7 @@ function renderCarousel(g,host){ const body=host||$('taskBody'); const cur = g==
   body.querySelectorAll('[data-cv]').forEach(b=>b.onclick=()=>{ settings.colsVisible=+b.dataset.cv; colsScrollGoCur=true; save(); renderTasks(); });
   body.querySelectorAll('.ccol').forEach(col=>{ const key=col.dataset.key;
     const inp=col.querySelector('.ccol-add input'), btn=col.querySelector('.ccol-add button');
-    col._addTask=(v)=>{ if(!v)return; const t=smartTask(v, x=>carouselSchedule(x,g,key)); tasks.push(t); save(); renderTasks(); };
+    col._addTask=(v)=>{ if(!v)return; const t=smartTask(v, x=>carouselSchedule(x,g,key)); gateAddTask(t,()=>{ tasks.push(t); save(); renderTasks(); }); };
     col._taskDrop=(t)=>carouselSchedule(t,g,key);
     const add=()=>col._addTask(inp.value.trim());
     if(btn)btn.onclick=add; if(inp)inp.onkeydown=e=>{if(e.key==='Enter')add();};
@@ -4742,7 +4841,7 @@ function renderPeriodView(body,hview){ const h=hview||taskView, key=curKey(h);
   out+=`<div class="qadd qadd-bottom"><input id="qaddInput" placeholder="Add a ${h} goal…" maxlength="200"><button id="qaddBtn">+</button></div>`;
   body.innerHTML=out; wireTasks(body); wireTaskGestures(body); wireLayoutToggle(body); wireGroupSort(body); if(h!=='life')wirePeriodStrip(body,h,key);
   const qi=$('qaddInput'),qb=$('qaddBtn');
-  const add=(reopen)=>{const v=qi.value.trim();if(!v)return;const t=newTask(v,'');assignHorizon(t,h,key);tasks.push(t);if(reopen)_pendingAddReopen='qadd';qi.value='';save();renderTasks();};
+  const add=(reopen)=>{const v=qi.value.trim();if(!v)return;const t=newTask(v,'');assignHorizon(t,h,key);gateAddTask(t,()=>{ tasks.push(t); if(reopen)_pendingAddReopen='qadd'; qi.value=''; save(); renderTasks(); });};
   qb.onclick=()=>add(false); qi.onkeydown=e=>{if(e.key==='Enter')add(true);}; consumeReopen('qadd',qi);
 }
 
@@ -4786,7 +4885,7 @@ function wireHorizon(scope){
   scope.querySelectorAll('.hz-sec').forEach(sec=>{ const h=sec.dataset.h, key=sec.dataset.key;
     const inp=sec.querySelector('.add-todo input'), btn=sec.querySelector('.add-todo button');
     const rk='hzs|'+(h||'inbox');
-    const add=(reopen)=>{const v=inp.value.trim();if(!v)return;const t=newTask(v,'');assignHorizon(t,h,h==='day'?key:key);tasks.push(t);if(reopen)_pendingAddReopen=rk;save();renderTasks();};
+    const add=(reopen)=>{const v=inp.value.trim();if(!v)return;const t=newTask(v,'');assignHorizon(t,h,h==='day'?key:key);gateAddTask(t,()=>{ tasks.push(t); if(reopen)_pendingAddReopen=rk; save(); renderTasks(); });};
     if(btn)btn.onclick=()=>add(false); if(inp){inp.onkeydown=e=>{if(e.key==='Enter')add(true);}; consumeReopen(rk,inp);}
     sec._taskDrop=(t)=>{ assignHorizon(t,h,key); };
     sec.addEventListener('dragover',e=>{ if(taskDragId){e.preventDefault();sec.classList.add('drop');} });
@@ -4807,7 +4906,7 @@ function horizonColsHTML(){ const today=todayKey();
 function wireHorizonCols(scope){ wireTasks(scope); wireTaskGestures(scope); wireLayoutToggle(scope); wireGroupSort(scope); wireHabits(scope);
   scope.querySelectorAll('.ccol').forEach(col=>{ const h=col.dataset.hz, key=col.dataset.key;
     const inp=col.querySelector('.ccol-add input'), btn=col.querySelector('.ccol-add button');
-    col._addTask=(v)=>{ if(!v)return; const t=newTask(v,''); assignHorizon(t,h,key); clampRepeat(t); tasks.push(t); save(); renderTasks(); };
+    col._addTask=(v)=>{ if(!v)return; const t=newTask(v,''); assignHorizon(t,h,key); clampRepeat(t); gateAddTask(t,()=>{ tasks.push(t); save(); renderTasks(); }); };
     col._taskDrop=(t)=>{ assignHorizon(t,h,key); clampRepeat(t); };
     const add=()=>col._addTask(inp.value.trim());
     if(btn)btn.onclick=add; if(inp)inp.onkeydown=e=>{if(e.key==='Enter')add();};
@@ -5139,7 +5238,7 @@ function wireBoards(scope){ wireTasks(scope); wireTaskGestures(scope); wireGroup
   // per-list add + drag tasks between lists
   scope.querySelectorAll('.bd-list').forEach(col=>{ const lid=col.dataset.list;
     const inp=col.querySelector('.ccol-add input'), btn=col.querySelector('.ccol-add button');
-    col._addTask=(v)=>{ if(!v||!b)return; const t=smartTask(v, x=>{x.boardId=b.id;x.listId=lid;}); tasks.push(t); save(); renderTasks(); notionMaybeCreate(t); };
+    col._addTask=(v)=>{ if(!v||!b)return; const t=smartTask(v, x=>{x.boardId=b.id;x.listId=lid;}); gateAddTask(t,()=>{ tasks.push(t); save(); renderTasks(); notionMaybeCreate(t); }); };
     col._taskDrop=(t)=>{ if(b){ t.boardId=b.id; t.listId=lid; notionMaybeCreate(t); } };
     const add=()=>col._addTask(inp.value.trim());
     if(btn)btn.onclick=add; if(inp)inp.onkeydown=e=>{if(e.key==='Enter')add();};
@@ -5536,9 +5635,15 @@ document.querySelectorAll('.railtab').forEach(b=>b.onclick=()=>{
 /* ---------- settings ---------- */
 $('autoToggle').classList.toggle('on',settings.autostart);
 $('autoToggle').onclick=()=>{settings.autostart=!settings.autostart;$('autoToggle').classList.toggle('on',settings.autostart);save();};
+$('setFriction').onclick=()=>$('setFriction').classList.toggle('on');   // visual only; persisted on Save
+function parseAddWindows(raw){ return String(raw||'').split(',').map(seg=>{
+    const m=seg.trim().match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/); if(!m) return null;
+    const sh=Math.min(23,+m[1]),sm=Math.min(59,+m[2]),eh=Math.min(23,+m[3]),em=Math.min(59,+m[4]);
+    const pad=n=>String(n).padStart(2,'0'); return {s:pad(sh)+':'+pad(sm),e:pad(eh)+':'+pad(em)}; }).filter(Boolean); }
 function refreshCloudState(){ if($('cloudState'))$('cloudState').textContent=cloudOn()?'Cloud sync: ON — shared across devices & Notion.':'Cloud sync: OFF — local to this browser only.'; }
 $('settingsBtn').onclick=()=>{$('setFocus').value=settings.focus;$('setSessions').value=settings.sessions;$('setShort').value=settings.short;$('setLong').value=settings.long;
   $('setRounds').value=settings.rounds;$('setGoal').value=settings.goal;$('setExam').value=settings.examDate||'';$('setUrgent').value=(settings.urgentDays==null?3:settings.urgentDays);$('setXpGoal').value=(settings.xpGoal||150);
+  $('setMaxTasks').value=addCap(); $('setAddWindows').value=addWindows().map(w=>w.s+'-'+w.e).join(', '); $('setFriction').classList.toggle('on',settings.frictionOn!==false);
   $('setCloudUrl').value=CLOUD.url||''; $('setCloudKey').value=CLOUD.key||''; refreshCloudState();
   $('setNotionProxy').value=settings.notionProxy||''; $('setNotionKey').value=settings.notionKey||'';
   refreshNotifyToggle();
@@ -5640,6 +5745,7 @@ $('notionDone').onclick=()=>$('ovNotion').classList.remove('show');
 $('saveSettings').onclick=()=>{const c=(v,a,b,d)=>{v=parseInt(v);return isNaN(v)?d:Math.min(b,Math.max(a,v));};
   settings.focus=c($('setFocus').value,1,120,50);settings.sessions=c($('setSessions').value,1,12,4);settings.short=c($('setShort').value,1,60,10);settings.long=c($('setLong').value,1,60,30);
   settings.rounds=c($('setRounds').value,0,8,4);settings.goal=c($('setGoal').value,30,900,240);settings.examDate=$('setExam').value||'';settings.urgentDays=c($('setUrgent').value,0,30,3);settings.xpGoal=c($('setXpGoal').value,20,2000,150);
+  settings.frictionOn=$('setFriction').classList.contains('on'); settings.maxTasksPerDay=c($('setMaxTasks').value,1,50,7); settings.addWindows=parseAddWindows($('setAddWindows').value);
   const npPrev=settings.notionProxy||''; settings.notionProxy=$('setNotionProxy').value.trim(); settings.notionKey=$('setNotionKey').value.trim();
   save();$('ovSettings').classList.remove('show');if(!active&&workedMs===0)setMode(mode);refreshStats();refreshDplus();gameRefreshChip();if($('tab-quest').classList.contains('show'))renderQuest();
   if(settings.notionProxy&&settings.notionProxy!==npPrev) notionSyncAll();
@@ -5647,6 +5753,7 @@ $('saveSettings').onclick=()=>{const c=(v,a,b,d)=>{v=parseInt(v);return isNaN(v)
 $('resetAll').onclick=()=>askConfirm('Erase ALL data — subjects, sessions, to-dos, day-offs? Cannot be undone.',()=>{
   localStorage.clear?.();['fd_settings','fd_subjects','fd_sessions','fd_dayoff','fd_tasks','fd_distract','fd_boards','fd_inboxlists','fd_notionsrc','fd_running','fd_bg','fd_device','fd_cloud'].forEach(k=>{try{localStorage.removeItem(k);}catch(e){}delete mem[k];});location.reload();});
 [ 'ovSettings','ovLog','ovConfirm','ovTodo','ovPause','ovDistract','ovNotion','ovCountdown','ovHabit' ].forEach(id=>$(id).onclick=e=>{if(e.target===$(id))$(id).classList.remove('show');});
+$('ovFriction').onclick=e=>{ if(e.target===$('ovFriction')) closeFriction(); };   // backdrop tap cancels the add (task is discarded, never pushed)
 
 /* ---------- theme (light / dark) ---------- */
 function applyTheme(){ const t=(settings.theme==='light')?'light':'dark';
