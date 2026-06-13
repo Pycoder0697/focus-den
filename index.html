@@ -3224,6 +3224,19 @@ function consumeReopen(key, inputEl){ if(key && _pendingAddReopen===key && input
    "＋ New task" row; click it to type inline. Pressing Enter on the keyboard commits AND reopens
    a fresh input below (continuous add); clicking the on-row "Enter" button commits and closes.
    Shared by every column-style view. `reopenKey` identifies this column across re-renders. */
+/* Tap-to-add guard. The empty areas of kanban columns and calendar grids open an inline
+   add-input — but on touch, a finger landing there to begin a scroll/swipe must NOT pop it.
+   Mouse stays immediate (precise click-to-place); touch only fires on a clean tap that barely
+   moves and is brief. `accept(e)` gates eligible targets; `open(e)` performs the add. */
+function tapAdd(el, accept, open){
+  el.addEventListener('pointerdown',e=>{ if(!accept(e)){ el._tap=null; return; }
+    if(e.pointerType==='mouse'){ open(e); return; }
+    el._tap={x:e.clientX,y:e.clientY,t:Date.now()}; });
+  el.addEventListener('pointermove',e=>{ const d=el._tap; if(d&&Math.hypot(e.clientX-d.x,e.clientY-d.y)>10)el._tap=null; });
+  el.addEventListener('pointerup',e=>{ const d=el._tap; el._tap=null;
+    if(d && Date.now()-d.t<700 && Math.hypot(e.clientX-d.x,e.clientY-d.y)<10) open(e); });
+  el.addEventListener('pointercancel',()=>{ el._tap=null; });
+}
 function installHoverAdd(body, addTask, reopenKey){
   if(!body || typeof addTask!=='function' || body.querySelector('.ccol-hz')) return;
   const hz=document.createElement('div'); hz.className='ccol-hz';
@@ -3244,7 +3257,7 @@ function installHoverAdd(body, addTask, reopenKey){
     ent.onmousedown=e=>{ e.preventDefault(); _taskVia='click'; fin(true,false); }; };
   hz.addEventListener('mousemove',e=>{ if(hz.querySelector('.ccol-ghrow'))return; const r=hz.getBoundingClientRect(); ghost.style.display='flex'; ghost.style.top=Math.max(0,Math.min(r.height-34,e.clientY-r.top-16))+'px'; });
   hz.addEventListener('mouseleave',()=>{ if(!hz.querySelector('.ccol-ghrow'))ghost.style.display='none'; });
-  hz.addEventListener('mousedown',e=>{ if(e.target.closest('.ccol-ghrow'))return; e.preventDefault(); const r=hz.getBoundingClientRect(); startInline(Math.max(0,Math.min(r.height-34,e.clientY-r.top-16))); });
+  tapAdd(hz, e=>!e.target.closest('.ccol-ghrow'), e=>{ e.preventDefault(); const r=hz.getBoundingClientRect(); startInline(Math.max(0,Math.min(r.height-34,e.clientY-r.top-16))); });
   if(reopenKey && _pendingAddReopen===reopenKey){ _pendingAddReopen=null; startInline(0); }
 }
 function enableHoverAdd(scope){
@@ -4093,10 +4106,8 @@ function wireTlHours(scope,day){
   canvas.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); const t=tasks.find(x=>x.id===taskDragId); taskDragId=null; if(!t)return;
     const y=e.clientY-canvas.getBoundingClientRect().top; let mins=Math.round((y/TLH_H*60)/TLH_SNAP)*TLH_SNAP; const dur=t.dur>0?t.dur:30; mins=Math.max(0,Math.min(1440-dur,mins));
     t.due=day; t.horizon='day'; t.hkey=''; t.start=minToHHMM(mins); if(!(t.dur>0))t.dur=30; save(); renderTasks(); });
-  canvas.addEventListener('pointerdown',e=>{ const tg=e.target;
-    if(tg!==canvas && !tg.classList.contains('tlh-hour') && !tg.classList.contains('tlh-half') && !tg.classList.contains('tlh-hr-lbl'))return;
-    const y=e.clientY-canvas.getBoundingClientRect().top; let mins=Math.floor((y/TLH_H*60)/TLH_SNAP)*TLH_SNAP; mins=Math.max(0,Math.min(1440-30,mins));
-    openHourAdd(canvas,day,mins); });
+  tapAdd(canvas, e=>{ const tg=e.target; return tg===canvas||tg.classList.contains('tlh-hour')||tg.classList.contains('tlh-half')||tg.classList.contains('tlh-hr-lbl'); },
+    e=>{ const y=e.clientY-canvas.getBoundingClientRect().top; let mins=Math.floor((y/TLH_H*60)/TLH_SNAP)*TLH_SNAP; mins=Math.max(0,Math.min(1440-30,mins)); openHourAdd(canvas,day,mins); });
   scope.querySelectorAll('.tlh-block').forEach(bl=>{ const t=tasks.find(x=>x.id===bl.dataset.id); if(!t)return;
     const menu=bl.querySelector('.bm'); if(menu)menu.onclick=e=>{e.stopPropagation();openCtxMenu(menu,buildTaskMenu(t,()=>renderTasks()));};
     let mode=null,y0=0,origTop=0,origH=0,moved=false;
@@ -4461,8 +4472,8 @@ function wireWeekGrid(scope){ const wk=weekStartMon(calAnchor);
   canvas.addEventListener('drop',e=>{ if(!taskDragId)return; e.preventDefault(); const t=tasks.find(x=>x.id===taskDragId); taskDragId=null; if(!t)return;
     const k=addDays(wk,colAt(e.clientX)); const dur=t.dur>0?t.dur:30; let mins=minsAt(e.clientY); mins=Math.max(0,Math.min(1440-dur,mins));
     t.due=k;t.horizon='day';t.hkey='';t.start=minToHHMM(mins); if(!(t.dur>0))t.dur=30; clampRepeat(t); save(); renderTasks(); });
-  scope.querySelectorAll('.wk-col').forEach(col=>{ col.addEventListener('pointerdown',e=>{ if(e.target!==col)return;
-    const mins=Math.floor(minsAt(e.clientY)/TLH_SNAP)*TLH_SNAP; openWeekAdd(canvas,col.dataset.day,col.dataset.di,mins); }); });
+  scope.querySelectorAll('.wk-col').forEach(col=>{ tapAdd(col, e=>e.target===col,
+    e=>{ const mins=Math.floor(minsAt(e.clientY)/TLH_SNAP)*TLH_SNAP; openWeekAdd(canvas,col.dataset.day,col.dataset.di,mins); }); });
   scope.querySelectorAll('.wk-block').forEach(bl=>{ const t=tasks.find(x=>x.id===bl.dataset.id); if(!t)return;
     const menu=bl.querySelector('.bm'); if(menu)menu.onclick=e=>{e.stopPropagation();openCtxMenu(menu,buildTaskMenu(t,()=>renderTasks()));};
     let mode=null,x0=0,y0=0,origTop=0,origH=0,moved=false;
