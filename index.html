@@ -3956,11 +3956,12 @@ function _wireQuadAdds(scope,kind){ scope.querySelectorAll('.ei-q').forEach(q=>{
 
 /* ---- Eisenhower matrix (priority → important, due proximity → urgent) ---- */
 function eisenhowerHTML(){
+  // strip colour = the priority colour each quadrant assigns its tasks (important⇒High, else Low — mirrors the add/drop logic)
   const quads=[
-    {q:3,t:'Do first',sub:'Urgent · Important',c:'var(--rose)'},
-    {q:2,t:'Schedule',sub:'Important · Not urgent',c:'var(--teal)'},
-    {q:1,t:'Delegate',sub:'Urgent · Not important',c:'var(--amber)'},
-    {q:0,t:"Don't do",sub:'Neither',c:'var(--faint)'}
+    {q:3,t:'Do first',sub:'Urgent · Important',c:PRI_COL[3]},
+    {q:2,t:'Schedule',sub:'Important · Not urgent',c:PRI_COL[3]},
+    {q:1,t:'Delegate',sub:'Urgent · Not important',c:PRI_COL[1]},
+    {q:0,t:"Don't do",sub:'Neither',c:PRI_COL[1]}
   ];
   const pool=topLevel(applyFilter(tasks,taskFilter));
   const cells=quads.map(qd=>{ const items=sortTasks(pool.filter(t=>quadrant(t)===qd.q));
