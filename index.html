@@ -634,8 +634,10 @@
   /* priority reads as the checkbox ring colour (done still wins with green) */
   .tk-check.pri1:not(.on),.tk-check.pri2:not(.on),.tk-check.pri3:not(.on){border-color:var(--prc)}
   /* ⋯ stays persistently visible (dimmed) so it never disappears; brightens on hover. Kept compact so it barely eats into the task name. */
-  .tk-menu{opacity:.4;transition:opacity .15s;padding:2px 1px;letter-spacing:0}
+  .tk-menu{opacity:.4;transition:opacity .15s;padding:2px 1px;letter-spacing:0;position:relative}
   .tk-main:hover .tk-menu,.tk-menu:focus{opacity:1}
+  /* touch: enlarge the ⋮ hit-area so a tap can't miss onto the card (which would open the detail box). Visual size unchanged. */
+  @media(pointer:coarse){ .tk-menu::after{content:'';position:absolute;top:-14px;bottom:-14px;left:-14px;right:-10px} }
 
   /* eisenhower matrix */
   .ei-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:12px}
@@ -4219,7 +4221,9 @@ function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
   let boardItems=boards.map(b=>({ic:(t.boardId===b.id)?'✓':'▤',label:b.name,sub:()=>({items:
       b.lists.length ? b.lists.map(l=>({ic:(t.boardId===b.id&&t.listId===l.id)?'✓':'',label:l.name,run:()=>{t.boardId=b.id;t.listId=l.id;save();re();notionMaybeCreate(t);}}))
                      : [{label:'No lists yet',run:()=>{}}] })}));
-  if(t.boardId) boardItems.push({sep:true},{ic:'✕',label:'Remove from board',run:()=>{t.boardId='';t.listId='';save();re();}});
+  if(t.boardId) boardItems.push({sep:true},isNotionTask(t)
+    ? {ic:'✕',label:'Remove from board & Notion',danger:true,run:()=>askConfirm('Remove from this board and archive the row in Notion?',()=>{notionArchivePage(t);tasks=tasks.filter(x=>x.id!==t.id);save();re();})}
+    : {ic:'✕',label:'Remove from board',run:()=>{t.boardId='';t.listId='';save();re();}});
   if(!boardItems.length) boardItems=[{label:'No boards yet',run:()=>{}}];
   const parentItems=[{ic:!t.parentId?'✓':'',label:'— none —',run:()=>{t.parentId='';save();re();}}].concat(
     validParents(t).map(p=>({ic:t.parentId===p.id?'✓':'',label:p.name,run:()=>{t.parentId=p.id;save();re();}})));
