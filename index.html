@@ -1165,6 +1165,12 @@
   .pills{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
   .pills button{font-family:inherit;font-size:14.3px;color:var(--muted);background:var(--track-bg);border:1px solid var(--stroke-soft);padding:8px 16px;border-radius:999px;cursor:pointer;transition:.2s}
   .pills button.active{background:var(--amber);color:#3a1810;font-weight:600;border-color:transparent}
+  .stat-nav{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:14px}
+  .stat-nav .sn-arrow{width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:20px;line-height:1;color:var(--ink);background:var(--glass-2);border:1px solid var(--stroke);border-radius:50%;cursor:pointer}
+  .stat-nav .sn-arrow:hover{border-color:var(--accent)}
+  .stat-nav .sn-arrow.off{opacity:.3;pointer-events:none}
+  .stat-nav .sn-lbl{min-width:150px;text-align:center;font-family:'Fraunces',serif;font-style:italic;font-size:17px;color:var(--ink);background:none;border:none;cursor:pointer;padding:6px 12px;border-radius:10px}
+  .stat-nav .sn-lbl:hover{background:var(--glass-2)}
   .stat-card{padding:18px;margin-bottom:14px}
   .stat-card h3{font-family:'Fraunces',serif;font-style:italic;font-weight:400;font-size:19.8px;margin-bottom:14px}
   .kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px}
@@ -3456,8 +3462,17 @@ $('newSubject').addEventListener('keydown',e=>{if(e.key==='Enter')$('addSubjectB
    STATS  (Day / Week / Month / Trend)
    ==================================================================== */
 let statRange='day';
-document.querySelectorAll('#statPills button').forEach(b=>b.onclick=()=>{statRange=b.dataset.r;
+let statOffset=0;   // periods away from the present in day/week/month views (0 = current, negative = past)
+document.querySelectorAll('#statPills button').forEach(b=>b.onclick=()=>{statRange=b.dataset.r;statOffset=0;
   document.querySelectorAll('#statPills button').forEach(x=>x.classList.toggle('active',x===b));refreshStats();});
+/* ‹ label › pager shared by the day/week/month stat views (label click jumps back to the present) */
+function statNavHTML(label){ return `<div class="stat-nav">
+  <button class="sn-arrow" data-sn="prev">‹</button>
+  <button class="sn-lbl" data-sn="now">${esc(label)}</button>
+  <button class="sn-arrow ${statOffset<0?'':'off'}" data-sn="next">›</button></div>`; }
+function wireStatNav(){ document.querySelectorAll('#statBody [data-sn]').forEach(b=>b.onclick=()=>{
+  const a=b.dataset.sn; if(a==='prev')statOffset--; else if(a==='next'){ if(statOffset<0)statOffset++; } else statOffset=0;
+  refreshStats(); }); }
 let statSubject='all';
 function sessionsOn(key){return sessions.filter(s=>dateKey(s.start)===key);}
 function secOn(key,sid){return sessionsOn(key).reduce((a,s)=>a+((!sid||sid==='all'||s.subjectId===sid)?sdur(s):0),0);}
@@ -3491,7 +3506,9 @@ function monthlyHistoryHTML(){
 function refreshStats(){ renderDots(); renderSubjectSelect();
   const body=$('statBody');
   if(statRange==='day'){
-    const k=todayKey(), ss=sessionsOn(k).slice().sort((a,b)=>a.start-b.start);
+    const k=addDays(todayKey(),statOffset);
+    const dayLbl=statOffset===0?'Today':statOffset===-1?'Yesterday':new Date(k+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+    const ss=sessionsOn(k).slice().sort((a,b)=>a.start-b.start);
     const total=secOn(k), maxF=ss.reduce((m,s)=>Math.max(m,sdur(s)),0);
     const start=ss.length?istTime(ss[0].start):'—', end=ss.length?istTime(ss[ss.length-1].end):'—';
     const score=total===0?'—':Math.min(100,Math.round(total/60/settings.goal*100));
@@ -3502,37 +3519,42 @@ function refreshStats(){ renderDots(); renderSubjectSelect();
       let d='M '+px(0)+' '+py(0); pts.forEach(p=>{d+=' L '+px(p[0])+' '+py(0); d+=' L '+px(p[0])+' '+py(p[1]);});
       line=`<svg class="line" viewBox="0 0 ${W} ${H}"><path d="${d}" fill="none" stroke="var(--amber)" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
     }
-    body.innerHTML=`
+    body.innerHTML=statNavHTML(dayLbl)+`
       <div class="card stat-card"><div class="kpis">
         <div class="kpi"><div class="k">Total study time</div><div class="v">${hms(total)}</div></div>
         <div class="kpi"><div class="k">Longest session</div><div class="v">${hms(maxF)}</div></div>
         <div class="kpi"><div class="k">Start · End</div><div class="v" style="font-size:18.7px">${start} – ${end}</div></div>
         <div class="kpi"><div class="k">Focus score</div><div class="v">${score}<span style="font-size:14.3px;color:var(--faint)">/100</span></div></div>
       </div></div>
-      <div class="card stat-card"><h3>Cumulative focus today</h3>${line}</div>
+      <div class="card stat-card"><h3>Cumulative focus${statOffset===0?' today':''}</h3>${line}</div>
       <div class="card stat-card"><h3>By subject</h3>${donutHTML(subjectParts([k]),total)}</div>`;
+    wireStatNav();
   }
   else if(statRange==='week'){
-    const keys=[];for(let i=6;i>=0;i--)keys.push(shiftKey(i));
+    const end=addDays(todayKey(),statOffset*7), todayK=todayKey();
+    const keys=[];for(let i=6;i>=0;i--)keys.push(addDays(end,-i));
     const vals=keys.map(k=>secOn(k,statSubject)), total=vals.reduce((a,b)=>a+b,0), max=Math.max(3600,...vals);
-    const bars=keys.map((k,i)=>{const d=new Date(k+'T00:00:00');return `<div class="col"><div class="bar ${i===6?'today':''}" data-v="${hms(vals[i])}" style="height:${vals[i]/max*100}%"></div><div class="dl">${'SMTWTFS'[d.getDay()]}</div></div>`;}).join('');
-    body.innerHTML=chipRow()+`
+    const bars=keys.map((k,i)=>{const d=new Date(k+'T00:00:00');return `<div class="col"><div class="bar ${k===todayK?'today':''}" data-v="${hms(vals[i])}" style="height:${vals[i]/max*100}%"></div><div class="dl">${'SMTWTFS'[d.getDay()]}</div></div>`;}).join('');
+    const fmt=k=>new Date(k+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    const range=fmt(keys[0])+' – '+fmt(keys[6]);
+    body.innerHTML=statNavHTML(statOffset===0?'This week':range)+chipRow()+`
       <div class="card stat-card"><div class="kpis">
         <div class="kpi"><div class="k">7-day total</div><div class="v">${hms(total)}</div></div>
         <div class="kpi"><div class="k">Daily average</div><div class="v">${hms(total/7)}</div></div>
       </div></div>
-      <div class="card stat-card"><h3>This week</h3><div class="bars">${bars}</div></div>
+      <div class="card stat-card"><h3>${range}</h3><div class="bars">${bars}</div></div>
       <div class="card stat-card"><h3>By subject (7 days)</h3>${donutHTML(subjectParts(keys),keys.reduce((a,k)=>a+secOn(k),0))}</div>`;
-    wireChips();
+    wireChips(); wireStatNav();
   }
   else if(statRange==='month'){
-    const now=new Date(),y=now.getFullYear(),m=now.getMonth(),p=n=>String(n).padStart(2,'0');
+    const base=new Date(), now=new Date(base.getFullYear(),base.getMonth()+statOffset,1);
+    const y=now.getFullYear(),m=now.getMonth(),p=n=>String(n).padStart(2,'0');
     const dim=new Date(y,m+1,0).getDate(),sd=(new Date(y,m,1).getDay()+6)%7; let total=0;
     let cells=''; for(let i=0;i<sd;i++)cells+='<div class="hm-cell" style="visibility:hidden"></div>';
     for(let d=1;d<=dim;d++){const key=y+'-'+p(m+1)+'-'+p(d),sec=secOn(key,statSubject);total+=sec;const min=sec/60;
       let bg='rgba(255,255,255,.04)';if(min>=420)bg='#7a2e12';else if(min>=300)bg='#c75a1e';else if(min>=180)bg='#ef8c3a';else if(min>=60)bg='#f7c07a';else if(min>0)bg='#f9e3c4';
       const isT=key===todayKey();cells+=`<div class="hm-cell ${isT?'today':''}" style="background:${bg};color:${min>=180?'#fff':'var(--faint)'}" title="${hms(sec)}">${d}</div>`;}
-    body.innerHTML=chipRow()+`
+    body.innerHTML=statNavHTML(now.toLocaleDateString('en-GB',{month:'long',year:'numeric'}))+chipRow()+`
       <div class="card stat-card"><div class="kpis">
         <div class="kpi"><div class="k">${now.toLocaleDateString('en-GB',{month:'long'})} total</div><div class="v">${hms(total)}</div></div>
         <div class="kpi"><div class="k">Daily average</div><div class="v">${hms(total/dim)}</div></div>
@@ -3542,7 +3564,7 @@ function refreshStats(){ renderDots(); renderSubjectSelect();
         <div class="hm-grid">${cells}</div>
         <div class="hm-legend">Less <i style="background:#f9e3c4"></i><i style="background:#f7c07a"></i><i style="background:#ef8c3a"></i><i style="background:#c75a1e"></i><i style="background:#7a2e12"></i> More</div>
       </div>`;
-    wireChips();
+    wireChips(); wireStatNav();
   }
   else { // trend — last 30 days line + streak + monthly history
     const keys=[];for(let i=29;i>=0;i--)keys.push(shiftKey(i));
