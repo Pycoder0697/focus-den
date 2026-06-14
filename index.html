@@ -2809,7 +2809,29 @@ function setMode(m){ if(active){freeze();commit(true);} else if(workedMs>0){comm
   $('startBtn').textContent='Start'; if(m==='pomo')remaining=phaseMin()*60; renderClock(); }
 function setPhase(p){ if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
   oneShot=false; customFocus=0; customSessions=0; _taskTimer=false; phase=p; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null; renderClock(); }
-function chime(){try{const ac=new(window.AudioContext||window.webkitAudioContext)();[880,1100,1320].forEach((f,i)=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.type='sine';o.connect(g);g.connect(ac.destination);const t=ac.currentTime+i*.16;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.25,t+.03);g.gain.exponentialRampToValueAtTime(.001,t+.5);o.start(t);o.stop(t+.55);});}catch(e){}}
+function chime(){try{const ac=new(window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();
+  // master limiter + gain so the alarm is loud but never clips harshly
+  const master=ac.createGain();master.gain.value=.9;
+  const comp=ac.createDynamicsCompressor();comp.threshold.value=-10;comp.ratio.value=12;
+  master.connect(comp);comp.connect(ac.destination);
+  const start=ac.currentTime+.02;
+  // a bright ascending triad, played as 3 urgent bursts so it cuts through
+  const notes=[880,1100,1320],burst=.5,reps=3;
+  for(let r=0;r<reps;r++){
+    notes.forEach((f,i)=>{
+      const base=start+r*burst+i*.13;
+      // pair a sine (body) with a triangle an octave up (cut/edge) per note
+      [[f,'sine',.55],[f*2,'triangle',.22]].forEach(([freq,type,amp])=>{
+        const o=ac.createOscillator(),g=ac.createGain();
+        o.type=type;o.frequency.value=freq;o.connect(g);g.connect(master);
+        g.gain.setValueAtTime(0,base);
+        g.gain.linearRampToValueAtTime(amp,base+.015);
+        g.gain.exponentialRampToValueAtTime(.001,base+.45);
+        o.start(base);o.stop(base+.5);
+      });
+    });
+  }
+}catch(e){}}
 /* System notification on session end. Fires even when the app window is in the
    background (Mac PWA + iOS Home-Screen app). Routed through the service worker
    (reg.showNotification) so it works on iOS, with a plain Notification fallback.
