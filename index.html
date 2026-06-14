@@ -2556,6 +2556,7 @@ function normalizeData(){
   }
   moodNormalize();
   gameNormalize();
+  if(advanceCompletedRepeats()){ try{save();}catch(e){} }  // roll completed recurring tasks forward to their next occurrence
 }
 /* Daylio-style mood tracker — seed default groups/activities/scales once, ensure ids. */
 function moodNormalize(){
@@ -3589,6 +3590,38 @@ function applyFilter(list,mode){ let out = (mode==='active')?list.filter(t=>!isT
   if(filtersActive()) out=out.filter(passesTaskFilters); return out; }
 function addDays(key,n){ const [y,m,d]=key.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+n); return dt.toISOString().slice(0,10); }
 function daysBetween(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
+/* add n calendar months to a YYYY-MM-DD key, clamping the day to the target month's length
+   (e.g. Jan 31 + 1 month → Feb 28/29) so monthly/quarterly/yearly repeats never overflow. */
+function addMonthsKey(key,n){ let [y,m,d]=key.split('-').map(Number); const idx=y*12+(m-1)+n, ny=Math.floor(idx/12), nm=idx%12;
+  const dim=new Date(Date.UTC(ny,nm+1,0)).getUTCDate(); return new Date(Date.UTC(ny,nm,Math.min(d,dim))).toISOString().slice(0,10); }
+/* the occurrence after `key` for a given repeat cadence (preserves weekday / day-of-month). */
+function nextRepeatKey(key,repeat){
+  if(repeat==='weekly')    return addDays(key,7);
+  if(repeat==='monthly')   return addMonthsKey(key,1);
+  if(repeat==='quarterly') return addMonthsKey(key,3);
+  if(repeat==='yearly')    return addMonthsKey(key,12);
+  if(repeat==='weekdays'){ let k=addDays(key,1); const g=new Date(k+'T00:00:00').getDay(); if(g===6)k=addDays(k,2); else if(g===0)k=addDays(k,1); return k; }
+  return addDays(key,1);   // daily (and any unknown finer cadence)
+}
+/* Recurring reschedule (TickTick-style). A dated repeating task whose scheduled occurrence has
+   slipped into the past rolls forward to its next occurrence — but ONLY if that occurrence was
+   completed. An UNCOMPLETED past occurrence is left exactly where it is: it shows as overdue
+   (a single card, never duplicated) until the user checks it off, and never auto-reschedules.
+   A completed occurrence catches up to the first occurrence that is today-or-later, so a daily
+   task done yesterday lands on today rather than piling up missed days. Idempotent + deterministic
+   (every device computes the same), so it's safe to run on load, on cloud-pull, and at rollover. */
+function advanceCompletedRepeats(){
+  const today=todayKey(); let changed=false;
+  tasks.forEach(t=>{
+    if(!t.repeat||t.repeat==='none') return;     // not recurring
+    if(!t.due || t.due>=today) return;           // undated repeat (board habit) or current/future occurrence — nothing to roll
+    if(!t.doneOn || t.doneOn<t.due) return;      // this occurrence wasn't completed → leave it overdue, no auto-reschedule
+    const span=(t.dueEnd&&t.dueEnd>=t.due)?daysBetween(t.due,t.dueEnd):0;
+    let d=t.due,guard=0; do{ d=nextRepeatKey(d,t.repeat); }while(d<today&&++guard<4000);
+    t.due=d; if(span)t.dueEnd=addDays(d,span); changed=true;
+  });
+  return changed;
+}
 function prettyDate(key){ const [y,m,d]=key.split('-').map(Number); return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]; }
 const PRI_COL=['transparent','#5fc24a','#f5a623','#ff5a5a'];
 function newTask(name,due){ taskSound(); return {id:uid('t'),name,desc:'',why:'',impact:'',due:due||'',dueEnd:'',priority:0,subjectId:'',subjectIds:[],checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
@@ -4107,8 +4140,10 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
   const timeChip=(schedHorizon(t)==='day'&&t.start)?`<span class="tk-chip" style="color:var(--accent)" title="Time of day">🕐 ${to12(t.start)}</span>`:'';
   const bd=t.boardId?boardById(t.boardId):null; const bdList=(bd&&t.listId)?bd.lists.find(l=>l.id===t.listId):null;
   const bdChip=bd?`<span class="tk-chip" style="color:var(--amber)" title="On board">▤ ${esc(bd.name)}${bdList?' · '+esc(bdList.name):''}</span>`:'';
+  const repLbl=(t.repeat&&t.repeat!=='none')?(repeatOptsFor(t).find(o=>o[0]===t.repeat)||[,t.repeat])[1]:'';
+  const repChip=repLbl?`<span class="tk-chip" style="color:var(--violet)" title="Repeats ${esc(repLbl)}">🔁 ${esc(repLbl)}</span>`:'';
   const tags=[
-    hzChip, timeChip, bdChip,
+    hzChip, timeChip, repChip, bdChip,
     multi?`<span class="tk-chip span">${prettyDate(t.due)}–${prettyDate(t.dueEnd)}</span>`:(dueTxt?`<span class="tk-chip ${over?'over':''}">${over?'⚠ ':''}${dueTxt}</span>`:''),
     subjChips
   ].filter(Boolean).join('');
@@ -7111,7 +7146,7 @@ console.log('%cFocus Den '+FD_VERSION,'color:#f5a623;font-weight:700','— type 
 
 /* re-render when the day rolls over so repeating tasks reset on schedule */
 let _dayKey=todayKey();
-setInterval(()=>{ const nk=todayKey(); if(nk!==_dayKey){ _dayKey=nk; renderSubjects(); refreshStats(); renderCalendar(); refreshDplus(); gameRollover(); gameRefreshChip(); } },60000);
+setInterval(()=>{ const nk=todayKey(); if(nk!==_dayKey){ _dayKey=nk; if(advanceCompletedRepeats())save(); refreshTaskSurfaces(); renderSubjects(); refreshStats(); renderCalendar(); refreshDplus(); gameRollover(); gameRefreshChip(); } },60000);
 </script>
 
 <!-- PWA service worker. Registered only for the standalone app (not the Notion embed),
