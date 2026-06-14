@@ -384,6 +384,9 @@
   .sl-sec.drop{outline:2px dashed var(--accent);outline-offset:4px;border-radius:12px}
   .sl-head{display:flex;align-items:center;gap:7px;font-size:14.3px;font-weight:600;color:var(--ink);padding:2px 2px 0}
   .sl-head .n{color:var(--faint);font-weight:400}
+  .postpone-btn{margin-left:auto;background:none;border:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:0 2px}
+  .postpone-btn:hover{text-decoration:underline}
+  .kcol h4 .postpone-btn{margin-left:auto}
   .sl-qa{margin-bottom:14px}
 
   /* ---- view controls: layout toggle + carousel pager ---- */
@@ -2243,7 +2246,7 @@ function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_
 /* device-local live-timer snapshot so an active session survives an iOS-Safari tab reload.
    All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
 function timerSnap(){ return { active, mode, phase, subjectId:(typeof $==='function'&&$('activeSubject')?$('activeSubject').value:''),
-  currentTask, currentHabit, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, savedAt:Date.now() }; }
+  currentTask, currentHabit, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, _taskTimer, savedAt:Date.now() }; }
 function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); }
 
 /* ====================================================================
@@ -2406,6 +2409,7 @@ function refreshDplus(){
    ==================================================================== */
 let mode='pomo', phase='focus', active=false, remaining=settings.focus*60, endStamp=null, focusStart=null, phaseStart=null, tick=null;
 let oneShot=false; // single-session pomodoro (a chosen duration; no chained breaks/sessions, ignores autostart)
+let _taskTimer=false; // true when the timer was launched from a task's ⋯ menu — editing the clock then won't rewrite the global pomodoro defaults
 let catchingUp=false; // true while replaying phase boundaries missed during iOS background suspension (mutes per-step sounds/notifications)
 let segStart=null, workedMs=0, sessionDistract=0; // segStart=start of current active segment; workedMs=accumulated study time this session (excludes pauses)
 let segs=[]; // [{start,end}] real work segments this session — pauses excluded, gaps preserved, logged individually on commit
@@ -2538,7 +2542,7 @@ function completePhase(){ clearInterval(tick); active=false; const endedAt=(type
     if(settings.autostart){ renderClock(); startTimer(endedAt); } else { $('distractBtn').classList.remove('show'); renderClock(); }
   } else { commit(false,endedAt); phase='focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null;
     if(settings.autostart){ renderClock(); startTimer(endedAt); } else { $('distractBtn').classList.remove('show'); renderClock(); } } }
-function resetTimer(){ clearInterval(tick); active=false; $('startBtn').textContent='Start'; oneShot=false; muteAmbient();
+function resetTimer(){ clearInterval(tick); active=false; $('startBtn').textContent='Start'; oneShot=false; _taskTimer=false; muteAmbient();
   $('distractBtn').classList.remove('show'); $('ovPause').classList.remove('show');
   workedMs=0; segs=[]; segStart=null; focusStart=null; running=null;
   if(mode==='pomo'){ remaining=phaseMin()*60; phaseStart=null; } save(); saveTimer(); renderClock(); renderSubjects(); refreshStats(); }
@@ -2555,7 +2559,7 @@ function restoreTimer(){ let snap=null; try{ snap=JSON.parse(store.get('fd_timer
   if(!snap || !snap.active) return false;
   const now=Date.now();
   if(snap.savedAt && now-snap.savedAt > 12*3600000) return false;                 // too stale to trust
-  mode = snap.mode==='stopwatch'?'stopwatch':'pomo'; phase=snap.phase||'focus'; roundCount=snap.roundCount||0; oneShot=!!snap.oneShot;
+  mode = snap.mode==='stopwatch'?'stopwatch':'pomo'; phase=snap.phase||'focus'; roundCount=snap.roundCount||0; oneShot=!!snap.oneShot; _taskTimer=!!snap._taskTimer;
   if(snap.subjectId && subjById(snap.subjectId)) $('activeSubject').value=snap.subjectId;
   if(snap.currentTask){ const t=tasks.find(x=>x.id===snap.currentTask); if(t){ currentTask=t.id; updateTimerTaskUI(); } }
   else if(snap.currentHabit && habits.find(h=>h.id===snap.currentHabit)){ currentHabit=snap.currentHabit; updateTimerTaskUI(); }
@@ -2570,14 +2574,14 @@ function restoreTimer(){ let snap=null; try{ snap=JSON.parse(store.get('fd_timer
   else { remaining=settings.focus*60; running={subjectId:activeSubjectId(),start:open||now,mode:'stopwatch'}; }
   applyTimerPanel(); $('distractBtn').classList.add('show');
   clearInterval(tick); tick=setInterval(tickFn,250); saveTimer(); return true; }
-function setMode(m){ if(active){freeze();commit(true);} else if(workedMs>0){commit(true);} mode=m; active=false; oneShot=false;
+function setMode(m){ if(active){freeze();commit(true);} else if(workedMs>0){commit(true);} mode=m; active=false; oneShot=false; _taskTimer=false;
   $('distractBtn').classList.remove('show');
   document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m===m));
   $('phases').style.display=m==='pomo'?'flex':'none'; $('dots').style.display=m==='pomo'?'flex':'none';
   $('timeAdjust').style.display=m==='pomo'?'flex':'none'; $('skipBtn').style.display=m==='pomo'?'':'none';
   $('startBtn').textContent='Start'; if(m==='pomo')remaining=phaseMin()*60; renderClock(); }
 function setPhase(p){ if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
-  oneShot=false; phase=p; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null; renderClock(); }
+  oneShot=false; _taskTimer=false; phase=p; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null; renderClock(); }
 function chime(){try{const ac=new(window.AudioContext||window.webkitAudioContext)();[880,1100,1320].forEach((f,i)=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.type='sine';o.connect(g);g.connect(ac.destination);const t=ac.currentTime+i*.16;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.25,t+.03);g.gain.exponentialRampToValueAtTime(.001,t+.5);o.start(t);o.stop(t+.55);});}catch(e){}}
 /* System notification on session end. Fires even when the app window is in the
    background (Mac PWA + iOS Home-Screen app). Routed through the service worker
@@ -2687,7 +2691,13 @@ function editClock(){ if(mode!=='pomo')return; const el=$('clock'); if(el.queryS
       else if(/^\d{1,3}(\.\d+)?$/.test(v)){ secs=Math.round(parseFloat(v)*60); }
       if(secs!=null && secs>0){ secs=Math.min(secs,600*60);
         if(active){ endStamp=Date.now()+secs*1000; saveTimer&&saveTimer(); }
-        else remaining=secs; } }
+        else remaining=secs;
+        // a standard (not task-launched, not one-shot) pomodoro persists the new length as the phase default
+        if(!_taskTimer && !oneShot){ const mins=Math.max(1,Math.round(secs/60));
+          if(phase==='focus') settings.focus=Math.min(mins,120);
+          else if(phase==='short') settings.short=Math.min(mins,60);
+          else if(phase==='long') settings.long=Math.min(mins,60);
+          save(); } } }
     renderClock(); };
   inp.onkeydown=e=>{ if(e.key==='Enter')fin(true); else if(e.key==='Escape')fin(false); };
   inp.onblur=()=>fin(true); }
@@ -3966,6 +3976,11 @@ function boardDropTask(t,ci){ if(!t)return; const today=todayKey();
   else if(ci===2){ assignHorizon(t,'day',addDays(today,1)); }              // Next 7 days → tomorrow
   else { t.due=''; t.dueEnd=''; t.horizon=''; t.hkey=''; } }               // Inbox → unassign
 function boardDrop(ci){ const t=tasks.find(x=>x.id===taskDragId); if(!t)return; boardDropTask(t,ci); save(); renderTasks(); }
+/* Postpone: pull every overdue task in the current smart view forward to today */
+function postponeOverdue(view){ const today=todayKey();
+  const isOverdue=t=>t.due&&t.due<today&&!(t.dueEnd&&t.dueEnd>=today)&&!isTaskDone(t);
+  topLevel(smartPool(view||'all')).filter(isOverdue).forEach(t=>boardDropTask(t,1));
+  save(); renderTasks(); }
 
 /* ===== TickTick-style Sort & Group (used by the Kanban + Timeline views) =====
    Group → sections/columns; Sort → order within each group; Completed always sinks (renderTaskList). */
@@ -4078,14 +4093,14 @@ function renderSmartList(view){ const body=$('taskBody');
   if(mode==='kanban'){
     const colsHTML=cols.map(c=>{ const items=sortTasks(pool.filter(c.match)); if(!items.length)return'';   // hide empty buckets (no stray "Later"/etc.)
       const activeN=items.filter(t=>!isTaskDone(t)).length;
-      return `<div class="kcol" data-gk="${esc(c.key)}"><h4><span class="gk-dot" style="background:${c.color}"></span> ${esc(c.label)} <span class="n">${activeN}</span></h4>
+      return `<div class="kcol" data-gk="${esc(c.key)}"><h4><span class="gk-dot" style="background:${c.color}"></span> ${esc(c.label)} <span class="n">${activeN}</span>${c.key==='overdue'?'<button class="postpone-btn" data-postpone>Postpone</button>':''}</h4>
         <div class="ccol-body">${renderTaskList(items,'sk|'+view+'|'+c.key)}</div></div>`; }).join('');
     main=habitSec+`<div class="kanban ${kanbanSizeClass()}">${colsHTML||'<div class="empty-t">Nothing here yet.</div>'}</div>`;
   } else {
     let listHTML;
     if(gb==='none'){ const items=sortTasks(pool); listHTML=items.length?renderTaskList(items,'sk|'+view):'<div class="empty-t">Nothing here yet.</div>'; }
     else { const secs=cols.map(c=>{ const items=sortTasks(pool.filter(c.match)); if(!items.length)return''; const activeN=items.filter(t=>!isTaskDone(t)).length;
-        return `<div class="sl-sec" data-gk="${esc(c.key)}"><div class="sl-head"><span class="gk-dot" style="background:${c.color}"></span> ${esc(c.label)} <span class="n">${activeN}</span></div>
+        return `<div class="sl-sec" data-gk="${esc(c.key)}"><div class="sl-head"><span class="gk-dot" style="background:${c.color}"></span> ${esc(c.label)} <span class="n">${activeN}</span>${c.key==='overdue'?'<button class="postpone-btn" data-postpone>Postpone</button>':''}</div>
           <div class="sl-body">${renderTaskList(items,'sk|'+view+'|'+c.key)}</div></div>`; }).join('');
       listHTML=secs||'<div class="empty-t">Nothing here yet.</div>'; }
     main=smartQuickAdd(view)+`<div class="sl-list">${habitSec}${listHTML}</div>`;
@@ -4093,6 +4108,7 @@ function renderSmartList(view){ const body=$('taskBody');
   if(showCal) body.innerHTML=toolbar+`<div class="tk-split"><div class="tk-split-list">${main}</div><div class="tk-split-cal">${calMonthHTML(monthKey(todayKey()),{side:true})}</div></div>`;
   else body.innerHTML=toolbar+main;
   wireTasks(body); wireTaskGestures(body); wireGroupSort(body); wireViewMode(body); wireSmartAdd(body,view); wireHabits(body);
+  body.querySelectorAll('[data-postpone]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); postponeOverdue(view); });
   body.querySelectorAll('[data-calsplit]').forEach(b=>b.onclick=()=>{settings.showCal=!settings.showCal;save();renderTasks();});
   if(showCal){ wireMonth(body); wireCalDropZones(body); }
   // drop targets (columns in kanban, sections in list) reassign per the group-by
@@ -5723,7 +5739,7 @@ function breakBlocks(){ if(!onBreak()) return false;
 /* start a pomodoro focus block bound to a task */
 function startTaskPomodoro(t,mins){ if(breakBlocks()) return; if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
   if(t.subjectId) $('activeSubject').value=t.subjectId;
-  currentTask=t.id; updateTimerTaskUI();
+  currentTask=t.id; updateTimerTaskUI(); _taskTimer=true;
   mode='pomo'; document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='pomo'));
   oneShot=!!mins; roundCount=0;
   $('phases').style.display=oneShot?'none':'flex'; $('dots').style.display=oneShot?'none':'flex'; $('timeAdjust').style.display='flex'; $('skipBtn').style.display='';
@@ -5742,7 +5758,7 @@ function startTaskTimer(t){
   reflectTimer(); }
 function startTaskStopwatch(t){ if(active){freeze();commit(true);} else if(workedMs>0){commit(true);}
   if(t.subjectId) $('activeSubject').value=t.subjectId;
-  currentTask=t.id; updateTimerTaskUI();
+  currentTask=t.id; updateTimerTaskUI(); _taskTimer=true;
   oneShot=false; mode='stopwatch';
   document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='stopwatch'));
   $('phases').style.display='none'; $('dots').style.display='none'; $('timeAdjust').style.display='none'; $('skipBtn').style.display='none';
@@ -5754,7 +5770,7 @@ function startSubjectTimer(id){
   if(mode==='pomo') startSubjectPomodoro(id); else quickStopwatch(id);
   reflectTimer(); }
 function startSubjectPomodoro(id,mins){ if(breakBlocks()) return; if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
-  currentTask=null; updateTimerTaskUI();
+  currentTask=null; updateTimerTaskUI(); _taskTimer=!!mins;
   $('activeSubject').value=id||''; renderClock();
   mode='pomo'; document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='pomo'));
   oneShot=!!mins; roundCount=0;
