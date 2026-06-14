@@ -5049,9 +5049,23 @@ window.addEventListener('resize',()=>closeCtx());
 
 /* ---- menu definitions ---- */
 function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
-  const repItems=repeatOptsFor(t).map(p=>({ic:(t.repeat||'none')===p[0]?'✓':'',label:p[1],run:()=>{
-    if(p[0]==='days'){ openTodo(null,t); return; } // open the detail modal to pick weekdays
-    t.repeat=p[0]; t.repeatDays=[]; save(); re(); }}));
+  // Repeat submenu is a live builder (re-evaluated on each open / keepOpen toggle) so the
+  // ✓ marks and the inline "Specific days" weekday pickers stay in sync — TickTick-style.
+  const repeatSub=()=>{
+    const items=repeatOptsFor(t).map(p=>({ic:(t.repeat||'none')===p[0]?'✓':'',label:p[1],
+      keepOpen:p[0]==='days',   // picking "Specific days" stays open to reveal the weekday toggles
+      run:()=>{
+        if(p[0]==='days'){ t.repeat='days';
+          if(!(Array.isArray(t.repeatDays)&&t.repeatDays.length)){ const k=t.due||todayKey(); t.repeatDays=[new Date(k+'T00:00:00').getDay()]; } // seed with the task's own weekday
+          save(); re(); return; }
+        t.repeat=p[0]; t.repeatDays=[]; save(); re(); }}));
+    if(t.repeat==='days'){
+      const wd=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+      items.push({sep:true});
+      wd.forEach((nm,i)=>items.push({ic:'',label:nm,gloss:(t.repeatDays||[]).includes(i)?'✓':'',keepOpen:true,
+        run:()=>{ const a=(t.repeatDays||(t.repeatDays=[])), j=a.indexOf(i); j>=0?a.splice(j,1):a.push(i); a.sort((x,y)=>x-y); save(); re(); }}));
+    }
+    return {items}; };
   // Subjects are tags: this is a MULTI-toggle. ✓ marks each tagged subject; clicking toggles + keeps the submenu open.
   const subjTags=subjectIdsOf(t);
   const subjGloss=subjTags.length ? (((subjById(subjTags[0])||{}).name||'')+(subjTags.length>1?` +${subjTags.length-1}`:'')) : '';
@@ -5073,7 +5087,7 @@ function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
   const items=[
       {ic:'✎',label:'Rename',run:()=>renameTask(t,re)},
       {ic:'📅',label:scheduled?'Reschedule':'Schedule',gloss:scheduled?scheduleLabel(t):'',run:(a)=>openDatePicker(a||document.body,t,()=>{save();re();})},
-      {ic:'🔁',label:'Repeat',gloss:(t.repeat&&t.repeat!=='none')?t.repeat:'',sub:()=>({items:repItems})},
+      {ic:'🔁',label:'Repeat',gloss:t.repeat==='days'?repeatDaysLabel(t.repeatDays):((t.repeat&&t.repeat!=='none')?t.repeat:''),sub:repeatSub},
       {ic:'＋',label:'Add subtask',gloss:kidN?String(kidN):'',run:()=>{ expandedGoals.add(t.id); _pendingAddReopen='sub|'+t.id; re(); }},
       {ic:'▤',label:'Add to board',sub:()=>({items:boardItems})},
       {ic:'●',label:'Subject',gloss:subjGloss,sub:subjectSub},
