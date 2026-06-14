@@ -2652,11 +2652,16 @@ function renderClock(){
     $('planFinish').textContent=''; }
   else { $('clock').textContent=mmss(remaining);
     const words={focus:'Focus',short:'Short break',long:'Long break'};
-    if(active||$('phaseLabel').textContent!=='Run complete 🎉') $('phaseLabel').textContent=words[phase];
+    // keep any "…complete 🎉" message on screen while idle (Run complete / Session complete);
+    // it's only cleared when the next session actually starts (active) or the phase changes.
+    if(active||$('phaseLabel').textContent.indexOf('complete 🎉')<0) $('phaseLabel').textContent=words[phase];
     const toMs=active?endStamp:Date.now()+remaining*1000;
     const fromMs=active?(phaseStart||Date.now()):Date.now();
     const tp=$('timePill'); if(tp) tp.textContent=`${istTime(fromMs)} → ${istTime(toMs)}`;
     simFinish(); }
+  // single source of truth for the Start/Pause label — derived from `active` so no
+  // state-transition path can leave it stale (e.g. a finished run still reading "Pause").
+  { const sb=$('startBtn'); if(sb){ const want=active?'Pause':'Start'; if(sb.textContent!==want) sb.textContent=want; } }
   document.title=(active?(mode==='stopwatch'?$('clock').textContent:mmss(remaining))+' · ':'')+'Focus Den';
   updateTimerTaskUI();
   updateRailRing();
