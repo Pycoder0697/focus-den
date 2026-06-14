@@ -2312,8 +2312,9 @@ let _notionCreating=0;   // while >0, a pull won't import unmatched remote rows 
 /* a source whose pin is exactly this board+list (i.e. tasks landing here mirror into that Notion DB) */
 function notionSourceForList(boardId,listId){ return notionSources.find(s=>s.enabled!==false&&s.dbId&&s.boardId===boardId&&s.listId===listId)||null; }
 /* WRITE / INSERT: a task that lands in a Notion-synced list becomes a brand-new row in that database */
-async function notionMaybeCreate(t){ if(!t||t.notionSourceId||!notionOn()) return;
-  const src=notionSourceForList(t.boardId,t.listId); if(!src||!src.schema) return;
+/* create a new Notion row for task `t` in the given source (used by both the board-add path and
+   the recurrence clone, which targets the parent's source explicitly). Claims t immediately. */
+async function notionCreateRow(t,src){ if(!t||!src||!src.schema||!notionOn()) return;
   const props=buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
   t.notionSourceId=src.id; t.notionPageId='';            // claim immediately so a racing pull won't duplicate it
   _notionCreating++;
@@ -2323,6 +2324,9 @@ async function notionMaybeCreate(t){ if(!t||t.notionSourceId||!notionOn()) retur
        else { t.notionSourceId=''; src.lastErr='Create failed: '+((d&&d.error)||('HTTP '+r.status)); save(); } }
   catch(e){ t.notionSourceId=''; src.lastErr='Create failed (proxy unreachable)'; save(); }
   finally{ _notionCreating--; } }
+async function notionMaybeCreate(t){ if(!t||t.notionSourceId||!notionOn()) return;
+  const src=notionSourceForList(t.boardId,t.listId); if(!src||!src.schema) return;
+  return notionCreateRow(t,src); }
 /* archive the Notion row when its synced task is deleted, so it doesn't resurrect on the next pull */
 async function notionArchivePage(t){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
   const pid=t.notionPageId; _notionRecent.set(pid,Date.now());
@@ -2556,7 +2560,6 @@ function normalizeData(){
   }
   moodNormalize();
   gameNormalize();
-  if(advanceCompletedRepeats()){ try{save();}catch(e){} }  // roll completed recurring tasks forward to their next occurrence
 }
 /* Daylio-style mood tracker — seed default groups/activities/scales once, ensure ids. */
 function moodNormalize(){
@@ -3086,7 +3089,10 @@ function setTaskDone(t,val){
 function notionDoneOf(t){ return !t.wontDo && isTaskDone(t); }
 function toggleTask(t){
   if(t.wontDo){ t.wontDo=false; t.wontDoOn=''; uncheckSound(); return; }   // clicking the check on an abandoned task reactivates it
-  setTaskDone(t, !isTaskDone(t));
+  if(t._recurNext){ uncompleteRecurring(t); uncheckSound(); setTimeout(gamePulse,0); return; } // un-tick a frozen recurrence → undo the spawn
+  const recurring = t.repeat && t.repeat!=='none' && t.due;   // dated recurring → complete + clone the next occurrence
+  if(recurring && !isTaskDone(t)){ completeRecurring(t); checkSound(); setTimeout(gamePulse,0); return; }
+  setTaskDone(t, !isTaskDone(t));                              // one-off, or an undated board-repeat (in-place period reset)
   (isTaskDone(t)?checkSound:uncheckSound)();
   setTimeout(gamePulse,0);   // award/refresh XP after the caller's save() lands
   // two-way push happens via the caller's save() → notionFlushChanges()
@@ -3611,24 +3617,41 @@ function nextRepeatKey(key,repeat){
   if(repeat==='weekdays'){ let k=addDays(key,1); const g=new Date(k+'T00:00:00').getDay(); if(g===6)k=addDays(k,2); else if(g===0)k=addDays(k,1); return k; }
   return addDays(key,1);   // daily (and any unknown finer cadence)
 }
-/* Recurring reschedule (TickTick-style). A dated repeating task whose scheduled occurrence has
-   slipped into the past rolls forward to its next occurrence — but ONLY if that occurrence was
-   completed. An UNCOMPLETED past occurrence is left exactly where it is: it shows as overdue
-   (a single card, never duplicated) until the user checks it off, and never auto-reschedules.
-   A completed occurrence catches up to the first occurrence that is today-or-later, so a daily
-   task done yesterday lands on today rather than piling up missed days. Idempotent + deterministic
-   (every device computes the same), so it's safe to run on load, on cloud-pull, and at rollover. */
-function advanceCompletedRepeats(){
-  const today=todayKey(); let changed=false;
-  tasks.forEach(t=>{
-    if(!t.repeat||t.repeat==='none') return;     // not recurring
-    if(!t.due || t.due>=today) return;           // undated repeat (board habit) or current/future occurrence — nothing to roll
-    if(!t.doneOn || t.doneOn<t.due) return;      // this occurrence wasn't completed → leave it overdue, no auto-reschedule
-    const span=(t.dueEnd&&t.dueEnd>=t.due)?daysBetween(t.due,t.dueEnd):0;
-    let d=t.due,guard=0; do{ d=nextRepeatKey(d,t.repeat); }while(d<today&&++guard<4000);
-    t.due=d; if(span)t.dueEnd=addDays(d,span); changed=true;
-  });
-  return changed;
+/* the next occurrence date for a dated recurring task, cadence-preserving and never in the past
+   (a daily task done late still lands on tomorrow, not on a past day). */
+function nextOccurrenceKey(t){ const today=todayKey(); let d=t.due,g=0;
+  do{ d=nextRepeatKey(d,t.repeat); }while(d<=today&&++g<4000); return d; }
+/* Recurrence = "complete + clone forward" (Google-Tasks style). Finishing a dated recurring task
+   FREEZES it as a permanent done record (its repeat is cleared, so it stays ticked — in Notion the
+   row stays checked — and never re-spawns) and CLONES a fresh task for the next occurrence. Each
+   occurrence is thus its own object → a dated history; a synced task spawns a brand-new Notion row.
+   Returns the spawned child (or null). The clone link (_recurNext/_recurRepeat) lets an un-tick undo it. */
+function completeRecurring(t){
+  const child=JSON.parse(JSON.stringify(t));
+  child.id=uid('t'); child.created=Date.now(); child.order=topOrder();
+  child.done=false; child.doneOn=''; child.wontDo=false; child.wontDoOn='';
+  (child.checklist||[]).forEach(c=>c.done=false);
+  if(child.due){ const span=(child.dueEnd&&child.dueEnd>=child.due)?daysBetween(child.due,child.dueEnd):0;
+    child.due=nextOccurrenceKey(t); child.dueEnd=span?addDays(child.due,span):''; }
+  delete child._recurNext; delete child._recurRepeat;
+  const srcId=t.notionSourceId;                       // a synced task's clone gets its OWN new Notion row
+  if(srcId){ child.notionSourceId=''; child.notionPageId=''; child.notionUrl=''; child.notionProps=[]; }
+  // freeze the finished occurrence as a static done record
+  t._recurRepeat=t.repeat; t.repeat='none'; t.done=true; t.doneOn=todayKey(); t._recurNext=child.id;
+  tasks.push(child);
+  if(srcId){ const src=notionSources.find(s=>s.id===srcId); if(src) notionCreateRow(child,src); } // create the next row in Notion
+  return child;
+}
+/* Un-tick a frozen recurring completion: drop the still-pending spawned occurrence (and its Notion
+   row, if created) and restore the recurrence on this task — the inverse of completeRecurring. */
+function uncompleteRecurring(t){
+  const child=t._recurNext?tasks.find(x=>x.id===t._recurNext):null;
+  if(child && !isTaskDone(child) && !child.wontDo){
+    if(child.notionSourceId && child.notionPageId) notionArchivePage(child);
+    tasks=tasks.filter(x=>x.id!==child.id);
+  }
+  if(t._recurRepeat) t.repeat=t._recurRepeat;
+  delete t._recurRepeat; delete t._recurNext; t.done=false; t.doneOn='';
 }
 function prettyDate(key){ const [y,m,d]=key.split('-').map(Number); return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]; }
 const PRI_COL=['transparent','#5fc24a','#f5a623','#ff5a5a'];
@@ -7154,7 +7177,7 @@ console.log('%cFocus Den '+FD_VERSION,'color:#f5a623;font-weight:700','— type 
 
 /* re-render when the day rolls over so repeating tasks reset on schedule */
 let _dayKey=todayKey();
-setInterval(()=>{ const nk=todayKey(); if(nk!==_dayKey){ _dayKey=nk; if(advanceCompletedRepeats())save(); refreshTaskSurfaces(); renderSubjects(); refreshStats(); renderCalendar(); refreshDplus(); gameRollover(); gameRefreshChip(); } },60000);
+setInterval(()=>{ const nk=todayKey(); if(nk!==_dayKey){ _dayKey=nk; refreshTaskSurfaces(); renderSubjects(); refreshStats(); renderCalendar(); refreshDplus(); gameRollover(); gameRefreshChip(); } },60000);
 </script>
 
 <!-- PWA service worker. Registered only for the standalone app (not the Notion embed),
