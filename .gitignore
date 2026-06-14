@@ -1,6 +1,9 @@
 # OS / editor cruft
 .DS_Store
 
+# Local Claude Code config (settings.local.json, launch.json — machine-specific)
+.claude/
+
 # Cloudflare Wrangler local state (can cache build artifacts)
 **/.wrangler/
 
