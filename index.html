@@ -2391,7 +2391,7 @@ function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_
 /* device-local live-timer snapshot so an active session survives an iOS-Safari tab reload.
    All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
 function timerSnap(){ return { active, mode, phase, subjectId:(typeof $==='function'&&$('activeSubject')?$('activeSubject').value:''),
-  currentTask, currentHabit, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, _taskTimer, savedAt:Date.now() }; }
+  currentTask, currentHabit, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, customFocus, customSessions, _taskTimer, savedAt:Date.now() }; }
 function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); }
 
 /* ====================================================================
@@ -2633,11 +2633,14 @@ function refreshDplus(){
    ==================================================================== */
 let mode='pomo', phase='focus', active=false, remaining=settings.focus*60, endStamp=null, focusStart=null, phaseStart=null, tick=null;
 let oneShot=false; // single-session pomodoro (a chosen duration; no chained breaks/sessions, ignores autostart)
+let customFocus=0, customSessions=0; // per-run pomodoro plan overrides (0 ⇒ use settings): a custom task/subject plan picks its own focus length + session count, breaks stay the settings defaults
 let _taskTimer=false; // true when the timer was launched from a task's ⋯ menu — editing the clock then won't rewrite the global pomodoro defaults
 let catchingUp=false; // true while replaying phase boundaries missed during iOS background suspension (mutes per-step sounds/notifications)
 let segStart=null, workedMs=0, sessionDistract=0; // segStart=start of current active segment; workedMs=accumulated study time this session (excludes pauses)
 let segs=[]; // [{start,end}] real work segments this session — pauses excluded, gaps preserved, logged individually on commit
-const phaseMin=()=>phase==='focus'?settings.focus:phase==='short'?settings.short:settings.long;
+const pomoFocusMin=()=>customFocus||settings.focus; // focus length for this run (custom plan override, else settings)
+const pomoN=()=>customSessions||settings.sessions||4; // session count for this run (custom plan override, else settings)
+const phaseMin=()=>phase==='focus'?pomoFocusMin():phase==='short'?settings.short:settings.long;
 function setPhaseButtons(){ document.querySelectorAll('#phases button').forEach(b=>b.classList.toggle('active',b.dataset.p===phase)); }
 
 let _clockEditing=false;
@@ -2681,12 +2684,12 @@ function updateRailRing(){
 }
 /* project when the whole pomodoro plan (all sessions + breaks) will finish */
 function simFinish(){ const pf=$('planFinish'); if(!pf)return; if(mode!=='pomo'||oneShot){pf.textContent='';return;}
-  const N=settings.sessions||4; let t=Date.now(), done=roundCount, ph=phase;
+  const N=pomoN(); let t=Date.now(), done=roundCount, ph=phase;
   let rem=(active?Math.max(0,endStamp-Date.now()):remaining*1000), guard=0;
   while(done<N && guard++<60){
     if(ph==='focus'){ t+=rem; rem=0; done++; if(done>=N)break;
       const longDue=settings.rounds>0 && done%settings.rounds===0; ph=longDue?'long':'short'; rem=(longDue?settings.long:settings.short)*60000; }
-    else { t+=rem; rem=0; ph='focus'; rem=settings.focus*60000; } }
+    else { t+=rem; rem=0; ph='focus'; rem=pomoFocusMin()*60000; } }
   const left=N-roundCount;
   pf.textContent = done>=N ? `Plan ends ~${istTime(t)} · ${left} session${left===1?'':'s'} left` : '';
 }
@@ -2759,14 +2762,14 @@ function completePhase(){ clearInterval(tick); active=false; const endedAt=(type
   if(phase==='focus' && oneShot){ commit(true,endedAt); oneShot=false; roundCount=0; phase='focus'; setPhaseButtons();
     remaining=phaseMin()*60; phaseStart=null; $('distractBtn').classList.remove('show'); muteAmbient(); renderDots(); renderClock(); $('phaseLabel').textContent='Session complete 🎉'; return; }
   if(phase==='focus'){ commit(true,endedAt); roundCount++;
-    if(roundCount>=(settings.sessions||4)){ roundCount=0; phase='focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null;
+    if(roundCount>=pomoN()){ roundCount=0; customFocus=0; customSessions=0; phase='focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null;
       $('distractBtn').classList.remove('show'); muteAmbient(); renderDots(); renderClock(); $('phaseLabel').textContent='Run complete 🎉'; return; }
     const longDue=settings.rounds>0 && roundCount%settings.rounds===0; phase=longDue?'long':'short'; setPhaseButtons();
     remaining=phaseMin()*60; phaseStart=null; renderDots();
     if(settings.autostart){ renderClock(); startTimer(endedAt); } else { $('distractBtn').classList.remove('show'); renderClock(); }
   } else { commit(false,endedAt); phase='focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null;
     if(settings.autostart){ renderClock(); startTimer(endedAt); } else { $('distractBtn').classList.remove('show'); renderClock(); } } }
-function resetTimer(){ clearInterval(tick); active=false; $('startBtn').textContent='Start'; oneShot=false; _taskTimer=false; muteAmbient();
+function resetTimer(){ clearInterval(tick); active=false; $('startBtn').textContent='Start'; oneShot=false; customFocus=0; customSessions=0; _taskTimer=false; muteAmbient();
   $('distractBtn').classList.remove('show'); $('ovPause').classList.remove('show');
   workedMs=0; segs=[]; segStart=null; focusStart=null; running=null;
   if(mode==='pomo'){ remaining=phaseMin()*60; phaseStart=null; } save(); saveTimer(); renderClock(); renderSubjects(); refreshStats(); }
@@ -2783,7 +2786,7 @@ function restoreTimer(){ let snap=null; try{ snap=JSON.parse(store.get('fd_timer
   if(!snap || !snap.active) return false;
   const now=Date.now();
   if(snap.savedAt && now-snap.savedAt > 12*3600000) return false;                 // too stale to trust
-  mode = snap.mode==='stopwatch'?'stopwatch':'pomo'; phase=snap.phase||'focus'; roundCount=snap.roundCount||0; oneShot=!!snap.oneShot; _taskTimer=!!snap._taskTimer;
+  mode = snap.mode==='stopwatch'?'stopwatch':'pomo'; phase=snap.phase||'focus'; roundCount=snap.roundCount||0; oneShot=!!snap.oneShot; customFocus=snap.customFocus||0; customSessions=snap.customSessions||0; _taskTimer=!!snap._taskTimer;
   if(snap.subjectId && subjById(snap.subjectId)) $('activeSubject').value=snap.subjectId;
   if(snap.currentTask){ const t=tasks.find(x=>x.id===snap.currentTask); if(t){ currentTask=t.id; updateTimerTaskUI(); } }
   else if(snap.currentHabit && habits.find(h=>h.id===snap.currentHabit)){ currentHabit=snap.currentHabit; updateTimerTaskUI(); }
@@ -2798,14 +2801,14 @@ function restoreTimer(){ let snap=null; try{ snap=JSON.parse(store.get('fd_timer
   else { remaining=settings.focus*60; running={subjectId:activeSubjectId(),start:open||now,mode:'stopwatch'}; }
   applyTimerPanel(); $('distractBtn').classList.add('show');
   clearInterval(tick); tick=setInterval(tickFn,250); saveTimer(); return true; }
-function setMode(m){ if(active){freeze();commit(true);} else if(workedMs>0){commit(true);} mode=m; active=false; oneShot=false; _taskTimer=false;
+function setMode(m){ if(active){freeze();commit(true);} else if(workedMs>0){commit(true);} mode=m; active=false; oneShot=false; customFocus=0; customSessions=0; _taskTimer=false;
   $('distractBtn').classList.remove('show');
   document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m===m));
   $('phases').style.display=m==='pomo'?'flex':'none'; $('dots').style.display=m==='pomo'?'flex':'none';
   $('timeAdjust').style.display=m==='pomo'?'flex':'none'; $('skipBtn').style.display=m==='pomo'?'':'none';
   $('startBtn').textContent='Start'; if(m==='pomo')remaining=phaseMin()*60; renderClock(); }
 function setPhase(p){ if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
-  oneShot=false; _taskTimer=false; phase=p; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null; renderClock(); }
+  oneShot=false; customFocus=0; customSessions=0; _taskTimer=false; phase=p; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null; renderClock(); }
 function chime(){try{const ac=new(window.AudioContext||window.webkitAudioContext)();[880,1100,1320].forEach((f,i)=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;o.type='sine';o.connect(g);g.connect(ac.destination);const t=ac.currentTime+i*.16;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.25,t+.03);g.gain.exponentialRampToValueAtTime(.001,t+.5);o.start(t);o.stop(t+.55);});}catch(e){}}
 /* System notification on session end. Fires even when the app window is in the
    background (Mac PWA + iOS Home-Screen app). Routed through the service worker
@@ -2935,7 +2938,7 @@ $('skipBtn').onclick=()=>{ if(mode!=='pomo')return; const was=phase;
   if(active){freeze();commit(was==='focus');} else if(workedMs>0){commit(was==='focus');}
   phase=was==='focus'?'short':'focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null; startTimer(); };
 
-function renderDots(){const el=$('dots');if(!el)return;el.innerHTML='';const N=settings.sessions||4;
+function renderDots(){const el=$('dots');if(!el)return;el.innerHTML='';const N=pomoN();
   for(let i=0;i<N;i++){const d=document.createElement('i');if(roundCount>i)d.classList.add('on');el.appendChild(d);}
   const s=document.createElement('small');
   s.textContent=`${roundCount}/${N} sessions`+(settings.rounds>0?` · long break every ${settings.rounds}`:' · no long break');
@@ -3289,7 +3292,7 @@ function quickStopwatch(subjectId){
   const canResume = !active && mode==='stopwatch' && $('activeSubject').value===subjectId && workedMs>0;
   if(active){ freeze(); commit(true); }
   else if(workedMs>0 && !canResume){ commit(true); }
-  oneShot=false;
+  oneShot=false; customFocus=0; customSessions=0;
   if(!canResume){ currentTask=null; updateTimerTaskUI(); } // subject stopwatch isn't task-bound
   $('activeSubject').value=subjectId; mode='stopwatch';
   document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='stopwatch'));
@@ -4887,7 +4890,7 @@ function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
         {ic:'⏱',label:'15 min · single',run:()=>startTaskPomodoro(t,15)},
         {ic:'⏱',label:'25 min · single',run:()=>startTaskPomodoro(t,25)},
         {ic:'⏱',label:'50 min · single',run:()=>startTaskPomodoro(t,50)},
-        {ic:'⌨',label:'Custom…',run:()=>{ const v=Math.round(+prompt('Focus length in minutes:',settings.focus||50)); if(v>0&&v<=600)startTaskPomodoro(t,v); }}
+        {ic:'⌨',label:'Custom…',run:()=>{ const m=Math.round(+prompt('Focus length (minutes):',settings.focus||50)); if(!(m>0&&m<=600))return; const n=Math.round(+prompt('Number of sessions (breaks use your settings):',settings.sessions||4)); if(!(n>0&&n<=12))return; startTaskPomodoro(t,m,n); }}
       ]})},
       {sep:true},
       {ic:t.wontDo?'↩':'✗',label:t.wontDo?"Reactivate (un-abandon)":"Won't do",run:()=>{toggleWontDo(t);save();re();}},
@@ -4914,7 +4917,7 @@ function buildSubjectMenu(s){
         {ic:'⏱',label:'15 min · single',run:()=>startSubjectPomodoro(s.id,15)},
         {ic:'⏱',label:'25 min · single',run:()=>startSubjectPomodoro(s.id,25)},
         {ic:'⏱',label:'50 min · single',run:()=>startSubjectPomodoro(s.id,50)},
-        {ic:'⌨',label:'Custom…',run:()=>{ const v=Math.round(+prompt('Focus length in minutes:',settings.focus||50)); if(v>0&&v<=600)startSubjectPomodoro(s.id,v); }}
+        {ic:'⌨',label:'Custom…',run:()=>{ const m=Math.round(+prompt('Focus length (minutes):',settings.focus||50)); if(!(m>0&&m<=600))return; const n=Math.round(+prompt('Number of sessions (breaks use your settings):',settings.sessions||4)); if(!(n>0&&n<=12))return; startSubjectPomodoro(s.id,m,n); }}
       ]})},
       {ic:'✎',label:'Rename',run:()=>renameSubject(s)},
       {ic:'＋',label:'Add task',run:()=>{ expandedSubj.add(s.id); renderSubjects(); setTimeout(()=>{ const el=$('subjList').querySelector(`.subj-item[data-id="${s.id}"] .add-todo input`); if(el)el.focus(); },40); }},
@@ -6357,14 +6360,24 @@ document.querySelectorAll('#taskViews [data-v]').forEach(b=>b.onclick=()=>setTas
 function onBreak(){ return mode==='pomo' && (phase==='short'||phase==='long'); }
 function breakBlocks(){ if(!onBreak()) return false;
   flash(); const el=$('phaseLabel'); if(el) el.textContent='On a break — skip it to focus ☕'; return true; }
+/* configure & launch a pomodoro from the current binding:
+   - bare (no mins)        → the settings plan (focus×sessions, default breaks)
+   - mins only             → a single one-shot block of that length (no chained breaks)
+   - mins + sess>1         → a custom plan: that focus length × that many sessions, breaks stay the settings defaults */
+function startPomoPlan(mins,sess){
+  const custom = !!mins && sess>1;
+  oneShot = !!mins && !custom;
+  customFocus = custom ? mins : 0;
+  customSessions = custom ? sess : 0;
+  roundCount=0;
+  $('phases').style.display=oneShot?'none':'flex'; $('dots').style.display=oneShot?'none':'flex'; $('timeAdjust').style.display='flex'; $('skipBtn').style.display='';
+  phase='focus'; setPhaseButtons(); remaining=(oneShot?mins:phaseMin())*60; phaseStart=null; renderDots(); startTimer(); }
 /* start a pomodoro focus block bound to a task */
-function startTaskPomodoro(t,mins){ if(breakBlocks()) return; if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
+function startTaskPomodoro(t,mins,sess){ if(breakBlocks()) return; if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
   if(t.subjectId) $('activeSubject').value=t.subjectId;
   currentTask=t.id; updateTimerTaskUI(); _taskTimer=true;
   mode='pomo'; document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='pomo'));
-  oneShot=!!mins; roundCount=0;
-  $('phases').style.display=oneShot?'none':'flex'; $('dots').style.display=oneShot?'none':'flex'; $('timeAdjust').style.display='flex'; $('skipBtn').style.display='';
-  phase='focus'; setPhaseButtons(); remaining=(oneShot?mins:phaseMin())*60; phaseStart=null; startTimer(); }
+  startPomoPlan(mins,sess); }
 /* re-render subject + task surfaces so play⇄pause icons track the live timer state */
 function reflectTimer(){ renderSubjects&&renderSubjects(); refreshTaskSurfaces&&refreshTaskSurfaces(); }
 /* the timer is bound to a subject (not a task) when no task is attached and the active subject matches */
@@ -6380,7 +6393,7 @@ function startTaskTimer(t){
 function startTaskStopwatch(t){ if(active){freeze();commit(true);} else if(workedMs>0){commit(true);}
   if(t.subjectId) $('activeSubject').value=t.subjectId;
   currentTask=t.id; updateTimerTaskUI(); _taskTimer=true;
-  oneShot=false; mode='stopwatch';
+  oneShot=false; customFocus=0; customSessions=0; mode='stopwatch';
   document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='stopwatch'));
   $('phases').style.display='none'; $('dots').style.display='none'; $('timeAdjust').style.display='none'; $('skipBtn').style.display='none';
   startTimer(); }
@@ -6390,13 +6403,11 @@ function startSubjectTimer(id){
   if(!active && subjBound(id) && workedMs>0){ resumeTimer(); reflectTimer(); return; }
   if(mode==='pomo') startSubjectPomodoro(id); else quickStopwatch(id);
   reflectTimer(); }
-function startSubjectPomodoro(id,mins){ if(breakBlocks()) return; if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
+function startSubjectPomodoro(id,mins,sess){ if(breakBlocks()) return; if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
   currentTask=null; updateTimerTaskUI(); _taskTimer=!!mins;
   $('activeSubject').value=id||''; renderClock();
   mode='pomo'; document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='pomo'));
-  oneShot=!!mins; roundCount=0;
-  $('phases').style.display=oneShot?'none':'flex'; $('dots').style.display=oneShot?'none':'flex'; $('timeAdjust').style.display='flex'; $('skipBtn').style.display='';
-  phase='focus'; setPhaseButtons(); remaining=(oneShot?mins:phaseMin())*60; phaseStart=null; startTimer(); renderSubjects(); }
+  startPomoPlan(mins,sess); renderSubjects(); }
 /* changing the (now hidden) subject binding re-renders the focus header and surfaces */
 $('activeSubject').addEventListener('change',()=>{ currentTask=null; renderClock(); renderFocusHeader(); reflectTimer&&reflectTimer(); });
 
