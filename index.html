@@ -1578,6 +1578,55 @@
   .game-toast .gt-t{font-weight:800;font-size:14.5px}
   .game-toast .gt-s{font-size:12px;color:var(--faint);margin-top:1px}
   @media(max-width:760px){ .q-hero{grid-template-columns:1fr;gap:18px} .q-sbrow{grid-template-columns:90px 1fr 42px} }
+
+  /* ===== Mindfulness page ===== */
+  .mind-sub{display:flex;gap:5px;background:var(--track-bg);padding:5px;border-radius:14px;border:1px solid var(--stroke-soft);width:max-content;margin-bottom:16px}
+  .mind-sub button{padding:8px 18px;border:0;border-radius:10px;background:transparent;color:var(--muted);font-weight:600;font-size:13.5px;cursor:pointer;transition:.2s}
+  .mind-sub button.active{background:var(--glass-2);color:var(--ink)}
+  /* breathe */
+  .breathe-card{position:relative;overflow:hidden;border-radius:24px;min-height:560px;display:flex;flex-direction:column;align-items:center;
+    padding:34px 22px 30px;border:1px solid var(--stroke-soft);
+    background:radial-gradient(120% 90% at 50% 18%, color-mix(in srgb,var(--teal) 34%,var(--card-bg,#15171d)) 0%, var(--card-bg,#15171d) 72%)}
+  .breathe-card .bc-title{font-size:21px;font-weight:700;letter-spacing:.2px;color:var(--ink);margin-bottom:4px}
+  .breathe-card .bc-sub{font-size:13px;color:var(--muted);margin-bottom:18px}
+  .breathe-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;width:100%}
+  .breathe-orb{position:relative;width:200px;height:200px;border-radius:50%;display:grid;place-items:center;
+    background:radial-gradient(circle at 38% 32%, color-mix(in srgb,var(--teal) 80%,#fff) 0%, var(--teal) 46%, color-mix(in srgb,var(--teal) 60%,#000) 100%);
+    box-shadow:0 0 60px color-mix(in srgb,var(--teal) 45%,transparent), inset 0 0 40px rgba(255,255,255,.18);
+    transform:scale(.74);transition:transform 4s cubic-bezier(.45,0,.55,1)}
+  .breathe-orb.inhale{transform:scale(1.05)}
+  .breathe-orb.exhale{transform:scale(.74)}
+  .breathe-orb .bo-cue{font-size:17px;font-weight:600;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.3);user-select:none}
+  .breathe-orb::after{content:"";position:absolute;inset:-14px;border-radius:50%;border:1px solid color-mix(in srgb,var(--teal) 40%,transparent);opacity:.5}
+  .breathe-time{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink);letter-spacing:.5px}
+  .breathe-controls{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:6px}
+  .bc-chip{padding:9px 16px;border-radius:999px;border:1px solid var(--stroke);background:var(--glass-2);color:var(--ink);font-size:13.5px;font-weight:600;cursor:pointer;transition:.2s}
+  .bc-chip:hover{background:var(--glass)}
+  .bc-chip.primary{background:var(--teal);border-color:var(--teal);color:#06231f}
+  .bc-len{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:8px}
+  .bc-len button{padding:6px 13px;border-radius:999px;border:1px solid var(--stroke);background:transparent;color:var(--muted);font-size:12.5px;cursor:pointer;transition:.2s}
+  .bc-len button.active{background:var(--glass-2);color:var(--ink);border-color:var(--stroke)}
+  .sound-row{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:4px}
+  .sound-btn{display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;width:60px}
+  .sound-btn .sb-ic{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:20px;border:1px solid var(--stroke);background:var(--glass-2);transition:.2s}
+  .sound-btn.on .sb-ic{background:var(--teal);border-color:var(--teal);box-shadow:0 0 16px color-mix(in srgb,var(--teal) 50%,transparent)}
+  .sound-btn .sb-lab{font-size:11px;color:var(--muted)}
+  .sound-btn.on .sb-lab{color:var(--ink)}
+  .mind-sessions{font-size:12.5px;color:var(--faint);text-align:center;margin-top:14px}
+  /* blocked apps */
+  .app-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--stroke-soft);background:var(--glass);margin-bottom:8px}
+  .app-row .ar-name{flex:1;font-weight:600;color:var(--ink);font-size:14px}
+  .app-row .ar-block{font-size:16px;cursor:pointer;opacity:.55;width:26px;text-align:center}
+  .app-row .ar-block.on{opacity:1}
+  .app-row .ar-del{cursor:pointer;color:var(--faint);font-size:16px;width:20px;text-align:center}
+  .app-add{display:flex;gap:8px;margin:14px 0 8px;flex-wrap:wrap}
+  .app-add input{flex:1;min-width:120px;padding:9px 12px;border-radius:10px;border:1px solid var(--stroke);background:var(--field-bg);color:var(--ink);font-size:13.5px}
+  .app-add button{padding:9px 16px;border-radius:10px;border:1px solid var(--teal);background:var(--teal);color:#06231f;font-weight:600;cursor:pointer}
+  .mind-note{font-size:12px;color:var(--faint);line-height:1.5;margin-top:6px;padding:11px 13px;border-radius:12px;background:var(--glass);border:1px solid var(--stroke-soft)}
+  .block-banner{display:none;margin:2px 0 0;padding:9px 13px;border-radius:12px;font-size:12.5px;
+    background:color-mix(in srgb,var(--rose) 14%,transparent);border:1px solid color-mix(in srgb,var(--rose) 35%,transparent);color:var(--ink)}
+  .block-banner.show{display:block}
+  .block-banner b{color:var(--rose)}
 </style>
 </head>
 <body>
@@ -1598,6 +1647,7 @@
     <button class="railtab" data-tab="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg><span class="rail-tip">Stats</span></button>
     <button class="railtab" data-tab="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="rail-tip">Log</span></button>
     <button class="railtab" data-tab="music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg><span class="rail-tip">Music</span></button>
+    <button class="railtab" data-tab="mindfulness"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1.6 2.3-1.6 4.3 0 6 1.6-1.7 1.6-3.7 0-6z"/><path d="M5 21c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/><path d="M4.5 13c2.2-.3 3.8.6 4.8 2.6M19.5 13c-2.2-.3-3.8.6-4.8 2.6"/></svg><span class="rail-tip">Mindfulness</span></button>
     <div class="rail-spacer"></div>
     <div class="rail-bottom">
       <span class="rail-sync" id="syncBadge" style="display:none" title="Cloud sync on">☁</span>
@@ -1635,6 +1685,7 @@
       <button class="adj" id="lenPlus" title="+5 min">+</button>
     </div>
     <div class="plan-finish" id="planFinish"></div>
+    <div class="block-banner" id="blockBanner"></div>
     <div class="controls">
       <button class="icon-btn" id="resetBtn" title="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
       <button class="start" id="startBtn">Start</button>
@@ -1776,6 +1827,18 @@
         <iframe id="scPlayer" height="340" scrolling="no" allow="autoplay; encrypted-media"
           src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/playlists/soundcloud%253Aplaylists%253A2187491597&color=%23ff6b9d&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false"></iframe>
       </div>
+    </div>
+
+    <!-- MINDFULNESS -->
+    <div class="tabview" id="tab-mindfulness">
+      <div class="tv-head">
+        <div class="tv-title">Mindfulness</div>
+      </div>
+      <div class="mind-sub" id="mindSub">
+        <button data-v="breathe" class="active">Breathe</button>
+        <button data-v="blocked">Blocked Apps</button>
+      </div>
+      <div id="mindBody"></div>
     </div>
   </section>
 
@@ -2667,6 +2730,7 @@ function renderClock(){
   // state-transition path can leave it stale (e.g. a finished run still reading "Pause").
   { const sb=$('startBtn'); if(sb){ const want=active?'Pause':'Start'; if(sb.textContent!==want) sb.textContent=want; } }
   document.title=(active?(mode==='stopwatch'?$('clock').textContent:mmss(remaining))+' · ':'')+'Focus Den';
+  if(typeof fdBlockBannerSync==='function')fdBlockBannerSync();
   updateTimerTaskUI();
   updateRailRing();
   if(typeof syncTimerRestore==='function')syncTimerRestore();
@@ -6785,6 +6849,106 @@ function renderQuest(){ const body=$('questBody'); if(!body)return; const map=xp
   body.innerHTML=hero+league+exped+subsCard+rules;
 }
 
+/* ---------- Mindfulness page (Forest-inspired) ---------- */
+let mindView='breathe';
+function mindfulData(){ if(!settings.mindful) settings.mindful={sessions:[],lastSound:''}; return settings.mindful; }
+function screenApps(){ if(!Array.isArray(settings.screenApps)) settings.screenApps=[]; return settings.screenApps; }
+function fmtMin(m){ m=Math.round(m||0); if(m<60)return m+'m'; const h=Math.floor(m/60),r=m%60; return r? h+'h '+r+'m' : h+'h'; }
+
+function renderMindfulness(){ const body=$('mindBody'); if(!body)return;
+  document.querySelectorAll('#mindSub button').forEach(b=>b.classList.toggle('active',b.dataset.v===mindView));
+  if(mindView==='breathe') renderBreathe(body); else renderScreen(body);
+}
+
+/* --- Breathe (Mindful Space clone) --- */
+let _breathe={running:false,left:0,total:300,sound:'',cycleTO:null,tickInt:null};
+const BREATHE_SOUNDS=[['off','🔇','Silent'],['rain','🌧','Rain'],['waves','🌊','Waves'],['bonfire','🔥','Bonfire'],['crickets','🦗','Crickets'],['tick','⏳','Ticks']];
+function renderBreathe(host){ const d=mindfulData();
+  const today=todayKey(); const todayMin=(d.sessions||[]).filter(s=>s.date===today).reduce((a,s)=>a+(s.mins||0),0);
+  const total=(d.sessions||[]).length;
+  const lens=[3,5,10,15,20];
+  host.innerHTML=`
+  <div class="breathe-card">
+    <div class="bc-title">Breathe</div>
+    <div class="bc-sub">Follow the orb — in as it grows, out as it shrinks.</div>
+    <div class="breathe-stage">
+      <div class="breathe-orb exhale" id="breatheOrb"><span class="bo-cue" id="breatheCue">Ready</span></div>
+      <div class="breathe-time" id="breatheTime">${mmss(_breathe.left||_breathe.total)}</div>
+    </div>
+    <div class="bc-len" id="breatheLens">${lens.map(n=>`<button data-n="${n*60}"${(_breathe.total===n*60)?' class="active"':''}>${n} min</button>`).join('')}</div>
+    <div class="breathe-controls">
+      <button class="bc-chip primary" id="breatheToggle">${_breathe.running?'Pause':'Begin'}</button>
+      <button class="bc-chip" id="breatheStop">End</button>
+    </div>
+    <div class="sound-row" id="breatheSounds">${BREATHE_SOUNDS.map(([s,ic,lab])=>`<div class="sound-btn${_breathe.sound===s||(!_breathe.sound&&s==='off')?' on':''}" data-s="${s}"><div class="sb-ic">${ic}</div><div class="sb-lab">${lab}</div></div>`).join('')}</div>
+    <div class="mind-sessions">${total?`${total} mindful session${total>1?'s':''} logged · ${fmtMin(todayMin)} today`:'No sessions yet — begin when you’re ready.'}</div>
+  </div>`;
+  $('breatheLens').querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(_breathe.running)return; _breathe.total=+b.dataset.n; _breathe.left=_breathe.total; renderBreathe(host); });
+  $('breatheToggle').onclick=()=>{ _breathe.running?breathePause():breatheStart(); };
+  $('breatheStop').onclick=()=>breatheEnd(true);
+  $('breatheSounds').querySelectorAll('.sound-btn').forEach(b=>b.onclick=()=>breatheSetSound(b.dataset.s));
+}
+function breatheStart(){ ensureCtx(); if(!_breathe.left)_breathe.left=_breathe.total; _breathe.running=true;
+  const tog=$('breatheToggle'); if(tog)tog.textContent='Pause';
+  if(_breathe.sound&&_breathe.sound!=='off') breathePlay(_breathe.sound);
+  breatheCycle(true);
+  clearInterval(_breathe.tickInt); _breathe.tickInt=setInterval(()=>{ _breathe.left--; const t=$('breatheTime'); if(t)t.textContent=mmss(Math.max(0,_breathe.left));
+    if(_breathe.left<=0) breatheDone(); },1000);
+}
+function breathePause(){ _breathe.running=false; clearTimeout(_breathe.cycleTO); clearInterval(_breathe.tickInt); stopAmbient();
+  const tog=$('breatheToggle'); if(tog)tog.textContent='Resume'; const o=$('breatheOrb'),c=$('breatheCue'); if(o){o.className='breathe-orb exhale';} if(c)c.textContent='Paused';
+}
+function breatheEnd(logIt){ const ran=_breathe.total-_breathe.left;
+  _breathe.running=false; clearTimeout(_breathe.cycleTO); clearInterval(_breathe.tickInt); stopAmbient();
+  if(logIt && ran>=30){ const d=mindfulData(); (d.sessions=d.sessions||[]).push({date:todayKey(),mins:Math.round(ran/60),at:Date.now()}); save(); }
+  _breathe.left=_breathe.total; if($('mindBody')&&mindView==='breathe')renderBreathe($('mindBody'));
+}
+function breatheDone(){ chime(); flash(); breatheEnd(true); const c=$('breatheCue'); if(c)c.textContent='Done 🌿'; }
+function breatheCycle(inhale){ if(!_breathe.running)return; const o=$('breatheOrb'),c=$('breatheCue'); if(!o)return;
+  if(inhale){ o.className='breathe-orb inhale'; if(c)c.textContent='Breathe in'; _breathe.cycleTO=setTimeout(()=>breatheCycle(false),4000); }
+  else { o.className='breathe-orb exhale'; if(c)c.textContent='Breathe out'; _breathe.cycleTO=setTimeout(()=>breatheCycle(true),6000); }
+}
+function breatheSetSound(s){ _breathe.sound=s; mindfulData().lastSound=s; save();
+  document.querySelectorAll('#breatheSounds .sound-btn').forEach(b=>b.classList.toggle('on',b.dataset.s===s));
+  stopAmbient(); if(_breathe.running && s&&s!=='off') breathePlay(s);
+}
+function breathePlay(s){ if(s==='rain')playRain();else if(s==='waves')playWaves();else if(s==='bonfire')playBonfire();else if(s==='crickets')playCrickets();else if(s==='tick')playTick(); }
+
+/* --- Blocked Apps (inverted Forest allowlist) --- */
+function renderScreen(host){ const apps=screenApps();
+  const blocked=apps.filter(a=>a.blocked).length;
+  const rows=apps.length? apps.slice().map(a=>`
+    <div class="app-row" data-id="${a.id}">
+      <span class="ar-block${a.blocked?' on':''}" data-act="block" title="${a.blocked?'Blocked during focus — tap to allow':'Allowed — tap to block'}">${a.blocked?'🔒':'🔓'}</span>
+      <span class="ar-name">${esc(a.name)}</span>
+      <span class="ar-del" data-act="del" title="Remove">×</span>
+    </div>`).join('') : '<div class="mind-note">No apps yet. Add the apps & sites that pull you away below — they’ll be locked 🔒 during focus. Tap the lock to allow one back.</div>';
+  host.innerHTML=`
+  <div class="mind-note">Lock the apps & sites to avoid. While a timer or stopwatch runs, your locked list shows on the timer card as a focus pledge — the inverse of Forest’s allow-list.</div>
+  <div id="appList" style="margin-top:14px">${rows}</div>
+  <div class="app-add">
+    <input id="appName" placeholder="App or website to block…" maxlength="60">
+    <button id="appAddBtn">Add</button>
+  </div>
+  <div class="mind-note"><b>${blocked}</b> app${blocked===1?'':'s'} locked 🔒 for focus.<br>Note: a web page can’t technically block native apps on your phone — treat the lock list as a focus pledge, surfaced as a reminder while you work.</div>`;
+  host.querySelectorAll('.app-row').forEach(row=>{ const id=row.dataset.id;
+    row.querySelectorAll('[data-act]').forEach(el=>el.onclick=()=>{ const a=screenApps().find(x=>x.id===id); if(!a)return;
+      const act=el.dataset.act;
+      if(act==='block'){ a.blocked=!a.blocked; }
+      else if(act==='del'){ settings.screenApps=screenApps().filter(x=>x.id!==id); }
+      save(); fdBlockBannerSync(); renderScreen(host); }); });
+  const add=()=>{ const n=$('appName').value.trim(); if(!n)return;
+    screenApps().push({id:uid('app'),name:n,blocked:true}); save(); fdBlockBannerSync(); renderScreen(host); $('appName').focus(); };
+  $('appAddBtn').onclick=add;
+  $('appName').onkeydown=e=>{ if(e.key==='Enter')add(); };
+}
+
+/* blocked-apps reminder banner on the timer card while a session runs */
+function fdBlockBannerSync(){ const el=$('blockBanner'); if(!el)return;
+  const blocked=(Array.isArray(settings.screenApps)?settings.screenApps:[]).filter(a=>a.blocked);
+  if(active && blocked.length){ el.innerHTML=`🔒 Focus mode — <b>${blocked.length}</b> app${blocked.length>1?'s':''} to avoid: ${blocked.map(a=>esc(a.name)).join(', ')}`; el.classList.add('show'); }
+  else el.classList.remove('show'); }
+
 /* ---------- tabs ---------- */
 /* expand/contract the Tasks smart-list panel (clicking the Tasks rail icon while already on Tasks) */
 function toggleTasksNav(){ $('tab-tasks').classList.toggle('nav-collapsed'); }
@@ -6799,12 +6963,14 @@ function switchTab(name){
   if(name==='countdown')renderCountdownTab();
   if(name==='habits')renderHabitsTab();
   if(name==='quest')renderQuest();
+  if(name==='mindfulness')renderMindfulness();
   if(name==='log')renderCalendar();
   if(name==='subjects')syncSubjCardHeight();
   // re-opening Tasks in single-column mode should land back on today / the current period, not wherever a stray scroll left us
   if(name==='tasks'){ if(colsVisible()===1)colsScrollGoCur=true; renderTasks(); }
   applyTaskWidth();
 }
+document.querySelectorAll('#mindSub button').forEach(b=>b.onclick=()=>{ mindView=b.dataset.v; renderMindfulness(); });
 document.querySelectorAll('.railtab').forEach(b=>b.onclick=()=>{
   const name=b.dataset.tab, already=$('tab-'+name).classList.contains('show');
   if(name==='tasks' && already){ toggleTasksNav(); return; }   // second click on Tasks collapses/expands the list panel
