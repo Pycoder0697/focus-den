@@ -96,6 +96,9 @@
 
   /* TIMER */
   .timer-card{padding:24px 24px 26px;display:flex;flex-direction:column;align-items:center;gap:18px;background:var(--card-bg);position:relative}
+  .timer-quote{width:100%;margin-top:2px;padding-top:16px;border-top:1px solid var(--stroke-soft);background:none;font-family:'Fraunces',serif;font-style:italic;font-size:14.6px;line-height:1.55;color:var(--muted);text-align:center;cursor:pointer;transition:color .2s}
+  .timer-quote:hover{color:var(--ink)}
+  .timer-quote .tq-dash{display:block;margin-top:6px;font-style:normal;font-size:12.4px;color:var(--faint)}
   .subj-select{width:100%;display:flex;gap:8px;align-items:center}
   .subj-select label{font-size:13.2px;color:var(--faint);white-space:nowrap;min-width:54px}
   select.subj{flex:1;font-family:inherit;font-size:15.4px;color:var(--ink);background:var(--field-bg);
@@ -1640,6 +1643,7 @@
     </div>
     <div class="session-dots" id="dots"></div>
     <div class="autostart-row"><span>Auto-start next session</span><div class="toggle" id="autoToggle"></div></div>
+    <button class="timer-quote" id="timerQuote" type="button" title="Tap for another"></button>
   </section>
 
   <!-- PANEL -->
@@ -1771,12 +1775,10 @@
         <h3>♪ Now playing</h3>
         <iframe id="scPlayer" height="340" scrolling="no" allow="autoplay; encrypted-media"
           src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/playlists/soundcloud%253Aplaylists%253A2187491597&color=%23ff6b9d&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false"></iframe>
-        <p class="music-note">Player blank here? SoundCloud is blocked inside this in-app preview — it loads normally once deployed to GitHub Pages. You can also <a href="https://soundcloud.com/vaishnavi-nair-812001539/sets/lofi-for-study-chill-and-more" target="_blank" rel="noopener">open the playlist ↗</a></p>
       </div>
     </div>
   </section>
 
-  <div class="footnote">Runs entirely in your browser · data stays on this device · live Google/Apple Calendar sync needs a server, so use <b>Export .ics</b> to push sessions to your calendar</div>
   </div><!-- /.wrap -->
 </div><!-- /.shell -->
 
@@ -2035,11 +2037,11 @@
   <div class="field"><label>Task</label><input id="tdName" maxlength="200"></div>
   <div class="field" style="flex-direction:column;align-items:stretch;gap:6px"><label>Note</label><textarea id="tdDesc" rows="3" placeholder="Add a description…"></textarea></div>
   <div class="field"><label>When</label><button type="button" class="tk-when" id="tdWhen" style="flex:0 1 auto;max-width:210px">No date</button></div>
-  <div class="field"><label>Subject</label><select id="tdSubject"></select></div>
-  <div class="field"><label>Impact</label><select id="tdImpact"><option value="unnecessary">Unnecessary</option><option value="necessary">Necessary</option><option value="purposeful">Purposeful</option><option value="distracting">Distracting</option></select></div>
-  <div class="field"><label>Parent goal</label><select id="tdParent"></select></div>
-  <div class="field"><label>Priority</label><select id="tdPri"><option value="0">None</option><option value="1">Low</option><option value="2">Medium</option><option value="3">High</option></select></div>
-  <div class="field"><label>Repeat</label><select id="tdRepeat"></select></div>
+  <div class="field"><label>Subject</label><button type="button" class="tk-when" id="tdSubject" style="flex:0 1 auto;max-width:210px">— none —</button></div>
+  <div class="field"><label>Impact</label><button type="button" class="tk-when" id="tdImpact" style="flex:0 1 auto;max-width:210px">Unnecessary</button></div>
+  <div class="field"><label>Parent goal</label><button type="button" class="tk-when" id="tdParent" style="flex:0 1 auto;max-width:210px">— none —</button></div>
+  <div class="field"><label>Priority</label><button type="button" class="tk-when" id="tdPri" style="flex:0 1 auto;max-width:210px">None</button></div>
+  <div class="field"><label>Repeat</label><button type="button" class="tk-when" id="tdRepeat" style="flex:0 1 auto;max-width:210px">Does not repeat</button></div>
   <div class="field" id="tdTimeRow"><label>Time of day</label><span style="display:flex;gap:8px;align-items:center"><input type="time" id="tdStart"><input type="number" id="tdDur" min="0" max="600" placeholder="min" style="width:74px"></span></div>
   <div id="tdActions" style="display:none;gap:8px;margin-top:4px"><button class="minor" id="tdDuplicate">⧉ Duplicate</button><button class="minor" id="tdDelete" style="color:var(--rose)">🗑 Delete</button></div>
   <button class="save" id="tdSave">Save task</button>
@@ -2970,6 +2972,34 @@ function renderFocusHeader(){ const nm=$('fpName'), sub=$('fpSub'), btn=$('focus
   else if($('activeSubject').value){ const s=subjById($('activeSubject').value); if(s) name=s.name; else has=false; }
   else has=false;
   nm.textContent=name; sub.innerHTML=subHTML; btn.classList.toggle('has-target',has); }
+/* ============================================================================
+   TIMER MOTIVATIONAL QUOTES
+   ----------------------------------------------------------------------------
+   TO ADD A QUOTE: copy one line below and edit it. Each quote is one line:
+       { text: 'The quote goes here.', by: 'Who said it' },
+   • `text`  — required. The quote itself.
+   • `by`    — OPTIONAL. Author or a sub-line. Delete `, by:'…'` to show none.
+   • Keep the comma at the end of the line; mind the apostrophes (use ’ inside
+     a word, e.g. 'You’re', so it doesn't end the quote early).
+   The quotes auto-rotate every minute, and tapping the quote shows the next one.
+   ============================================================================ */
+const TIMER_QUOTES=[
+  { text: 'Attention is our most limited and constrained resource. We are what we pay attention to.', by: 'Snap out of autopilot mode.' },
+  { text: 'Good things happen to good people who wait.' },
+  { text: 'Keep pushing Justin. You are closer to your goals than you realise. Big dreams, small steps.' },
+  { text: 'Your focus determines your reality.' },
+  { text: 'Life is a dance. Mindfulness is witnessing that dance.', by: 'Amit Ray' },
+];
+const TIMER_QUOTE_ROTATE_MS=60*1000;   // auto-advance every 1 minute
+let _tqIdx=Math.floor(Math.random()*Math.max(1,TIMER_QUOTES.length)), _tqTimer=null;
+function renderTimerQuote(){ const el=$('timerQuote'); if(!el)return;
+  if(!TIMER_QUOTES.length){ el.style.display='none'; return; }
+  el.style.display='';
+  const q=TIMER_QUOTES[_tqIdx%TIMER_QUOTES.length];
+  el.innerHTML=`“${esc(q.text)}”`+(q.by?`<span class="tq-dash">— ${esc(q.by)}</span>`:''); }
+function advanceTimerQuote(){ if(TIMER_QUOTES.length>1) _tqIdx=(_tqIdx+1)%TIMER_QUOTES.length; renderTimerQuote(); }
+function startTimerQuoteRotation(){ clearInterval(_tqTimer); if(TIMER_QUOTES.length>1) _tqTimer=setInterval(advanceTimerQuote,TIMER_QUOTE_ROTATE_MS); }
+function cycleTimerQuote(){ advanceTimerQuote(); startTimerQuoteRotation(); }   // manual tap: advance + reset the 1-min timer
 /* the Task dropdown under the Subject dropdown: open tasks of the chosen subject, plus a "— None —"
    so the timer can run bare. Reflects whatever currentTask is (set here or from the Tasks tab). */
 function renderTaskSelect(){ const sel=$('activeTask'); if(!sel) return;
@@ -3181,22 +3211,53 @@ let _tdCtx=null, _tdDraft=null;
 /* refresh the modal's When button, horizon-aware Repeat options & day-only Time row from the draft */
 function tdRenderSched(){
   $('tdWhen').textContent='📅 '+scheduleLabel(_tdDraft);
-  const rep=$('tdRepeat'); rep.innerHTML=repeatOptsFor(_tdDraft).map(o=>`<option value="${o[0]}">${o[1]}</option>`).join('');
   const ok=new Set(repeatOptsFor(_tdDraft).map(o=>o[0])); if(!ok.has(_tdDraft.repeat)) _tdDraft.repeat='none';
-  rep.value=_tdDraft.repeat;
   const day=schedHorizon(_tdDraft)==='day'; $('tdTimeRow').style.display=day?'':'none';
+  tdRenderFields();
 }
+/* Fill the detail-modal value buttons from _tdDraft (popover-driven, TickTick-consistent) */
+function tdRenderFields(){
+  if(!_tdDraft) return;
+  const sids=_tdDraft.subjectIds||[];
+  const names=sids.map(id=>(subjById(id)||{}).name).filter(Boolean);
+  $('tdSubject').textContent = names.length ? names.join(', ') : '— none —';
+  $('tdImpact').textContent = ({purposeful:'Purposeful',necessary:'Necessary',distracting:'Distracting',unnecessary:'Unnecessary'})[_tdDraft.impact||'unnecessary'];
+  const par=_tdDraft.parentId ? (tasks.find(x=>x.id===_tdDraft.parentId)||{}).name : '';
+  $('tdParent').textContent = par || '— none —';
+  $('tdPri').textContent = ['None','Low','Medium','High'][_tdDraft.priority||0];
+  const rl=(repeatOptsFor(_tdDraft).find(o=>o[0]===(_tdDraft.repeat||'none'))||['none','Does not repeat'])[1];
+  $('tdRepeat').textContent = rl;
+}
+/* popover builders — same ctx-menu engine the ⋯ task menu uses, for cross-app consistency */
+function tdSubjectMenu(){
+  const a=_tdDraft.subjectIds||(_tdDraft.subjectIds=[]);
+  return { rebuild:tdSubjectMenu, items:[{ic:!a.length?'✓':'',label:'— none —',keepOpen:true,run:()=>{_tdDraft.subjectIds=[];tdRenderFields();}}].concat(
+    subjects.map(s=>({ic:`<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${s.color}"></span>`,label:s.name,gloss:a.includes(s.id)?'✓':'',keepOpen:true,
+      run:()=>{ const i=_tdDraft.subjectIds.indexOf(s.id); i>=0?_tdDraft.subjectIds.splice(i,1):_tdDraft.subjectIds.push(s.id); tdRenderFields(); }}))) }; }
+function tdImpactMenu(){
+  return { rebuild:tdImpactMenu, items:IMPACT_OPTS.map(o=>({ic:(_tdDraft.impact||'unnecessary')===o[0]?'✓':'',label:o[1],run:()=>{_tdDraft.impact=o[0];tdRenderFields();}})) }; }
+function tdParentMenu(){
+  const task=_tdCtx&&_tdCtx.task;
+  return { rebuild:tdParentMenu, items:[{ic:!_tdDraft.parentId?'✓':'',label:'— none —',run:()=>{_tdDraft.parentId='';tdRenderFields();}}].concat(
+    validParents(task).map(p=>({ic:_tdDraft.parentId===p.id?'✓':'',label:p.name,run:()=>{_tdDraft.parentId=p.id;tdRenderFields();}}))) }; }
+function tdPriMenu(){
+  return { rebuild:tdPriMenu, items:['None','Low','Medium','High'].map((lbl,i)=>({
+    ic:`<span style="display:inline-block;width:11px;height:11px;border-radius:50%;border:1px solid var(--stroke-soft);background:${PRI_COL[i]}"></span>`,
+    label:lbl,gloss:(_tdDraft.priority||0)===i?'✓':'',run:()=>{_tdDraft.priority=i;tdRenderFields();}})) }; }
+function tdRepeatMenu(){
+  return { rebuild:tdRepeatMenu, items:repeatOptsFor(_tdDraft).map(p=>({ic:(_tdDraft.repeat||'none')===p[0]?'✓':'',label:p[1],run:()=>{_tdDraft.repeat=p[0];tdRenderFields();}})) }; }
+$('tdSubject').onclick=()=>openCtxMenu($('tdSubject'),tdSubjectMenu());
+$('tdImpact').onclick=()=>openCtxMenu($('tdImpact'),tdImpactMenu());
+$('tdParent').onclick=()=>openCtxMenu($('tdParent'),tdParentMenu());
+$('tdPri').onclick=()=>openCtxMenu($('tdPri'),tdPriMenu());
+$('tdRepeat').onclick=()=>openCtxMenu($('tdRepeat'),tdRepeatMenu());
 function openTodo(defaultSubjectId,task){ _tdCtx={task};
-  const sel=$('tdSubject'); sel.innerHTML='<option value="">— none —</option>'; subjects.forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.name;sel.appendChild(o);});
-  sel.value = task? (task.subjectId||'') : (defaultSubjectId||'');
-  const psel=$('tdParent'); psel.innerHTML='<option value="">— none —</option>';
-  validParents(task).forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.name;psel.appendChild(o);});
-  psel.value = task?(task.parentId||''):'';
-  _tdDraft = task ? {horizon:schedHorizon(task), due:task.due||'', dueEnd:task.dueEnd||'', hkey:task.hkey||'', repeat:task.repeat||'none', start:task.start||'', dur:task.dur||0}
-                  : {horizon:'', due:'', dueEnd:'', hkey:'', repeat:'none', start:'', dur:0};
+  _tdDraft = task ? {horizon:schedHorizon(task), due:task.due||'', dueEnd:task.dueEnd||'', hkey:task.hkey||'', repeat:task.repeat||'none', start:task.start||'', dur:task.dur||0,
+                     subjectIds:[...subjectIdsOf(task)], impact:taskImpact(task), priority:task.priority||0, parentId:task.parentId||'', boardId:task.boardId||''}
+                  : {horizon:'', due:'', dueEnd:'', hkey:'', repeat:'none', start:'', dur:0,
+                     subjectIds:(defaultSubjectId?[defaultSubjectId]:[]), impact:'unnecessary', priority:0, parentId:'', boardId:''};
   $('todoTitle').textContent=task?'Edit task':'New task';
-  $('tdName').value=task?task.name:''; $('tdDesc').value=task?(task.desc||''):''; $('tdPri').value=task?(task.priority||0):0;
-  $('tdImpact').value=task?taskImpact(task):'unnecessary';
+  $('tdName').value=task?task.name:''; $('tdDesc').value=task?(task.desc||''):'';
   $('tdStart').value=_tdDraft.start||''; $('tdDur').value=_tdDraft.dur||'';
   $('tdActions').style.display=task?'flex':'none';   // Delete/Duplicate only when editing an existing task
   tdRenderSched();
@@ -3205,15 +3266,15 @@ $('tdDuplicate').onclick=()=>{ const t=_tdCtx&&_tdCtx.task; if(!t)return; $('ovT
 $('tdDelete').onclick=()=>{ const t=_tdCtx&&_tdCtx.task; if(!t)return; $('ovTodo').classList.remove('show'); _tdCtx=null;_tdDraft=null;
   askConfirm('Delete this task?',()=>{ notionArchivePage(t); tasks=tasks.filter(x=>x.id!==t.id); save(); refreshTaskSurfaces(); }); };
 $('tdWhen').onclick=()=>openDatePicker($('tdWhen'),_tdDraft,()=>{ $('tdStart').value=_tdDraft.start||''; $('tdDur').value=_tdDraft.dur||''; tdRenderSched(); });
-$('tdRepeat').onchange=e=>{ _tdDraft.repeat=e.target.value; };
 $('tdStart').onchange=e=>{ _tdDraft.start=e.target.value; };
 $('tdDur').onchange=e=>{ _tdDraft.dur=parseInt(e.target.value)||0; };
 $('tdSave').onclick=()=>{ if(!_tdCtx||!_tdDraft)return; const {task}=_tdCtx;
   const name=$('tdName').value.trim(); if(!name)return;
   const target = task || newTask(name,'');
-  Object.assign(target,{ name, desc:$('tdDesc').value.replace(/\s+$/,''), subjectId:$('tdSubject').value||'', impact:$('tdImpact').value||'', priority:parseInt($('tdPri').value)||0,
+  Object.assign(target,{ name, desc:$('tdDesc').value.replace(/\s+$/,''), impact:_tdDraft.impact||'', priority:_tdDraft.priority||0,
     horizon:_tdDraft.horizon||'', due:_tdDraft.due||'', dueEnd:_tdDraft.dueEnd||'', hkey:_tdDraft.hkey||'',
-    repeat:_tdDraft.repeat||'none', parentId:$('tdParent').value||'' });
+    repeat:_tdDraft.repeat||'none', parentId:_tdDraft.parentId||'' });
+  setTaskSubjects(target,_tdDraft.subjectIds||[]);
   if(target.horizon==='day' && !target.due) target.due=todayKey();
   const day=schedHorizon(target)==='day';
   target.start = day ? (_tdDraft.start||'') : ''; target.dur = day ? (_tdDraft.dur||0) : 0;
@@ -3807,7 +3868,8 @@ const REPEAT_OPTS={
   life:   [['none','Does not repeat']],
   '':     [['none','Does not repeat']]
 };
-function repeatOptsFor(t){ return REPEAT_OPTS[schedHorizon(t)]||REPEAT_OPTS['']; }
+/* A board-placed task with no date still gets full repeat options (reset is date-agnostic via isTaskDone). */
+function repeatOptsFor(t){ const h=schedHorizon(t)||(t.boardId?'day':''); return REPEAT_OPTS[h]||REPEAT_OPTS['']; }
 function clampRepeat(t){ const ok=new Set(repeatOptsFor(t).map(o=>o[0])); if(!ok.has(t.repeat||'none')) t.repeat='none'; }
 function scheduleLabel(t){ const h=schedHorizon(t), today=todayKey();
   if(h==='day'){
@@ -4762,6 +4824,7 @@ function openCtxMenu(anchor,page){ closeCtx(); closeDatePicker&&closeDatePicker(
   m.querySelectorAll('.ctx-item').forEach(b=>{ const it=page.items[+b.dataset.i]; if(!it)return;
     if(it.sub){ const open=()=>{ closeCtxSub(); b.classList.add('subopen'); openCtxSub(b,it.sub); };
       _ctxBind(b, open, open); }
+    else if(it.keepOpen) _ctxBind(b, ()=>{ it.run&&it.run(); openCtxMenu(anchor, page.rebuild?page.rebuild():page); }, closeCtxSub);  // toggle + re-render in place (multi-select)
     else _ctxBind(b, ()=>{ const a=_ctxAnchor; closeCtx(); it.run&&it.run(a); }, closeCtxSub); });
   positionFloat(m,anchor,'below');
   setTimeout(()=>{ document.addEventListener('mousedown',_ctxOutside,true); document.addEventListener('touchstart',_ctxOutside,true); },0); }
@@ -6423,6 +6486,7 @@ function selectFocusSubject(id){ currentTask=null; currentHabit=null; $('activeS
 function selectFocusHabit(h){ if(!h)return; currentHabit=h.id; currentTask=null; $('activeSubject').value=''; updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); closeFocusPicker(); }
 function clearFocus(){ currentTask=null; currentHabit=null; $('activeSubject').value=''; updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); }
 $('focusPick').onclick=e=>{ e.stopPropagation(); $('fpickPop').classList.contains('open')?closeFocusPicker():openFocusPicker(); };
+$('timerQuote').onclick=cycleTimerQuote; renderTimerQuote(); startTimerQuoteRotation();
 $('fpickTabs').querySelectorAll('[data-ft]').forEach(b=>b.onclick=()=>{ fpickTab=b.dataset.ft; renderFocusPicker(); });
 $('fpickSearch').addEventListener('input',renderFocusPicker);
 $('fpickListSel').onclick=e=>{ e.stopPropagation(); $('fpickScopeMenu').classList.contains('open')?closeScopeMenu():openScopeMenu(); };
