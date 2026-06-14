@@ -2222,7 +2222,7 @@ const _notionRecent=new Map();        // pageId → ts of last local push (a rac
    live tasks against this and pushes whatever changed — so ANY mutation site (date picker, drag-drop,
    calendar, timeline, matrix…) reflects back into Notion without each having to call notionPushTask. */
 const _notionShadow=new Map();        // pageId → {name,done,due,dueEnd,desc}
-const notionFields=t=>({name:t.name||'',done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:Math.round(taskSecs(t))});
+const notionFields=t=>({name:t.name||'',done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:Math.round(taskSecs(t))});
 function notionMarkSynced(t){ if(t&&t.notionPageId) _notionShadow.set(t.notionPageId,notionFields(t)); } // baseline matches Notion ⇒ no echo-push
 function notionFlushChanges(){ if(!notionOn()) return;
   for(const t of tasks){ if(!t.notionSourceId||!t.notionPageId) continue;
@@ -2270,7 +2270,7 @@ async function notionSyncOne(src){
       tasks.push(t); changed=true; }                    // NEW rows land in the pinned board list, carrying their Notion due date + description…
     else {                                              // …after that, placement is yours — sync mirrors name + done + date + description both ways…
       const fresh=_notionInflight.has(pid) || ((_notionRecent.get(pid)||0) > Date.now()-15000);
-      if(!fresh){ if(t.name!==name){ t.name=name; changed=true; } if(t.done!==done){ t.done=done; t.doneOn=done?todayKey():''; changed=true; }
+      if(!fresh){ if(t.name!==name){ t.name=name; changed=true; } if(notionDoneOf(t)!==done){ setTaskDone(t,done); changed=true; } // checkbox applies to the right field (repeat-aware)
         if(hasDate && (t.due!==rDue || (t.dueEnd||'')!==rEnd)){ t.due=rDue; t.dueEnd=rEnd;   // a date edited in Notion pulls back
           if(rDue){ t.horizon='day'; t.hkey=''; } else if(t.horizon==='day'){ t.horizon=''; } changed=true; }
         if(hasDesc && (t.desc||'')!==rDesc){ t.desc=rDesc; changed=true; } } // …but a just-pushed local edit isn't reverted by a read that raced it
@@ -2300,7 +2300,7 @@ function buildNotionProps(schema,vals){ if(!schema) return null; const p={};
 /* TWO-WAY: push a synced task's name + done back to Notion. Fire-and-forget; guarded so a racing pull won't revert it */
 async function notionPushTask(t){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
   const src=notionSources.find(s=>s.id===t.notionSourceId); if(!src||!src.schema) return;
-  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
+  const props=buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
   const pid=t.notionPageId; _notionInflight.add(pid); _notionRecent.set(pid,Date.now());
   try{ const r=await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,properties:props})});
        const d=await r.json().catch(()=>null);
@@ -2314,7 +2314,7 @@ function notionSourceForList(boardId,listId){ return notionSources.find(s=>s.ena
 /* WRITE / INSERT: a task that lands in a Notion-synced list becomes a brand-new row in that database */
 async function notionMaybeCreate(t){ if(!t||t.notionSourceId||!notionOn()) return;
   const src=notionSourceForList(t.boardId,t.listId); if(!src||!src.schema) return;
-  const props=buildNotionProps(src.schema,{title:t.name,done:!!t.done,due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
+  const props=buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
   t.notionSourceId=src.id; t.notionPageId='';            // claim immediately so a racing pull won't duplicate it
   _notionCreating++;
   try{ const r=await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({create:src.dbId,properties:props})});
@@ -3074,11 +3074,19 @@ function staleDone(t){
   if(t.done)   return !t.doneOn   || t.doneOn   < todayKey();  // completed before today
   return false;
 }
+/* Set a task's done-state, writing the field its mode actually uses: one-off → t.done;
+   recurring → t.doneOn (the occurrence marker isTaskDone reads). Shared by the in-app check
+   and the Notion pull so recurring completions stay consistent in both directions. */
+function setTaskDone(t,val){
+  if(t.repeat&&t.repeat!=='none'){ t.doneOn = val ? todayKey() : ''; t.done=false; } // doneOn powers XP-per-day (derived, no parallel counter)
+  else { t.done=!!val; t.doneOn = val ? todayKey() : ''; }
+}
+/* The checked-state mirrored to/from Notion: the live occurrence done-state (so a recurring
+   task's reset/advance unchecks it in Notion too), but never the app-only "Won't Do" state. */
+function notionDoneOf(t){ return !t.wontDo && isTaskDone(t); }
 function toggleTask(t){
   if(t.wontDo){ t.wontDo=false; t.wontDoOn=''; uncheckSound(); return; }   // clicking the check on an abandoned task reactivates it
-  const was=isTaskDone(t);
-  if(!t.repeat||t.repeat==='none'){ t.done=!t.done; t.doneOn=t.done?todayKey():''; } // doneOn powers XP-per-day (derived, no parallel counter)
-  else t.doneOn = was ? '' : todayKey();
+  setTaskDone(t, !isTaskDone(t));
   (isTaskDone(t)?checkSound:uncheckSound)();
   setTimeout(gamePulse,0);   // award/refresh XP after the caller's save() lands
   // two-way push happens via the caller's save() → notionFlushChanges()
