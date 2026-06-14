@@ -1040,6 +1040,9 @@
   /* schedule "When" button + collapsible time extension on task cards */
   .tk-when{font-family:inherit;font-size:13.8px;color:var(--ink);background:var(--field-bg);border:1px solid var(--stroke-soft);border-radius:8px;padding:6px 10px;cursor:pointer;flex:1 1 auto;text-align:left;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tk-when:hover{border-color:var(--accent)}
+  .tdday{font-family:inherit;font-size:12.6px;color:var(--faint);background:var(--field-bg);border:1px solid var(--stroke-soft);border-radius:50%;width:32px;height:32px;cursor:pointer;padding:0;flex:0 0 auto}
+  .tdday:hover{border-color:var(--accent)}
+  .tdday.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
   .tk-addtime{font-family:inherit;font-size:13.2px;color:var(--accent);background:none;border:1px dashed var(--stroke);border-radius:8px;padding:6px 11px;cursor:pointer}
   .tk-addtime:hover{background:var(--glass-2)}
   .tk-time{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--track-bg);border:1px solid var(--stroke-soft);border-radius:10px;padding:8px 10px}
@@ -2113,6 +2116,7 @@
   <div class="field"><label>Parent goal</label><button type="button" class="tk-when" id="tdParent" style="flex:0 1 auto;max-width:210px">— none —</button></div>
   <div class="field"><label>Priority</label><button type="button" class="tk-when" id="tdPri" style="flex:0 1 auto;max-width:210px">None</button></div>
   <div class="field"><label>Repeat</label><button type="button" class="tk-when" id="tdRepeat" style="flex:0 1 auto;max-width:210px">Does not repeat</button></div>
+  <div class="field" id="tdDaysRow" style="display:none"><label>On days</label><span id="tdDays" style="display:flex;gap:5px;flex-wrap:wrap"></span></div>
   <div class="field" id="tdTimeRow"><label>Time of day</label><span style="display:flex;gap:8px;align-items:center"><input type="time" id="tdStart"><input type="number" id="tdDur" min="0" max="600" placeholder="min" style="width:74px"></span></div>
   <div id="tdActions" style="display:none;gap:8px;margin-top:4px"><button class="minor" id="tdDuplicate">⧉ Duplicate</button><button class="minor" id="tdDelete" style="color:var(--rose)">🗑 Delete</button></div>
   <button class="save" id="tdSave">Save task</button>
@@ -3138,7 +3142,8 @@ function isTaskDone(t){
   if(t.repeat==='quarterly') return !!t.doneOn && quarterKey(t.doneOn)===quarterKey(todayKey());
   if(t.repeat==='yearly')    return !!t.doneOn && yearKey(t.doneOn)===yearKey(todayKey());
   if(t.repeat==='weekdays'){ const dow=new Date(todayKey()+'T00:00:00').getDay(); if(dow===0||dow===6) return true; } // not due on weekends
-  return t.doneOn===todayKey(); // daily & weekdays reset each day
+  if(t.repeat==='days'){ const dow=new Date(todayKey()+'T00:00:00').getDay(); if(!repeatDaysOf(t).includes(dow)) return true; } // not due on an unselected weekday
+  return t.doneOn===todayKey(); // daily / weekdays / specific-days reset each day
 }
 /* TickTick "completed tasks don't pile up": a finished one-off task stops cluttering the
    working views once the day it was finished on has passed — it lives on in the Log/Stats and
@@ -3343,8 +3348,28 @@ function tdRenderFields(){
   const par=_tdDraft.parentId ? (tasks.find(x=>x.id===_tdDraft.parentId)||{}).name : '';
   $('tdParent').textContent = par || '— none —';
   $('tdPri').textContent = ['None','Low','Medium','High'][_tdDraft.priority||0];
-  const rl=(repeatOptsFor(_tdDraft).find(o=>o[0]===(_tdDraft.repeat||'none'))||['none','Does not repeat'])[1];
+  let rl=(repeatOptsFor(_tdDraft).find(o=>o[0]===(_tdDraft.repeat||'none'))||['none','Does not repeat'])[1];
+  if(_tdDraft.repeat==='days') rl=repeatDaysLabel(_tdDraft.repeatDays);
   $('tdRepeat').textContent = rl;
+  tdRenderDays();
+}
+/* "Every Mon, Wed, Fri" style summary for a Specific-days repeat */
+function repeatDaysLabel(days){ const a=(days||[]).slice().sort((x,y)=>x-y);
+  if(!a.length) return 'Pick days…';
+  if(a.length===7) return 'Every day';
+  if(a.length===5 && [1,2,3,4,5].every(d=>a.includes(d))) return 'Weekdays';
+  const wd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']; return 'Every '+a.map(d=>wd[d]).join(', '); }
+/* the weekday-toggle row, shown only for a Specific-days repeat */
+function tdRenderDays(){
+  const row=$('tdDaysRow'); if(!row) return;
+  const show = _tdDraft && _tdDraft.repeat==='days';
+  row.style.display = show?'':'none';
+  if(!show) return;
+  if(!Array.isArray(_tdDraft.repeatDays)) _tdDraft.repeatDays=[];
+  const wd=['S','M','T','W','T','F','S'];
+  $('tdDays').innerHTML = wd.map((nm,i)=>`<button type="button" class="tdday${_tdDraft.repeatDays.includes(i)?' on':''}" data-d="${i}" title="${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][i]}">${nm}</button>`).join('');
+  $('tdDays').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const d=+b.dataset.d, a=_tdDraft.repeatDays, i=a.indexOf(d);
+    i>=0?a.splice(i,1):a.push(d); a.sort((x,y)=>x-y); tdRenderFields(); });
 }
 /* popover builders — same ctx-menu engine the ⋯ task menu uses, for cross-app consistency */
 function tdSubjectMenu(){
@@ -3363,16 +3388,19 @@ function tdPriMenu(){
     ic:`<span style="display:inline-block;width:11px;height:11px;border-radius:50%;border:1px solid var(--stroke-soft);background:${PRI_COL[i]}"></span>`,
     label:lbl,gloss:(_tdDraft.priority||0)===i?'✓':'',run:()=>{_tdDraft.priority=i;tdRenderFields();}})) }; }
 function tdRepeatMenu(){
-  return { rebuild:tdRepeatMenu, items:repeatOptsFor(_tdDraft).map(p=>({ic:(_tdDraft.repeat||'none')===p[0]?'✓':'',label:p[1],run:()=>{_tdDraft.repeat=p[0];tdRenderFields();}})) }; }
+  return { rebuild:tdRepeatMenu, items:repeatOptsFor(_tdDraft).map(p=>({ic:(_tdDraft.repeat||'none')===p[0]?'✓':'',label:p[1],run:()=>{
+    _tdDraft.repeat=p[0];
+    if(p[0]==='days' && !(Array.isArray(_tdDraft.repeatDays)&&_tdDraft.repeatDays.length)){ const k=_tdDraft.due||todayKey(); _tdDraft.repeatDays=[new Date(k+'T00:00:00').getDay()]; } // seed with the task's own weekday
+    tdRenderFields();}})) }; }
 $('tdSubject').onclick=()=>openCtxMenu($('tdSubject'),tdSubjectMenu());
 $('tdImpact').onclick=()=>openCtxMenu($('tdImpact'),tdImpactMenu());
 $('tdParent').onclick=()=>openCtxMenu($('tdParent'),tdParentMenu());
 $('tdPri').onclick=()=>openCtxMenu($('tdPri'),tdPriMenu());
 $('tdRepeat').onclick=()=>openCtxMenu($('tdRepeat'),tdRepeatMenu());
 function openTodo(defaultSubjectId,task){ _tdCtx={task};
-  _tdDraft = task ? {horizon:schedHorizon(task), due:task.due||'', dueEnd:task.dueEnd||'', hkey:task.hkey||'', repeat:task.repeat||'none', start:task.start||'', dur:task.dur||0,
+  _tdDraft = task ? {horizon:schedHorizon(task), due:task.due||'', dueEnd:task.dueEnd||'', hkey:task.hkey||'', repeat:task.repeat||'none', repeatDays:[...(task.repeatDays||[])], start:task.start||'', dur:task.dur||0,
                      subjectIds:[...subjectIdsOf(task)], impact:taskImpact(task), priority:task.priority||0, parentId:task.parentId||'', boardId:task.boardId||''}
-                  : {horizon:'', due:'', dueEnd:'', hkey:'', repeat:'none', start:'', dur:0,
+                  : {horizon:'', due:'', dueEnd:'', hkey:'', repeat:'none', repeatDays:[], start:'', dur:0,
                      subjectIds:(defaultSubjectId?[defaultSubjectId]:[]), impact:'unnecessary', priority:0, parentId:'', boardId:''};
   $('todoTitle').textContent=task?'Edit task':'New task';
   $('tdName').value=task?task.name:''; $('tdDesc').value=task?(task.desc||''):'';
@@ -3397,6 +3425,7 @@ $('tdSave').onclick=()=>{ if(!_tdCtx||!_tdDraft)return; const {task}=_tdCtx;
   const day=schedHorizon(target)==='day';
   target.start = day ? (_tdDraft.start||'') : ''; target.dur = day ? (_tdDraft.dur||0) : 0;
   clampRepeat(target);
+  target.repeatDays = target.repeat==='days' ? (_tdDraft.repeatDays||[]).slice().sort((x,y)=>x-y) : [];
   if(!task){   // brand-new task built in the detail modal → run the add-friction gate before it lands
     $('ovTodo').classList.remove('show'); _tdCtx=null; _tdDraft=null;
     gateAddTask(target, ()=>{ tasks.push(target); save(); refreshTaskSurfaces(); }); return; }
@@ -3681,19 +3710,23 @@ function daysBetween(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a
    (e.g. Jan 31 + 1 month → Feb 28/29) so monthly/quarterly/yearly repeats never overflow. */
 function addMonthsKey(key,n){ let [y,m,d]=key.split('-').map(Number); const idx=y*12+(m-1)+n, ny=Math.floor(idx/12), nm=idx%12;
   const dim=new Date(Date.UTC(ny,nm+1,0)).getUTCDate(); return new Date(Date.UTC(ny,nm,Math.min(d,dim))).toISOString().slice(0,10); }
+/* the selected weekdays (0=Sun…6=Sat) for a "Specific days" repeat — empty falls back to every day. */
+function repeatDaysOf(t){ const a=t&&t.repeatDays; return (Array.isArray(a)&&a.length)?a:[0,1,2,3,4,5,6]; }
 /* the occurrence after `key` for a given repeat cadence (preserves weekday / day-of-month). */
-function nextRepeatKey(key,repeat){
+function nextRepeatKey(key,repeat,days){
   if(repeat==='weekly')    return addDays(key,7);
   if(repeat==='monthly')   return addMonthsKey(key,1);
   if(repeat==='quarterly') return addMonthsKey(key,3);
   if(repeat==='yearly')    return addMonthsKey(key,12);
   if(repeat==='weekdays'){ let k=addDays(key,1); const g=new Date(k+'T00:00:00').getDay(); if(g===6)k=addDays(k,2); else if(g===0)k=addDays(k,1); return k; }
+  if(repeat==='days'){ const ds=(Array.isArray(days)&&days.length)?days:[0,1,2,3,4,5,6]; let k=key,g=0;
+    do{ k=addDays(k,1); }while(!ds.includes(new Date(k+'T00:00:00').getDay())&&++g<14); return k; }
   return addDays(key,1);   // daily (and any unknown finer cadence)
 }
 /* the next occurrence date for a dated recurring task, cadence-preserving and never in the past
    (a daily task done late still lands on tomorrow, not on a past day). */
 function nextOccurrenceKey(t){ const today=todayKey(); let d=t.due,g=0;
-  do{ d=nextRepeatKey(d,t.repeat); }while(d<=today&&++g<4000); return d; }
+  do{ d=nextRepeatKey(d,t.repeat,t.repeatDays); }while(d<=today&&++g<4000); return d; }
 /* Recurrence = "complete + clone forward" (Google-Tasks style). Finishing a dated recurring task
    FREEZES it as a permanent done record (its repeat is cleared, so it stays ticked — in Notion the
    row stays checked — and never re-spawns) and CLONES a fresh task for the next occurrence. Each
@@ -3728,7 +3761,7 @@ function uncompleteRecurring(t){
 }
 function prettyDate(key){ const [y,m,d]=key.split('-').map(Number); return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]; }
 const PRI_COL=['transparent','#5fc24a','#f5a623','#ff5a5a'];
-function newTask(name,due){ taskSound(); return {id:uid('t'),name,desc:'',why:'',impact:'',due:due||'',dueEnd:'',priority:0,subjectId:'',subjectIds:[],checklist:[],done:false,doneOn:'',repeat:'none',start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
+function newTask(name,due){ taskSound(); return {id:uid('t'),name,desc:'',why:'',impact:'',due:due||'',dueEnd:'',priority:0,subjectId:'',subjectIds:[],checklist:[],done:false,doneOn:'',repeat:'none',repeatDays:[],start:'',dur:0,created:Date.now(),order:topOrder(),horizon:(due?'day':''),hkey:'',parentId:'',boardId:'',listId:'',inboxListId:''}; }
 
 /* ---- TeuxDeux-style smart entry: parse priority, date & repeat from free text ---- */
 const SMART_WD={sunday:0,sun:0,monday:1,mon:1,tuesday:2,tues:2,tue:2,wednesday:3,weds:3,wed:3,thursday:4,thurs:4,thur:4,thu:4,friday:5,fri:5,saturday:6,sat:6};
@@ -4027,7 +4060,7 @@ function tasksInHorizon(h,key){
    ==================================================================== */
 function schedHorizon(t){ return t.horizon || (t.due?'day':''); }
 const REPEAT_OPTS={
-  day:    [['none','Does not repeat'],['daily','Daily'],['weekdays','Weekdays'],['weekly','Weekly'],['monthly','Monthly'],['quarterly','Quarterly'],['yearly','Yearly']],
+  day:    [['none','Does not repeat'],['daily','Daily'],['weekdays','Weekdays'],['days','Specific days…'],['weekly','Weekly'],['monthly','Monthly'],['quarterly','Quarterly'],['yearly','Yearly']],
   week:   [['none','Does not repeat'],['weekly','Weekly'],['monthly','Monthly'],['quarterly','Quarterly'],['yearly','Yearly']],
   month:  [['none','Does not repeat'],['monthly','Monthly'],['quarterly','Quarterly'],['yearly','Yearly']],
   quarter:[['none','Does not repeat'],['quarterly','Quarterly'],['yearly','Yearly']],
@@ -4244,7 +4277,7 @@ function taskCard(t,depth){ depth=depth||0; const today=todayKey();
   const timeChip=(schedHorizon(t)==='day'&&t.start)?`<span class="tk-chip" style="color:var(--accent)" title="Time of day">🕐 ${to12(t.start)}</span>`:'';
   const bd=t.boardId?boardById(t.boardId):null; const bdList=(bd&&t.listId)?bd.lists.find(l=>l.id===t.listId):null;
   const bdChip=bd?`<span class="tk-chip" style="color:var(--amber)" title="On board">▤ ${esc(bd.name)}${bdList?' · '+esc(bdList.name):''}</span>`:'';
-  const repLbl=(t.repeat&&t.repeat!=='none')?(repeatOptsFor(t).find(o=>o[0]===t.repeat)||[,t.repeat])[1]:'';
+  const repLbl=(t.repeat==='days')?repeatDaysLabel(t.repeatDays):(t.repeat&&t.repeat!=='none')?(repeatOptsFor(t).find(o=>o[0]===t.repeat)||[,t.repeat])[1]:'';
   const repChip=repLbl?`<span class="tk-chip" style="color:var(--violet)" title="Repeats ${esc(repLbl)}">🔁 ${esc(repLbl)}</span>`:'';
   const tags=[
     hzChip, timeChip, repChip, bdChip,
@@ -5016,7 +5049,9 @@ window.addEventListener('resize',()=>closeCtx());
 
 /* ---- menu definitions ---- */
 function buildTaskMenu(t,re){ re=re||(()=>renderTasks());
-  const repItems=repeatOptsFor(t).map(p=>({ic:(t.repeat||'none')===p[0]?'✓':'',label:p[1],run:()=>{t.repeat=p[0];save();re();}}));
+  const repItems=repeatOptsFor(t).map(p=>({ic:(t.repeat||'none')===p[0]?'✓':'',label:p[1],run:()=>{
+    if(p[0]==='days'){ openTodo(null,t); return; } // open the detail modal to pick weekdays
+    t.repeat=p[0]; t.repeatDays=[]; save(); re(); }}));
   // Subjects are tags: this is a MULTI-toggle. ✓ marks each tagged subject; clicking toggles + keeps the submenu open.
   const subjTags=subjectIdsOf(t);
   const subjGloss=subjTags.length ? (((subjById(subjTags[0])||{}).name||'')+(subjTags.length>1?` +${subjTags.length-1}`:'')) : '';
