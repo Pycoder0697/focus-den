@@ -1613,6 +1613,13 @@
   .sound-btn .sb-lab{font-size:11px;color:var(--muted)}
   .sound-btn.on .sb-lab{color:var(--ink)}
   .mind-sessions{font-size:12.5px;color:var(--faint);text-align:center;margin-top:14px}
+  /* guided meditation */
+  .gd-phase{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--teal);font-weight:700;min-height:14px;text-align:center;margin-top:4px}
+  .gd-text{font-size:16px;line-height:1.6;color:var(--ink);text-align:center;max-width:340px;margin:0 auto;min-height:84px;
+    display:flex;align-items:center;justify-content:center;transition:opacity .5s ease}
+  .gd-text.fade{opacity:0}
+  .breathe-orb.pulse{animation:gdpulse 11s ease-in-out infinite}
+  @keyframes gdpulse{0%,100%{transform:scale(.74)}50%{transform:scale(1.04)}}
   /* blocked apps */
   .app-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--stroke-soft);background:var(--glass);margin-bottom:8px}
   .app-row .ar-name{flex:1;font-weight:600;color:var(--ink);font-size:14px}
@@ -1836,6 +1843,7 @@
       </div>
       <div class="mind-sub" id="mindSub">
         <button data-v="breathe" class="active">Breathe</button>
+        <button data-v="guided">Meditate</button>
         <button data-v="blocked">Blocked Apps</button>
       </div>
       <div id="mindBody"></div>
@@ -6857,7 +6865,7 @@ function fmtMin(m){ m=Math.round(m||0); if(m<60)return m+'m'; const h=Math.floor
 
 function renderMindfulness(){ const body=$('mindBody'); if(!body)return;
   document.querySelectorAll('#mindSub button').forEach(b=>b.classList.toggle('active',b.dataset.v===mindView));
-  if(mindView==='breathe') renderBreathe(body); else renderScreen(body);
+  if(mindView==='breathe') renderBreathe(body); else if(mindView==='guided') renderGuided(body); else renderScreen(body);
 }
 
 /* --- Breathe (Mindful Space clone) --- */
@@ -6913,6 +6921,136 @@ function breatheSetSound(s){ _breathe.sound=s; mindfulData().lastSound=s; save()
   stopAmbient(); if(_breathe.running && s&&s!=='off') breathePlay(s);
 }
 function breathePlay(s){ if(s==='rain')playRain();else if(s==='waves')playWaves();else if(s==='bonfire')playBonfire();else if(s==='crickets')playCrickets();else if(s==='tick')playTick(); }
+
+/* --- Guided meditation (time-adaptive spoken-style instructions) ---
+   A session is built from the universal mindfulness arc — Arrive → Settle → Breath →
+   Return → (Deepen / Open) → Close. buildGuide(T) lays the instruction cues across the
+   chosen duration: the opening and closing are always present and densely paced (so the
+   start and end land cleanly), while the optional middle stages drop out as the session
+   gets shorter and stretch into longer silences as it gets longer. All wording is original. */
+let _guide={running:false,left:0,total:600,sound:'',cues:[],idx:-1,tickInt:null};
+const GUIDE_LENS=[5,10,15,20,30];
+
+function buildGuide(T){
+  const open  = Math.max(20, Math.min(60, Math.round(T*0.18)));
+  const close = Math.max(30, Math.min(66, Math.round(T*0.20)));
+  const mid   = Math.max(40, T - open - close);
+  const B={
+    arrive:{label:'Arrive',lines:[
+      'Settle into a comfortable position — sitting tall, but relaxed. Let your eyes gently close, or soften your gaze downward.',
+      'Let your hands rest, your shoulders drop, and allow your full weight to be held by whatever supports you.',
+      'Take a slow breath in through the nose… and let it go with a long, easy exhale.',
+      'Once more — breathe in deeply… and release, letting yourself arrive fully in this moment.']},
+    settle:{label:'Settle',w:1,lines:[
+      'Bring your attention to where your body meets the world — your seat, your feet, your hands.',
+      'Notice any tightness you’re carrying, and let it soften a little with each breath out.',
+      'There’s nowhere else to be and nothing to fix right now. Simply let yourself be here.']},
+    anchor:{label:'Breath',w:1.6,lines:[
+      'Now let your breathing find its own natural rhythm — there’s no need to control it.',
+      'Rest your attention on the breath, wherever you feel it most clearly — the nose, the chest, or the belly.',
+      'Just notice each breath as it arrives… and each breath as it gently leaves.']},
+    wander:{label:'Return',w:2,lines:[
+      'Before long you’ll notice the mind has wandered off into thinking. That’s completely normal — it’s simply what minds do.',
+      'The moment you realise you’ve drifted, that noticing itself is the heart of the practice.',
+      'Gently, and without any judgement, guide your attention back to the breath.',
+      'Again and again, as many times as it takes. Each return is one quiet rep of training the mind.']},
+    deepen:{label:'Deepen',w:1.2,lines:[
+      'If it helps you stay present, silently count each exhale… one… two… on up toward ten.',
+      'Whenever you reach ten, or lose your place, simply begin again at one. The count is just a thread back to the breath.']},
+    aware:{label:'Open',w:1.4,lines:[
+      'Now let the breath ease into the background of your attention.',
+      'Open up to whatever is already here — sounds rising and fading, sensations, the quiet space around you.',
+      'Rest in this soft, open awareness, letting each thing come and go entirely on its own.']},
+    close:{label:'Close',lines:[
+      'Gently let go of any effort now, and let your breathing be completely natural.',
+      'Begin to bring a little life back to the body — your fingers, your hands, perhaps a deeper breath.',
+      'Notice how you feel, and quietly set one simple intention for the time ahead.',
+      'When you’re ready, slowly open your eyes, and carry this calm, steady attention with you.']}
+  };
+  const order=['settle','anchor','wander','deepen','aware'];
+  const include={settle:mid>=100,anchor:true,wander:true,deepen:mid>=300,aware:mid>=540};
+  const used=order.filter(k=>include[k]);
+  const sumW=used.reduce((a,k)=>a+B[k].w,0);
+  const cues=[];
+  const lay=(start,secs,blk,gap,keepLast)=>{
+    let n=Math.max(1,Math.min(blk.lines.length,Math.round(secs/gap)));
+    let chosen = (keepLast && n<blk.lines.length)
+      ? blk.lines.slice(0,Math.max(1,n-1)).concat([blk.lines[blk.lines.length-1]])
+      : blk.lines.slice(0,n);
+    const step=secs/chosen.length;
+    chosen.forEach((tx,i)=>cues.push({t:Math.round(start+i*step),label:blk.label,text:tx}));
+  };
+  let cur=0;
+  lay(cur,open,B.arrive,16,false); cur+=open;
+  used.forEach(k=>{ const secs=Math.round(mid*B[k].w/sumW); lay(cur,secs,B[k],38,false); cur+=secs; });
+  lay(Math.max(cur,T-close),close,B.close,16,true);
+  return cues;
+}
+
+function renderGuided(host){ const d=mindfulData();
+  const today=todayKey(); const todayMin=(d.sessions||[]).filter(s=>s.date===today).reduce((a,s)=>a+(s.mins||0),0);
+  const total=(d.sessions||[]).length;
+  const cue=_guide.cues[_guide.idx]||null;
+  host.innerHTML=`
+  <div class="breathe-card">
+    <div class="bc-title">Guided meditation</div>
+    <div class="bc-sub">A calm, spoken-style session — instructions appear as you go, paced to the length you pick.</div>
+    <div class="breathe-stage">
+      <div class="breathe-orb ${_guide.running?'pulse':'exhale'}" id="gdOrb"></div>
+      <div class="gd-phase" id="gdPhase">${cue?esc(cue.label):''}</div>
+      <div class="gd-text" id="gdText">${cue?esc(cue.text):'When you’re ready, choose a length and begin.'}</div>
+      <div class="breathe-time" id="gdTime">${mmss(_guide.left||_guide.total)}</div>
+    </div>
+    <div class="bc-len" id="gdLens">${GUIDE_LENS.map(n=>`<button data-n="${n*60}"${(_guide.total===n*60)?' class="active"':''}>${n} min</button>`).join('')}</div>
+    <div class="breathe-controls">
+      <button class="bc-chip primary" id="gdToggle">${_guide.running?'Pause':'Begin'}</button>
+      <button class="bc-chip" id="gdStop">End</button>
+    </div>
+    <div class="sound-row" id="gdSounds">${BREATHE_SOUNDS.map(([s,ic,lab])=>`<div class="sound-btn${_guide.sound===s||(!_guide.sound&&s==='off')?' on':''}" data-s="${s}"><div class="sb-ic">${ic}</div><div class="sb-lab">${lab}</div></div>`).join('')}</div>
+    <div class="mind-sessions">${total?`${total} mindful session${total>1?'s':''} logged · ${fmtMin(todayMin)} today`:'No sessions yet — begin when you’re ready.'}</div>
+  </div>`;
+  $('gdLens').querySelectorAll('button').forEach(b=>b.onclick=()=>{ if(_guide.running)return; _guide.total=+b.dataset.n; _guide.left=_guide.total; _guide.idx=-1; _guide.cues=[]; renderGuided(host); });
+  $('gdToggle').onclick=()=>{ _guide.running?guidePause():guideStart(); };
+  $('gdStop').onclick=()=>guideEnd(true);
+  $('gdSounds').querySelectorAll('.sound-btn').forEach(b=>b.onclick=()=>guideSetSound(b.dataset.s));
+}
+function guideStart(){ ensureCtx(); if(!_guide.left)_guide.left=_guide.total;
+  if(!_guide.cues.length){ _guide.cues=buildGuide(_guide.total); _guide.idx=-1; }
+  _guide.running=true;
+  const o=$('gdOrb'); if(o)o.className='breathe-orb pulse';
+  const tog=$('gdToggle'); if(tog)tog.textContent='Pause';
+  if(_guide.sound&&_guide.sound!=='off') breathePlay(_guide.sound);
+  guideRefreshCue(true);
+  clearInterval(_guide.tickInt);
+  _guide.tickInt=setInterval(()=>{ _guide.left--; const t=$('gdTime'); if(t)t.textContent=mmss(Math.max(0,_guide.left));
+    guideRefreshCue(false);
+    if(_guide.left<=0) guideDone(); },1000);
+}
+function guideRefreshCue(force){ const elapsed=_guide.total-_guide.left;
+  let i=-1; for(let k=0;k<_guide.cues.length;k++){ if(_guide.cues[k].t<=elapsed) i=k; else break; }
+  if(i===_guide.idx && !force) return;
+  _guide.idx=i; const cue=_guide.cues[i]; if(!cue) return;
+  const ph=$('gdPhase'), tx=$('gdText'); if(!tx) return;
+  if(force){ ph&&(ph.textContent=cue.label); tx.textContent=cue.text; tx.classList.remove('fade'); return; }
+  tx.classList.add('fade');
+  setTimeout(()=>{ const p=$('gdPhase'),x=$('gdText'); if(!x)return; p&&(p.textContent=cue.label); x.textContent=cue.text; x.classList.remove('fade'); },300);
+}
+function guidePause(){ _guide.running=false; clearInterval(_guide.tickInt); stopAmbient();
+  const tog=$('gdToggle'); if(tog)tog.textContent='Resume'; const o=$('gdOrb'); if(o)o.className='breathe-orb exhale';
+}
+function guideEnd(logIt){ const ran=_guide.total-_guide.left;
+  _guide.running=false; clearInterval(_guide.tickInt); stopAmbient();
+  if(logIt && ran>=30){ const d=mindfulData(); (d.sessions=d.sessions||[]).push({date:todayKey(),mins:Math.round(ran/60),at:Date.now(),kind:'guided'}); save(); }
+  _guide.left=_guide.total; _guide.idx=-1; _guide.cues=[];
+  if($('mindBody')&&mindView==='guided')renderGuided($('mindBody'));
+}
+function guideDone(){ chime(); flash(); guideEnd(true);
+  const tx=$('gdText'); if(tx)tx.textContent='Session complete 🌿'; const ph=$('gdPhase'); if(ph)ph.textContent='';
+}
+function guideSetSound(s){ _guide.sound=s; mindfulData().lastSound=s; save();
+  document.querySelectorAll('#gdSounds .sound-btn').forEach(b=>b.classList.toggle('on',b.dataset.s===s));
+  stopAmbient(); if(_guide.running && s&&s!=='off') breathePlay(s);
+}
 
 /* --- Blocked Apps (inverted Forest allowlist) --- */
 function renderScreen(host){ const apps=screenApps();
