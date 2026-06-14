@@ -1096,6 +1096,9 @@
   .tp-colon{font-size:22px;font-weight:600;color:var(--faint)}
   .tp-now{margin-left:auto;font-family:inherit;font-size:14.3px;color:var(--ink);background:var(--glass-2);border:1px solid var(--stroke);border-radius:11px;padding:0 18px;height:52px;cursor:pointer}
   .tp-now:hover{border-color:var(--accent)}
+  .tp-ap{flex:none;font-family:inherit;font-size:14.3px;font-weight:600;letter-spacing:.5px;color:var(--ink);background:var(--field-bg);border:1px solid var(--stroke-soft);border-radius:11px;width:54px;height:52px;cursor:pointer}
+  .tp-ap:hover{border-color:var(--accent)}
+  .tp-ap.on{background:var(--accent);border-color:var(--accent);color:#fff}
   .tp-durrow{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
   .tp-dchip{font-family:inherit;font-size:13.2px;color:var(--ink);background:var(--field-bg);border:1px solid var(--stroke-soft);border-radius:10px;padding:11px 0;cursor:pointer;line-height:1}
   .tp-dchip:hover{border-color:var(--accent)}
@@ -4200,14 +4203,17 @@ function positionTP(anchor){ const pop=$('tpPop'); pop.style.visibility='hidden'
   let top=r.top; if(top+ph>innerHeight-8) top=Math.max(8,innerHeight-8-ph);
   pop.style.left=left+'px'; pop.style.top=top+'px'; pop.style.visibility=''; }
 function renderTP(){ if(!_tp)return; const t=_tp.target;
-  const sh=t.start?t.start.slice(0,2):'', sm=t.start?t.start.slice(3,5):'';
-  const dur=t.dur||0; const end=t.start?addMinutes(t.start,dur):''; const eh=end?end.slice(0,2):'', em=end?end.slice(3,5):'';
+  const sp=t.start?_h12parts(t.start):null;
+  const sh=sp?String(sp.h12):'', sm=t.start?t.start.slice(3,5):'', sap=sp?sp.ap:'AM';
+  const dur=t.dur||0; const end=t.start?addMinutes(t.start,dur):''; const ep=end?_h12parts(end):null;
+  const eh=ep?String(ep.h12):'', em=end?end.slice(3,5):'', eap=ep?ep.ap:'AM';
   const durBtns=[[30,'30m'],[60,'1H'],[90,'1:30H'],[120,'2H']].map(([m,l])=>`<button class="tp-dchip ${dur===m?'on':''}" data-tp="dur" data-v="${m}">${l}</button>`).join('');
+  const apBtn=(k,cur)=>`<button class="tp-ap ${cur==='PM'?'on':''}" data-tp="${k}" data-v="${cur}">${cur}</button>`;
   $('tpPop').innerHTML=`
     <div class="tp-lbl">Starts</div>
-    <div class="tp-row"><input class="tp-num" data-tp="sh" maxlength="2" inputmode="numeric" placeholder="00" value="${sh}"><span class="tp-colon">:</span><input class="tp-num" data-tp="sm" maxlength="2" inputmode="numeric" placeholder="00" value="${sm}"><button class="tp-now" data-tp="now">now</button></div>
+    <div class="tp-row"><input class="tp-num" data-tp="sh" maxlength="2" inputmode="numeric" placeholder="12" value="${sh}"><span class="tp-colon">:</span><input class="tp-num" data-tp="sm" maxlength="2" inputmode="numeric" placeholder="00" value="${sm}">${apBtn('sap',sap)}<button class="tp-now" data-tp="now">now</button></div>
     <div class="tp-lbl">Ends</div>
-    <div class="tp-row"><input class="tp-num" data-tp="eh" maxlength="2" inputmode="numeric" placeholder="00" value="${eh}"><span class="tp-colon">:</span><input class="tp-num" data-tp="em" maxlength="2" inputmode="numeric" placeholder="00" value="${em}"></div>
+    <div class="tp-row"><input class="tp-num" data-tp="eh" maxlength="2" inputmode="numeric" placeholder="12" value="${eh}"><span class="tp-colon">:</span><input class="tp-num" data-tp="em" maxlength="2" inputmode="numeric" placeholder="00" value="${em}">${apBtn('eap',eap)}</div>
     <div class="tp-lbl">Duration</div>
     <div class="tp-durrow">${durBtns}</div>
     <div class="tp-foot"><button class="tp-rm" data-tp="rm">Remove time</button></div>`;
@@ -4217,16 +4223,24 @@ function renderTP(){ if(!_tp)return; const t=_tp.target;
   pop.querySelectorAll('[data-tp]').forEach(b=>{ if(b.classList.contains('tp-num'))return; b.onclick=()=>{ const v=b.dataset.tp;
     if(v==='dur') return tpSetDur(+b.dataset.v);
     if(v==='now') return tpNow();
+    if(v==='sap'||v==='eap'){ b.dataset.v=(b.dataset.v==='AM')?'PM':'AM'; b.textContent=b.dataset.v; b.classList.toggle('on',b.dataset.v==='PM'); return tpCommit(v==='sap'?'start':'end'); }
     if(v==='rm')  return tpRemove(); }; });
   positionTP(_tp.anchor); }
 function _tpNum(k){ const el=$('tpPop').querySelector(`[data-tp="${k}"]`); if(!el)return null; const v=parseInt(el.value,10); return isNaN(v)?null:v; }
+function _tpAp(k){ const el=$('tpPop').querySelector(`[data-tp="${k}"]`); return (el&&el.dataset.v==='PM')?'PM':'AM'; }
+/* 24h "HH:MM" → {h12:1-12, ap:'AM'|'PM'} for the 12-hour time inputs */
+function _h12parts(hhmm){ const h=+hhmm.slice(0,2); const ap=h<12?'AM':'PM'; let h12=h%12; if(h12===0)h12=12; return {h12,ap}; }
+/* 12-hour hour (1-12) + AM/PM → 24h hour (0-23) */
+function _to24h(h12,ap){ h12=h12%12; return ap==='PM'?h12+12:h12; }
 function _tpFlush(){ clampRepeat(_tp.target); save(); _tp.onChange&&_tp.onChange(); renderTP(); }
 function tpCommit(which){ const t=_tp.target;
   if(which==='start'){ let h=_tpNum('sh'); if(h==null){ t.start=''; t.dur=0; return _tpFlush(); }
-    let m=_tpNum('sm'); h=Math.max(0,Math.min(23,h)); m=Math.max(0,Math.min(59,m==null?0:m)); t.start=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+    let m=_tpNum('sm'); h=Math.max(1,Math.min(12,h)); m=Math.max(0,Math.min(59,m==null?0:m));
+    const h24=_to24h(h,_tpAp('sap')); t.start=String(h24).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
   else { if(!t.start) t.start='09:00'; let h=_tpNum('eh'); if(h==null) return _tpFlush();
-    let m=_tpNum('em'); h=Math.max(0,Math.min(23,h)); m=Math.max(0,Math.min(59,m==null?0:m));
-    let d=(h*60+m)-hhmmToMin(t.start); if(d<0)d+=1440; t.dur=d; }
+    let m=_tpNum('em'); h=Math.max(1,Math.min(12,h)); m=Math.max(0,Math.min(59,m==null?0:m));
+    const h24=_to24h(h,_tpAp('eap'));
+    let d=(h24*60+m)-hhmmToMin(t.start); if(d<0)d+=1440; t.dur=d; }
   _tpFlush(); }
 function tpSetDur(m){ const t=_tp.target; if(!t.start) t.start=minToHHMM(Math.round((new Date().getHours()*60+new Date().getMinutes())/15)*15);
   t.dur=(t.dur===m?0:m); _tpFlush(); }
@@ -4489,7 +4503,8 @@ function postponeOverdue(view){ const today=todayKey();
 function sortTasks(list){ const sb=settings.sortBy||'manual';
   return list.slice().sort((a,b)=>{ const ad=isTaskDone(a),bd=isTaskDone(b); if(ad!==bd)return ad?1:-1;   // done last
     if(sb==='priority'){ const d=(b.priority||0)-(a.priority||0); if(d)return d; }
-    else if(sb==='date'){ const x=a.due||'9999-99-99',y=b.due||'9999-99-99'; if(x!==y)return x<y?-1:1; }
+    else if(sb==='date'){ const x=a.due||'9999-99-99',y=b.due||'9999-99-99'; if(x!==y)return x<y?-1:1;
+      const at=a.start||'99:99',bt=b.start||'99:99'; if(at!==bt)return at<bt?-1:1; }   // same day ⇒ earlier time-of-day first (untimed last)
     else if(sb==='title'){ const d=(a.name||'').localeCompare(b.name||''); if(d)return d; }
     return (a.order||0)-(b.order||0); }); }
 /* column/section descriptors for a group-by key: {key,label,color,match(t),drop(t)} */
