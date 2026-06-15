@@ -2480,7 +2480,7 @@ function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_
    All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
 function timerSnap(){ return { active, mode, phase, subjectId:(typeof $==='function'&&$('activeSubject')?$('activeSubject').value:''),
   currentTask, currentHabit, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, customFocus, customSessions, _taskTimer, savedAt:Date.now() }; }
-function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); }
+function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); if(typeof syncKeepAwake==='function') syncKeepAwake(); }
 
 /* ====================================================================
    UNIFIED TASK MODEL  — a single `tasks` array is the source of truth.
@@ -2947,6 +2947,33 @@ function fdNotify(title,body){
   }catch(e){}
 }
 function flash(){document.body.animate([{filter:'brightness(1.4)'},{filter:'brightness(1)'}],{duration:600});}
+
+/* Keep-alive: desktop browsers FREEZE a backgrounded/occluded page after ~5 min, so a long
+   pomodoro running behind another window never reaches its end-of-phase tick — no chime, no
+   local notification — until you click back. A page that is "playing audio" is exempt from that
+   freezing (and from background timer throttling), so while a pomodoro is actively counting we
+   keep a single near-silent looping source running. It's inaudible (-60 dB-ish) but enough to
+   mark the tab audible, which keeps tickFn firing on time in the background. Stopped the instant
+   the timer pauses/ends. (A fully-CLOSED app is covered separately by the Web Push backstop.) */
+let _kaSrc=null,_kaGain=null;
+function keepAwake(on){
+  try{
+    if(on){
+      if(_kaSrc) return;
+      const ctx=ensureCtx();
+      _kaGain=ctx.createGain(); _kaGain.gain.value=0.0008;            // inaudible, yet marks the tab "playing audio"
+      const buf=ctx.createBuffer(1,ctx.sampleRate,ctx.sampleRate);    // 1s loop of a tiny dither so output isn't pure digital silence
+      const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(i&1?1:-1)*0.0008;
+      _kaSrc=ctx.createBufferSource(); _kaSrc.buffer=buf; _kaSrc.loop=true;
+      _kaSrc.connect(_kaGain); _kaGain.connect(ctx.destination); _kaSrc.start();
+    } else {
+      if(_kaSrc){ try{_kaSrc.stop();}catch(e){} try{_kaSrc.disconnect();}catch(e){} _kaSrc=null; }
+      if(_kaGain){ try{_kaGain.disconnect();}catch(e){} _kaGain=null; }
+    }
+  }catch(e){}
+}
+/* Hold the keep-alive exactly while a pomodoro is live; idempotent, so it's safe to call often. */
+function syncKeepAwake(){ keepAwake(active && mode==='pomo'); }
 
 /* ---------- ambient sounds (generated with Web Audio — no files to break) ---------- */
 let audioCtx=null,ambientNodes=[],_tickInt=null;
