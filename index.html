@@ -2903,7 +2903,7 @@ function setMode(m){ if(active){freeze();commit(true);} else if(workedMs>0){comm
   $('startBtn').textContent='Start'; if(m==='pomo')remaining=phaseMin()*60; renderClock(); }
 function setPhase(p){ if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
   oneShot=false; customFocus=0; customSessions=0; _taskTimer=false; phase=p; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null; renderClock(); }
-function chime(){try{const ac=new(window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();
+function chime(){try{const ac=ensureCtx();   // reuse the start-gesture-unlocked context — a fresh AudioContext stays suspended on macOS/WebKit, so the alarm would be silent
   // master limiter + gain so the alarm is loud but never clips harshly
   const master=ac.createGain();master.gain.value=.9;
   const comp=ac.createDynamicsCompressor();comp.threshold.value=-10;comp.ratio.value=12;
@@ -2935,11 +2935,15 @@ function fdNotify(title,body){
     if(settings.notify!==true) return;
     if(!('Notification' in window) || Notification.permission!=='granted') return;
     const opts={ body, icon:'icon-192.png', badge:'icon-192.png', tag:'fd-timer', renotify:true };
-    if(navigator.serviceWorker && navigator.serviceWorker.ready){
-      navigator.serviceWorker.ready
-        .then(reg=>{ if(reg&&reg.showNotification) reg.showNotification(title,opts); else new Notification(title,opts); })
-        .catch(()=>{ try{ new Notification(title,opts); }catch(e){} });
-    } else { new Notification(title,opts); }
+    const direct=()=>{ try{ new Notification(title,opts); }catch(e){} };
+    // Prefer an *already-active* SW registration (needed on iOS), but never block on
+    // serviceWorker.ready — it never resolves when no SW is registered (e.g. the Notion
+    // iframe), which would silently swallow the notification. Fall straight back to Notification.
+    if(navigator.serviceWorker && navigator.serviceWorker.controller && typeof navigator.serviceWorker.getRegistration==='function'){
+      navigator.serviceWorker.getRegistration()
+        .then(reg=>{ if(reg&&reg.showNotification) reg.showNotification(title,opts); else direct(); })
+        .catch(direct);
+    } else { direct(); }
   }catch(e){}
 }
 function flash(){document.body.animate([{filter:'brightness(1.4)'},{filter:'brightness(1)'}],{duration:600});}
