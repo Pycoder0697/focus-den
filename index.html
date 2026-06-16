@@ -1238,6 +1238,8 @@
   .tl-item.distract .nm{font-weight:400;font-style:italic;color:var(--muted)}
   .tl-del{background:none;border:none;color:var(--faint);cursor:pointer;font-size:17.6px;opacity:.5}
   .tl-del:hover{color:var(--rose);opacity:1}
+  .tl-edit{background:none;border:none;color:var(--faint);cursor:pointer;font-size:14px;opacity:.5}
+  .tl-edit:hover{color:var(--accent);opacity:1}
   .empty{color:var(--faint);font-size:14.9px;text-align:center;padding:22px 0;font-style:italic}
 
   .music-card{padding:16px}
@@ -3671,7 +3673,8 @@ function renderTimeline(){
     const row=document.createElement('div');row.className='tl-item';
     row.innerHTML=`<div class="tl-time">${istTime(g.start)}</div><div class="tl-dot"><span class="d" style="background:${list[0].color}"></span></div>
       <div class="tl-body"><div class="nm">${names}${tk?` · <span style="color:var(--faint);font-weight:400">${esc(tk.name)}</span>`:''}</div><div class="meta">${hms(total)} · ${istTime(g.start)} – ${istTime(g.end)}</div></div>
-      <button class="tl-del" title="Delete">×</button>`;
+      <button class="tl-edit" title="Edit">✎</button><button class="tl-del" title="Delete">×</button>`;
+    row.querySelector('.tl-edit').onclick=()=>openLogEdit(g);
     row.querySelector('.tl-del').onclick=()=>askConfirm('Delete this study log?',()=>{const ids=new Set(g.rows.map(s=>s.id));sessions=sessions.filter(x=>!ids.has(x.id));save();renderCalendar();renderSubjects();refreshStats();});
     tl.appendChild(row);});
   if(distr.length){
@@ -3690,13 +3693,27 @@ $('calNext').onclick=()=>{calView.setMonth(calView.getMonth()+1);renderCalendar(
 $('dayoffToggle').onclick=()=>{if(dayoff[selectedDay])delete dayoff[selectedDay];else dayoff[selectedDay]=true;save();renderCalendar();};
 
 /* add/edit log modal */
-$('addLogBtn').onclick=()=>{ const sel=$('logSubject');sel.innerHTML='';subjects.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;sel.appendChild(o);});
+let logEditGroup=null;                 // when set, saveLog edits this timeline group's existing session rows instead of adding new
+const hhmm=ts=>{const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
+function fillLogSubjects(sel){ const s=$(sel||'logSubject'); s.innerHTML=''; subjects.forEach(sj=>{const o=document.createElement('option');o.value=sj.id;o.textContent=sj.name;s.appendChild(o);}); }
+$('addLogBtn').onclick=()=>{ logEditGroup=null; fillLogSubjects(); $('logSubject').disabled=false;
   $('logModalTitle').textContent='Add study log'; $('logModalTitle').style.color='';
   $('logDate').value=selectedDay; $('logStart').value='09:00'; $('logEnd').value='10:00'; $('ovLog').classList.add('show'); };
+/* open the modal pre-filled to edit an already-logged study block (change its times / subject) */
+function openLogEdit(g){ logEditGroup=g; fillLogSubjects();
+  $('logModalTitle').textContent='Edit study log'; $('logModalTitle').style.color='';
+  $('logDate').value=dateKey(g.start); $('logStart').value=hhmm(g.start); $('logEnd').value=hhmm(g.end);
+  // multi-subject blocks split time across subjects — subject is not editable there, only times
+  const multi=g.rows.length>1; $('logSubject').disabled=multi;
+  $('logSubject').value=multi?'':(g.rows[0].subjectId||''); $('ovLog').classList.add('show'); }
 $('saveLog').onclick=()=>{ const sid=$('logSubject').value,d=$('logDate').value,st=$('logStart').value,en=$('logEnd').value;
   if(!d||!st||!en)return; const start=new Date(`${d}T${st}:00`).getTime(),end=new Date(`${d}T${en}:00`).getTime();
   if(end<=start){ $('logModalTitle').textContent='End must be after start'; $('logModalTitle').style.color='var(--rose)'; return; }
-  pushSpan(sid,start,end); save(); $('ovLog').classList.remove('show'); selectedDay=dateKey(start); renderCalendar(); renderSubjects(); refreshStats(); };
+  if(logEditGroup){ const ids=new Set(logEditGroup.rows.map(s=>s.id));
+    sessions.forEach(s=>{ if(ids.has(s.id)){ s.start=start; s.end=end; if(!logEditGroup.rows.length||logEditGroup.rows.length===1)s.subjectId=sid; } });
+    logEditGroup=null; }
+  else pushSpan(sid,start,end);
+  save(); $('ovLog').classList.remove('show'); selectedDay=dateKey(start); renderCalendar(); renderSubjects(); refreshStats(); };
 
 /* ICS export */
 $('exportBtn').onclick=()=>{
