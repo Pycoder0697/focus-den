@@ -6237,7 +6237,14 @@ function moodCardHTML(k){
   </div>`;
 }
 function repaintMoodCard(k){ const main=$('rfMain'); if(!main)return; const card=main.querySelector('.rf-mood-card'); if(!card)return;
-  card.outerHTML=moodCardHTML(k); wireMoodCard(main,k); }
+  // replacing the card's outerHTML destroys the focused button's subtree, which makes the browser's
+  // scroll anchoring snap the page to the top — capture & restore scroll across the repaint so it doesn't jump.
+  const sEl=_moodScrollEl(card), sTop=sEl?sEl.scrollTop:0, wx=window.scrollX, wy=window.scrollY;
+  card.outerHTML=moodCardHTML(k); wireMoodCard(main,k);
+  if(sEl)sEl.scrollTop=sTop; if(window.scrollX!==wx||window.scrollY!==wy)window.scrollTo(wx,wy); }
+/* nearest scrollable ancestor (falls back to the document scroller) — used to pin scroll across mood-card repaints */
+function _moodScrollEl(el){ for(let n=el.parentElement;n;n=n.parentElement){ const oy=getComputedStyle(n).overflowY;
+    if((oy==='auto'||oy==='scroll')&&n.scrollHeight>n.clientHeight+2) return n; } return document.scrollingElement||document.documentElement; }
 function wireMoodCard(main,k){ const card=main.querySelector('.rf-mood-card'); if(!card)return;
   card.querySelectorAll('[data-mood]').forEach(b=>b.onclick=()=>{ const id=b.dataset.mood;
     moodMutate(k,e=>{ e.mood=(e.mood===id?'':id); }); repaintMoodCard(k); });
