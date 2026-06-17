@@ -2263,6 +2263,10 @@ function applyRemote(cloud){
   if(Array.isArray(cloud.moodScales)) moodScales=cloud.moodScales;
   if(cloud.game && typeof cloud.game==='object') game=cloud.game;
   normalizeData();
+  // a change that arrived via cloud was already pushed to Notion by its origin device — re-baseline
+  // the shadow to it so this device's next save() doesn't echo-push the same value back to Notion
+  for(const t of tasks){ if(t.notionSourceId&&t.notionPageId) _notionShadow.set(t.notionPageId,notionFields(t)); }
+  persistNotionMeta();
   store.set('fd_settings',JSON.stringify(settings));store.set('fd_subjects',JSON.stringify(subjects));
   store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
   store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
@@ -2301,6 +2305,13 @@ const isNotionTask=t=>!!t.notionSourceId;
 /* request headers for the proxy — attaches the optional shared key (settings.notionKey) so a locked-down Worker accepts the call */
 function notionHeaders(json){ const h={}; if(json) h['Content-Type']='application/json';
   const k=(settings.notionKey||'').trim(); if(k) h['x-sync-key']=k; return h; }
+/* fetch with a hard timeout — a hung request on a flaky network must NOT leave the sync
+   half-finished. Without this, an aborted-mid-flight poll would pin _notionSyncing=true forever
+   and silently kill every subsequent sync until the app is reloaded. */
+async function notionFetch(url,opts,ms){ ms=ms||12000; const ctl=new AbortController();
+  const to=setTimeout(()=>ctl.abort(),ms);
+  try{ return await fetch(url,Object.assign({signal:ctl.signal},opts||{})); }
+  finally{ clearTimeout(to); } }
 let _notionSyncing=false, _notionTimer=null;
 const _notionInflight=new Set();      // pageIds with a write in flight
 const _notionRecent=new Map();        // pageId → ts of last local push (a racing pull won't clobber it within the window)
@@ -2310,6 +2321,19 @@ const _notionRecent=new Map();        // pageId → ts of last local push (a rac
 const _notionShadow=new Map();        // pageId → {name,done,due,dueEnd,desc}
 const notionFields=t=>({name:t.name||'',done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:Math.round(taskSecs(t))});
 function notionMarkSynced(t){ if(t&&t.notionPageId) _notionShadow.set(t.notionPageId,notionFields(t)); } // baseline matches Notion ⇒ no echo-push
+/* persist the sync baseline + recent-push window across reloads. Without this, a check made right
+   after a page load (before the first poll repopulates the in-memory shadow) is treated as "first
+   sight": its baseline is set silently, the change is never pushed, and the racing initial poll
+   then reverts it — so the check vanishes on every device. Persisting fixes that race. */
+function persistNotionMeta(){ try{
+  store.set('fd_notionshadow', JSON.stringify([..._notionShadow]));
+  const cut=Date.now()-60000; store.set('fd_notionrecent', JSON.stringify([..._notionRecent].filter(([,ts])=>ts>cut)));
+}catch(e){} }
+function loadNotionMeta(){ try{
+  const sh=JSON.parse(store.get('fd_notionshadow')||'[]'); if(Array.isArray(sh)) for(const e of sh) if(Array.isArray(e)) _notionShadow.set(e[0],e[1]);
+  const cut=Date.now()-60000; const rc=JSON.parse(store.get('fd_notionrecent')||'[]');
+  if(Array.isArray(rc)) for(const e of rc) if(Array.isArray(e)&&e[1]>cut) _notionRecent.set(e[0],e[1]);
+}catch(e){} }
 function notionFlushChanges(){ if(!notionOn()) return;
   for(const t of tasks){ if(!t.notionSourceId||!t.notionPageId) continue;
     const cur=notionFields(t), prev=_notionShadow.get(t.notionPageId);
@@ -2329,7 +2353,7 @@ async function notionSyncOne(src){
   if(m.dateProp!==undefined) url+='&date='+encodeURIComponent(m.dateProp||'');
   if(m.descProp!==undefined) url+='&desc='+encodeURIComponent(m.descProp||'');
   if(m.durProp!==undefined)  url+='&dur='+encodeURIComponent(m.durProp||'');
-  try{ const r=await fetch(url,{cache:'no-store',headers:notionHeaders()});
+  try{ const r=await notionFetch(url,{cache:'no-store',headers:notionHeaders()});
        data=await r.json().catch(()=>null);
        if(!r.ok) return {error:(data&&data.error)||('HTTP '+r.status)}; }
   catch(e){ return {error:'Network / proxy unreachable'}; }
@@ -2388,9 +2412,9 @@ async function notionPushTask(t){ if(!t||!t.notionSourceId||!t.notionPageId||!no
   const src=notionSources.find(s=>s.id===t.notionSourceId); if(!src||!src.schema) return;
   const props=buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
   const pid=t.notionPageId; _notionInflight.add(pid); _notionRecent.set(pid,Date.now());
-  try{ const r=await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,properties:props})});
+  try{ const r=await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,properties:props})});
        const d=await r.json().catch(()=>null);
-       if(r.ok && d && d.ok!==false){ _notionRecent.set(pid,Date.now()); notionMarkSynced(t); src.lastErr=''; }
+       if(r.ok && d && d.ok!==false){ _notionRecent.set(pid,Date.now()); notionMarkSynced(t); src.lastErr=''; persistNotionMeta(); }
        else { src.lastErr='Push failed: '+((d&&d.error)||('HTTP '+r.status)); } }
   catch(e){ src.lastErr='Push failed (proxy unreachable)'; }
   finally{ _notionInflight.delete(pid); } }
@@ -2404,7 +2428,7 @@ async function notionCreateRow(t,src){ if(!t||!src||!src.schema||!notionOn()) re
   const props=buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
   t.notionSourceId=src.id; t.notionPageId='';            // claim immediately so a racing pull won't duplicate it
   _notionCreating++;
-  try{ const r=await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({create:src.dbId,properties:props})});
+  try{ const r=await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({create:src.dbId,properties:props})});
        const d=await r.json().catch(()=>null);
        if(r.ok&&d&&d.id){ t.notionPageId=d.id; _notionRecent.set(d.id,Date.now()); notionMarkSynced(t); src.lastErr=''; save(); refreshTaskSurfaces&&refreshTaskSurfaces(); }
        else { t.notionSourceId=''; src.lastErr='Create failed: '+((d&&d.error)||('HTTP '+r.status)); save(); } }
@@ -2416,7 +2440,7 @@ async function notionMaybeCreate(t){ if(!t||t.notionSourceId||!notionOn()) retur
 /* archive the Notion row when its synced task is deleted, so it doesn't resurrect on the next pull */
 async function notionArchivePage(t){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
   const pid=t.notionPageId; _notionRecent.set(pid,Date.now());
-  try{ await fetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,archived:true})}); }catch(e){} }
+  try{ await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,archived:true})}); }catch(e){} }
 /* sync every enabled, fully-pinned source, then persist + re-render once */
 async function notionSyncAll(opts){ opts=opts||{};
   if(_notionSyncing) return; if(!notionOn()) return;
@@ -2426,8 +2450,10 @@ async function notionSyncAll(opts){ opts=opts||{};
   if(!live.length){ if(opts.report) setNotionStatus('Add a database and pin it to a list first.'); return; }
   _notionSyncing=true; if(opts.report) setNotionStatus('Syncing…');
   let ok=0,fail=0,changed=false;
-  for(const s of live){ const r=await notionSyncOne(s); if(r.error){ s.lastErr=r.error; fail++; } else { ok++; if(r.changed) changed=true; } }
-  _notionSyncing=false;
+  // try/finally: a fetch that aborts/throws must STILL release the lock, or every later poll dies
+  try{ for(const s of live){ const r=await notionSyncOne(s); if(r.error){ s.lastErr=r.error; fail++; } else { ok++; if(r.changed) changed=true; } } }
+  finally{ _notionSyncing=false; }
+  persistNotionMeta();
   if(changed){ save(); refreshTaskSurfaces&&refreshTaskSurfaces(); }   // only touch storage/DOM when Notion actually changed → safe to poll every ~10s
   if($('ovNotion')&&$('ovNotion').classList.contains('show')) renderNotionList();
   if(opts.report) setNotionStatus(fail?`Synced ${ok}, ${fail} failed — check IDs / sharing.`:`Synced ${ok} database${ok===1?'':'s'} · ${new Date().toLocaleTimeString()}`);
@@ -2477,7 +2503,7 @@ function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_
   store.set('fd_habits',JSON.stringify(habits));store.set('fd_moodgroups',JSON.stringify(moodGroups));
   store.set('fd_moodscales',JSON.stringify(moodScales));store.set('fd_game',JSON.stringify(game));
   store.set('fd_running',JSON.stringify(running));cloudSave();
-  notionFlushChanges();}   // push any name/done/date change on a synced task back to Notion (two-way)
+  notionFlushChanges(); persistNotionMeta();}   // push any name/done/date change on a synced task back to Notion (two-way) + persist the baseline so a reload can't lose it
 /* device-local live-timer snapshot so an active session survives an iOS-Safari tab reload.
    All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
 function timerSnap(){ return { active, mode, phase, subjectId:(typeof $==='function'&&$('activeSubject')?$('activeSubject').value:''),
@@ -7603,6 +7629,7 @@ async function boot(){
   document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else { pollCloud(); if(active && mode!=='stopwatch') tickFn(); } });
   window.addEventListener('pagehide',saveTimer);
   // Notion DB → board list sync: near-realtime both ways (push is instant; pull polls ~10s while visible, 60s hidden, and immediately on refocus)
+  loadNotionMeta();   // restore the sync baseline first, so a check made right after load pushes instead of being swallowed/reverted by the racing initial poll
   if(notionOn()) notionSyncAll();
   scheduleNotionPoll();
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) notionSyncAll(); scheduleNotionPoll(); });
