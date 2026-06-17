@@ -2319,7 +2319,7 @@ const _notionRecent=new Map();        // pageId → ts of last local push (a rac
    live tasks against this and pushes whatever changed — so ANY mutation site (date picker, drag-drop,
    calendar, timeline, matrix…) reflects back into Notion without each having to call notionPushTask. */
 const _notionShadow=new Map();        // pageId → {name,done,due,dueEnd,desc}
-const notionFields=t=>({name:t.name||'',done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:Math.round(taskSecs(t))});
+const notionFields=t=>({name:t.name||'',done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',start:t.start||'',desc:t.desc||'',secs:Math.round(taskSecs(t))});
 function notionMarkSynced(t){ if(t&&t.notionPageId) _notionShadow.set(t.notionPageId,notionFields(t)); } // baseline matches Notion ⇒ no echo-push
 /* persist the sync baseline + recent-push window across reloads. Without this, a check made right
    after a page load (before the first poll repopulates the in-memory shadow) is treated as "first
@@ -2341,7 +2341,7 @@ function notionFlushChanges(){ if(!notionOn()) return;
   for(const t of tasks){ if(!t.notionSourceId||!t.notionPageId) continue;
     const cur=notionFields(t), prev=_notionShadow.get(t.notionPageId);
     if(!prev){ _notionShadow.set(t.notionPageId,cur); continue; } // first sight (freshly imported) — establish baseline, don't push
-    if(prev.name!==cur.name||prev.done!==cur.done||prev.due!==cur.due||prev.dueEnd!==cur.dueEnd||prev.desc!==cur.desc||prev.secs!==cur.secs){
+    if(prev.name!==cur.name||prev.done!==cur.done||prev.due!==cur.due||prev.dueEnd!==cur.dueEnd||prev.start!==cur.start||prev.desc!==cur.desc||prev.secs!==cur.secs){
       // DON'T pre-baseline the shadow here — only a SUCCESSFUL push may, so a failed/aborted push is retried
       // on the next save() or poll instead of being lost. Skip if a push for this row is already in flight.
       if(!_notionInflight.has(t.notionPageId)) notionPushTask(t); } } }
@@ -2374,12 +2374,14 @@ async function notionSyncOne(src){
   rows.forEach(row=>{ const pid=row.id||row.pageId; if(!pid)return; seen.add(pid);
     const name=(row.title||'').trim()||'(untitled)'; const done=!!row.done;
     const rDue=hasDate?(row.due||''):'', rEnd=hasDate?(row.dueEnd||''):'';
+    const timeSupported=('dueTime' in row);   // older proxy builds omit the field ⇒ leave local start time untouched
+    const rTime=(hasDate&&timeSupported)?(row.dueTime||''):'';   // Notion date's time-of-day (IST HH:MM)
     const rDesc=hasDesc?(row.desc||''):'';
     const rProps=Array.isArray(row.props)?row.props:[];
     let t=byPage.get(pid);
     if(!t){ if(_notionCreating>0) return;             // an unmatched row may be our own in-flight create — import it next cycle instead of duplicating
       t={id:uid('t'),name,desc:rDesc,subjectId:'',due:rDue,dueEnd:rEnd,priority:0,checklist:[],
-        done,doneOn:done?todayKey():'',repeat:'none',start:'',dur:0,created:Date.now(),order:nextOrder(),
+        done,doneOn:done?todayKey():'',repeat:'none',start:rTime,dur:0,created:Date.now(),order:nextOrder(),
         horizon:(rDue?'day':''),hkey:'',parentId:'',inboxListId:'',notionProps:rProps,
         boardId:src.boardId,listId:src.listId,notionSourceId:src.id,notionPageId:pid,notionUrl:row.url||''};
       tasks.push(t); changed=true; }                    // NEW rows land in the pinned board list, carrying their Notion due date + description…
@@ -2388,6 +2390,7 @@ async function notionSyncOne(src){
       if(!fresh){ if(t.name!==name){ t.name=name; changed=true; } if(notionDoneOf(t)!==done){ setTaskDone(t,done); changed=true; } // checkbox applies to the right field (repeat-aware)
         if(hasDate && (t.due!==rDue || (t.dueEnd||'')!==rEnd)){ t.due=rDue; t.dueEnd=rEnd;   // a date edited in Notion pulls back
           if(rDue){ t.horizon='day'; t.hkey=''; } else if(t.horizon==='day'){ t.horizon=''; } changed=true; }
+        if(hasDate && timeSupported && (t.start||'')!==rTime){ t.start=rTime; changed=true; }   // a time-of-day edited in Notion pulls back too
         if(hasDesc && (t.desc||'')!==rDesc){ t.desc=rDesc; changed=true; } } // …but a just-pushed local edit isn't reverted by a read that raced it
       t.notionProps=rProps; t.notionUrl=row.url||t.notionUrl||''; }
     notionMarkSynced(t); });                            // shadow now matches Notion ⇒ the next save() won't echo-push it back
@@ -2405,8 +2408,11 @@ function buildNotionProps(schema,vals){ if(!schema) return null; const p={};
     if(dp.type==='checkbox') p[dp.name]={checkbox:!!vals.done};
     else if(dp.type==='status'&&v) p[dp.name]={status:{name:v}};
     else if(dp.type==='select'&&v) p[dp.name]={select:{name:v}}; }
-  if(vals.due!==undefined && schema.dateProp)   // two-way due date — '' / null clears it in Notion
-    p[schema.dateProp]= vals.due ? {date:{start:vals.due, ...(vals.dueEnd?{end:vals.dueEnd}:{})}} : {date:null};
+  if(vals.due!==undefined && schema.dateProp){  // two-way due date — '' / null clears it in Notion
+    if(!vals.due) p[schema.dateProp]={date:null};
+    else { // a single-day task with a start time pushes a datetime (IST) so Notion's Date carries the time too; multi-day spans stay date-only
+      const dStart=(vals.start && !vals.dueEnd) ? (vals.due+'T'+vals.start+':00+05:30') : vals.due;
+      p[schema.dateProp]={date:{start:dStart, ...(vals.dueEnd?{end:vals.dueEnd}:{})}}; } }
   if(vals.desc!==undefined && schema.descProp)  // two-way description — empty clears the text property
     p[schema.descProp]={rich_text:notionRichText(vals.desc)};
   if(vals.secs!==undefined && schema.durProp)   // one-way duration — net logged study time → a Notion Number (hrs/mins by column name)
@@ -2416,7 +2422,7 @@ function buildNotionProps(schema,vals){ if(!schema) return null; const p={};
 async function notionPushTask(t){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
   const src=notionSources.find(s=>s.id===t.notionSourceId); if(!src||!src.schema) return;
   const fields=notionFields(t);   // snapshot EXACTLY what we send, so success baselines to the pushed value — not a maybe-newer t (a later edit then still diffs and re-pushes)
-  const props=buildNotionProps(src.schema,{title:fields.name,done:fields.done,due:fields.due,dueEnd:fields.dueEnd,desc:fields.desc,secs:fields.secs}); if(!props) return;
+  const props=buildNotionProps(src.schema,{title:fields.name,done:fields.done,due:fields.due,dueEnd:fields.dueEnd,start:fields.start,desc:fields.desc,secs:fields.secs}); if(!props) return;
   const pid=t.notionPageId; _notionInflight.add(pid); _notionRecent.set(pid,Date.now());
   try{ const r=await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,properties:props})});
        const d=await r.json().catch(()=>null);
@@ -2431,7 +2437,7 @@ function notionSourceForList(boardId,listId){ return notionSources.find(s=>s.ena
 /* create a new Notion row for task `t` in the given source (used by both the board-add path and
    the recurrence clone, which targets the parent's source explicitly). Claims t immediately. */
 async function notionCreateRow(t,src){ if(!t||!src||!src.schema||!notionOn()) return;
-  const props=buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
+  const props=buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',start:t.start||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
   t.notionSourceId=src.id; t.notionPageId='';            // claim immediately so a racing pull won't duplicate it
   _notionCreating++;
   try{ const r=await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({create:src.dbId,properties:props})});

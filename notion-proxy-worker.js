@@ -8,7 +8,7 @@
  *   This tiny Worker holds the token server-side and exposes two endpoints:
  *
  *     READ   GET  /?db=<databaseId>[&date=<prop>][&desc=<prop>][&dur=<prop>]
- *            -> { ok:true, results:[ {id,title,done,due,dueEnd,desc,props,url}, ... ],
+ *            -> { ok:true, results:[ {id,title,done,due,dueEnd,dueTime,desc,props,url}, ... ],
  *                schema:{ titleProp, doneProp:{name,type,doneValue,undoneValue},
  *                         dateProp, descProp, durProp },
  *                fields:[ {name,type}, ... ] }
@@ -74,7 +74,8 @@
  *           "not done" = an option in the To-do group / the first other option.
  *   due   : first Date property -- start->due, end->dueEnd. TWO-WAY: rescheduling
  *           a synced task in Focus Den writes this date back to Notion, and a
- *           date edited in Notion pulls back. (Date-only; times are truncated.)
+ *           date edited in Notion pulls back. A task with a time-of-day pushes a
+ *           datetime; `dueTime` returns that time (IST HH:MM, '' when date-only).
  *   desc  : a rich_text property named like a description (Description, Notes,
  *           Details, Summary, ...) -- TWO-WAY: a task's description edited in Focus
  *           Den writes back here, and a Notion edit pulls back. Auto-detection is
@@ -257,11 +258,12 @@ function mapRow(page, schema) {
     else if (schema.doneProp.type === 'select') done = !!p.select && (p.select.name === schema.doneProp.doneValue || DONE_WORDS.includes((p.select.name || '').toLowerCase()));
   }
 
-  let due = '', dueEnd = '';
+  let due = '', dueEnd = '', dueTime = '';
   if (schema.dateProp && props[schema.dateProp] && props[schema.dateProp].date) {
     const d = props[schema.dateProp].date;
-    due = (d.start || '').slice(0, 10);     // Focus Den dates are date-only (YYYY-MM-DD)
-    dueEnd = (d.end || '').slice(0, 10);
+    due = istDate(d.start);                  // IST calendar date (YYYY-MM-DD)
+    dueEnd = istDate(d.end);
+    dueTime = istTime(d.start);              // time-of-day in IST (HH:MM) when the Notion date includes a time, else ''
   }
 
   let desc = '';                            // two-way task description (a rich_text property)
@@ -278,7 +280,23 @@ function mapRow(page, schema) {
     if (value) extra.push({ name, value });
   }
 
-  return { id: page.id, title: title.trim(), done, due, dueEnd, desc, props: extra, url: page.url || '' };
+  return { id: page.id, title: title.trim(), done, due, dueEnd, dueTime, desc, props: extra, url: page.url || '' };
+}
+
+/* A Notion date value is either date-only ("2026-06-17") or a datetime ("2026-06-17T09:30:00.000+05:30").
+   Resolve both to the IST calendar date so a near-midnight UTC time never lands on the wrong day. */
+function istDate(iso) {
+  if (!iso) return '';
+  if (iso.length <= 10 || !iso.includes('T')) return iso.slice(0, 10);   // date-only — already a calendar date
+  const d = new Date(iso); if (isNaN(d)) return iso.slice(0, 10);
+  const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  return p;   // en-CA formats as YYYY-MM-DD
+}
+/* The time-of-day (IST, HH:MM) of a Notion datetime, or '' when the value carries no time. */
+function istTime(iso) {
+  if (!iso || iso.length <= 10 || !iso.includes('T')) return '';
+  const d = new Date(iso); if (isNaN(d)) return '';
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
 }
 
 /* Render a Notion property to a short display string (for the up-to-4 extra props). */
