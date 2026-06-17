@@ -292,11 +292,14 @@ function istDate(iso) {
   const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
   return p;   // en-CA formats as YYYY-MM-DD
 }
-/* The time-of-day (IST, HH:MM) of a Notion datetime, or '' when the value carries no time. */
+/* The time-of-day (IST, HH:MM) of a Notion datetime, or '' when the value carries no time.
+   Reads hour/minute via formatToParts with hourCycle h23, so midnight is "00:00" (never "24:00"). */
 function istTime(iso) {
   if (!iso || iso.length <= 10 || !iso.includes('T')) return '';
   const d = new Date(iso); if (isNaN(d)) return '';
-  return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d);
+  const h = parts.find((p) => p.type === 'hour'), m = parts.find((p) => p.type === 'minute');
+  return (h && m) ? `${h.value}:${m.value}` : '';
 }
 
 /* Render a Notion property to a short display string (for the up-to-4 extra props). */
