@@ -2333,13 +2333,18 @@ function loadNotionMeta(){ try{
   const sh=JSON.parse(store.get('fd_notionshadow')||'[]'); if(Array.isArray(sh)) for(const e of sh) if(Array.isArray(e)) _notionShadow.set(e[0],e[1]);
   const cut=Date.now()-60000; const rc=JSON.parse(store.get('fd_notionrecent')||'[]');
   if(Array.isArray(rc)) for(const e of rc) if(Array.isArray(e)&&e[1]>cut) _notionRecent.set(e[0],e[1]);
+  // seed a baseline for any synced task we have no record of (first run after this update, or one that
+  // arrived via an old build) so a check made before the first poll diffs+pushes instead of being swallowed
+  for(const t of tasks){ if(t.notionSourceId&&t.notionPageId&&!_notionShadow.has(t.notionPageId)) _notionShadow.set(t.notionPageId,notionFields(t)); }
 }catch(e){} }
 function notionFlushChanges(){ if(!notionOn()) return;
   for(const t of tasks){ if(!t.notionSourceId||!t.notionPageId) continue;
     const cur=notionFields(t), prev=_notionShadow.get(t.notionPageId);
     if(!prev){ _notionShadow.set(t.notionPageId,cur); continue; } // first sight (freshly imported) — establish baseline, don't push
     if(prev.name!==cur.name||prev.done!==cur.done||prev.due!==cur.due||prev.dueEnd!==cur.dueEnd||prev.desc!==cur.desc||prev.secs!==cur.secs){
-      _notionShadow.set(t.notionPageId,cur); notionPushTask(t); } } }
+      // DON'T pre-baseline the shadow here — only a SUCCESSFUL push may, so a failed/aborted push is retried
+      // on the next save() or poll instead of being lost. Skip if a push for this row is already in flight.
+      if(!_notionInflight.has(t.notionPageId)) notionPushTask(t); } } }
 /* Notion rich_text values cap each text object at 2000 chars — chunk a long description so it never truncates */
 function notionRichText(s){ s=String(s||''); if(!s) return []; const out=[]; for(let i=0;i<s.length;i+=2000) out.push({text:{content:s.slice(i,i+2000)}}); return out; }
 /* pull one source's rows from the proxy and reconcile them into its board list (no save() here — caller batches) */
@@ -2410,12 +2415,13 @@ function buildNotionProps(schema,vals){ if(!schema) return null; const p={};
 /* TWO-WAY: push a synced task's name + done back to Notion. Fire-and-forget; guarded so a racing pull won't revert it */
 async function notionPushTask(t){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
   const src=notionSources.find(s=>s.id===t.notionSourceId); if(!src||!src.schema) return;
-  const props=buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
+  const fields=notionFields(t);   // snapshot EXACTLY what we send, so success baselines to the pushed value — not a maybe-newer t (a later edit then still diffs and re-pushes)
+  const props=buildNotionProps(src.schema,{title:fields.name,done:fields.done,due:fields.due,dueEnd:fields.dueEnd,desc:fields.desc,secs:fields.secs}); if(!props) return;
   const pid=t.notionPageId; _notionInflight.add(pid); _notionRecent.set(pid,Date.now());
   try{ const r=await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,properties:props})});
        const d=await r.json().catch(()=>null);
-       if(r.ok && d && d.ok!==false){ _notionRecent.set(pid,Date.now()); notionMarkSynced(t); src.lastErr=''; persistNotionMeta(); }
-       else { src.lastErr='Push failed: '+((d&&d.error)||('HTTP '+r.status)); } }
+       if(r.ok && d && d.ok!==false){ _notionRecent.set(pid,Date.now()); _notionShadow.set(pid,fields); src.lastErr=''; persistNotionMeta(); }   // SUCCESS ⇒ Notion now holds `fields` ⇒ baseline to it
+       else { src.lastErr='Push failed: '+((d&&d.error)||('HTTP '+r.status)); } }   // FAILURE ⇒ shadow untouched ⇒ next save()/poll retries
   catch(e){ src.lastErr='Push failed (proxy unreachable)'; }
   finally{ _notionInflight.delete(pid); } }
 let _notionCreating=0;   // while >0, a pull won't import unmatched remote rows (they may be our own in-flight creates) or prune pending tasks
@@ -2453,6 +2459,7 @@ async function notionSyncAll(opts){ opts=opts||{};
   // try/finally: a fetch that aborts/throws must STILL release the lock, or every later poll dies
   try{ for(const s of live){ const r=await notionSyncOne(s); if(r.error){ s.lastErr=r.error; fail++; } else { ok++; if(r.changed) changed=true; } } }
   finally{ _notionSyncing=false; }
+  notionFlushChanges();   // reconcile after the pull: re-push any local edit that earlier failed/raced (no-op when local already matches Notion)
   persistNotionMeta();
   if(changed){ save(); refreshTaskSurfaces&&refreshTaskSurfaces(); }   // only touch storage/DOM when Notion actually changed → safe to poll every ~10s
   if($('ovNotion')&&$('ovNotion').classList.contains('show')) renderNotionList();
