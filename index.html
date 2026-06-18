@@ -2236,7 +2236,7 @@ function _pushAlarmFlush(){
 })();
 function applyCloudCfg(url,key){ CLOUD.url=(url||'').trim(); CLOUD.key=(key||'').trim();
   try{ if(cloudOn()) store.set('fd_cloud',JSON.stringify({url:CLOUD.url,key:CLOUD.key})); else { try{localStorage.removeItem('fd_cloud');}catch(_){} delete mem['fd_cloud']; } }catch(e){} }
-function snapshot(){return {settings,subjects,sessions,dayoff,tasks,distractions,boards,inboxLists,notionSources,countdowns,habits,moodGroups,moodScales,game,_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local
+function snapshot(){return {settings,subjects,sessions,dayoff,tasks,distractions,boards,inboxLists,notionSources,countdowns,habits,moodGroups,moodScales,game,tombstones:pruneTombstones(tombstones),_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local
 async function cloudLoad(){ if(!cloudOn())return null; try{const r=await fetch(cloudRef(),{cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;} }
 let _cloudT=null, _lastLocalWrite=0, _lastSeenRemote=0;
 function cloudSave(){ if(!cloudOn())return; setSync('saving'); clearTimeout(_cloudT);
@@ -2250,10 +2250,11 @@ function setSync(s){ const b=document.getElementById('syncBadge'); if(!b)return;
 function applyRemote(cloud){
   if(cloud.settings) settings=Object.assign({...DEF},cloud.settings);
   if(Array.isArray(cloud.subjects)) subjects=cloud.subjects;
-  if(Array.isArray(cloud.sessions)) sessions=cloud.sessions;
+  tombstones=mergeTomb(tombstones,cloud.tombstones);                  // union deletions first so the log merges honour them
+  sessions=mergeLog(sessions,cloud.sessions,tombstones);              // append-only: never drop a locally-committed session
   if(cloud.dayoff) dayoff=cloud.dayoff;
   if(Array.isArray(cloud.tasks)) tasks=cloud.tasks;
-  if(Array.isArray(cloud.distractions)) distractions=cloud.distractions;
+  distractions=mergeLog(distractions,cloud.distractions,tombstones);
   if(Array.isArray(cloud.boards)) boards=cloud.boards;
   if(Array.isArray(cloud.inboxLists)) inboxLists=cloud.inboxLists;
   if(Array.isArray(cloud.notionSources)) notionSources=cloud.notionSources;
@@ -2274,6 +2275,7 @@ function applyRemote(cloud){
   store.set('fd_notionsrc',JSON.stringify(notionSources));store.set('fd_countdowns',JSON.stringify(countdowns));
   store.set('fd_habits',JSON.stringify(habits));store.set('fd_moodgroups',JSON.stringify(moodGroups));
   store.set('fd_moodscales',JSON.stringify(moodScales));store.set('fd_game',JSON.stringify(game));
+  store.set('fd_tombstones',JSON.stringify(tombstones));
   applyTheme(); refreshDplus(); renderSubjectSelect&&renderSubjectSelect(); refreshTaskSurfaces&&refreshTaskSurfaces(); refreshStats&&refreshStats(); renderCalendar&&renderCalendar();
   if($('tab-countdown')&&$('tab-countdown').classList.contains('show')) renderCountdownTab();
   if($('tab-habits')&&$('tab-habits').classList.contains('show')) renderHabitsTab();
@@ -2508,6 +2510,21 @@ let notionSources=JSON.parse(store.get('fd_notionsrc')||'[]'); // {id,name,dbId,
 let running=JSON.parse(store.get('fd_running')||'null'); // {subjectId,start,mode}
 let game=JSON.parse(store.get('fd_game')||'null')||{}; // gamification state — see GAMIFICATION block (freezes/league/celebration flags; XP itself is DERIVED)
 let roundCount=0;
+/* Append-only logs (sessions/distractions) MERGE on cloud pull instead of being replaced wholesale.
+   A concurrent device or the always-open Notion embed can save a snapshot that predates a just-
+   committed session; replacing the array wholesale would silently erase that study time. We union
+   local∪remote by id (remote wins on a same-id edit since applyRemote only runs for a newer remote),
+   and keep deletions sticky via tombstones so a merge can't resurrect a row the user deleted. */
+let tombstones=(()=>{ try{ return JSON.parse(store.get('fd_tombstones')||'{}')||{}; }catch(e){ return {}; } })(); // {logId:deletedAt}
+const TOMB_TTL=90*86400000; // forget a deletion after 90 days (long enough that every device has converged)
+function pruneTombstones(o){ const now=Date.now(); for(const k in o){ if(now-o[k]>TOMB_TTL) delete o[k]; } return o; }
+function tombstone(id){ if(id!=null) tombstones[String(id)]=Date.now(); }
+function mergeLog(local,remote,tomb){ const out=new Map();
+  (Array.isArray(remote)?remote:[]).forEach(x=>{ if(x&&x.id!=null) out.set(String(x.id),x); });
+  (Array.isArray(local)?local:[]).forEach(x=>{ if(x&&x.id!=null&&!out.has(String(x.id))) out.set(String(x.id),x); });
+  if(tomb) for(const id in tomb) out.delete(String(id));
+  return [...out.values()]; }
+function mergeTomb(a,b){ const o=Object.assign({},a||{}); for(const k in (b||{})) o[k]=Math.max(o[k]||0,b[k]); return pruneTombstones(o); }
 function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_subjects',JSON.stringify(subjects));
   store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
   store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
@@ -2515,6 +2532,7 @@ function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_
   store.set('fd_notionsrc',JSON.stringify(notionSources));store.set('fd_countdowns',JSON.stringify(countdowns));
   store.set('fd_habits',JSON.stringify(habits));store.set('fd_moodgroups',JSON.stringify(moodGroups));
   store.set('fd_moodscales',JSON.stringify(moodScales));store.set('fd_game',JSON.stringify(game));
+  store.set('fd_tombstones',JSON.stringify(pruneTombstones(tombstones)));
   store.set('fd_running',JSON.stringify(running));cloudSave();
   notionFlushChanges(); persistNotionMeta();}   // push any name/done/date change on a synced task back to Notion (two-way) + persist the baseline so a reload can't lose it
 /* device-local live-timer snapshot so an active session survives an iOS-Safari tab reload.
@@ -3141,6 +3159,12 @@ function renderSubjectSelect(){ const sel=$('activeSubject'),cur=sel.value; sel.
 /* The subject a running session logs against. If a task is attached, it follows
    the task's subject (so moving the task re-points attribution); a task with no
    subject logs as "Unlisted" (empty subjectId). Otherwise the dropdown rules. */
+/* Set the hidden subject <select> robustly. Assigning .value to an option that doesn't yet exist
+   silently no-ops (stays on the old value) — which made a freshly-tapped subject "not register on the
+   first try". Guarantee the option exists first, so the binding always takes. */
+function setActiveSubject(id){ const sel=$('activeSubject'); if(!sel)return; id=id||'';
+  if(id && ![...sel.options].some(o=>o.value===id)){ const sj=subjById(id); const o=document.createElement('option'); o.value=id; o.textContent=sj?sj.name:id; sel.appendChild(o); }
+  sel.value=id; }
 function activeSubjectId(){ if(currentTask){ const t=tasks.find(x=>x.id===currentTask); if(t) return t.subjectId||''; } return $('activeSubject').value; }
 function syncSubjectLock(){ const sel=$('activeSubject'); if(!sel)return;
   let ul=sel.querySelector('option[value=""]');
@@ -3519,7 +3543,7 @@ function quickStopwatch(subjectId){
   else if(workedMs>0 && !canResume){ commit(true); }
   oneShot=false; customFocus=0; customSessions=0;
   if(!canResume){ currentTask=null; updateTimerTaskUI(); } // subject stopwatch isn't task-bound
-  $('activeSubject').value=subjectId; mode='stopwatch';
+  setActiveSubject(subjectId); mode='stopwatch';
   document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='stopwatch'));
   $('phases').style.display='none'; $('dots').style.display='none'; $('timeAdjust').style.display='none'; $('skipBtn').style.display='none';
   if(canResume) resumeTimer(); else startTimer();
@@ -3561,16 +3585,20 @@ function donutHTML(parts,total){ // parts:[{name,color,sec}]
   const legend=parts.filter(p=>p.sec>0).sort((a,b)=>b.sec-a.sec).map(p=>`<div class="row"><span class="sw" style="background:${p.color}"></span><span class="nm">${esc(p.name)}</span><span class="vv">${hms(p.sec)} · ${Math.round(p.sec/total*100)}%</span></div>`).join('');
   return `<div class="donut-wrap"><div class="donut" style="background:conic-gradient(${stops.join(',')})"></div><div class="legend">${legend}</div></div>`;
 }
-function subjectParts(keys){ const m={}; subjects.forEach(s=>m[s.id]=0);
-  keys.forEach(k=>sessionsOn(k).forEach(s=>{m[s.subjectId]=(m[s.subjectId]||0)+sdur(s);}));
-  return subjects.map(s=>({name:s.name,color:s.color,sec:m[s.id]||0})); }
+function subjectParts(keys){ const known=new Set(subjects.map(s=>s.id)); const m={}; subjects.forEach(s=>m[s.id]=0); let other=0;
+  // untagged focus (no subject) and time on a since-deleted subject still count — bucket them as "Unlisted" so the breakdown matches the total
+  keys.forEach(k=>sessionsOn(k).forEach(s=>{ if(known.has(s.subjectId)) m[s.subjectId]+=sdur(s); else other+=sdur(s); }));
+  const parts=subjects.map(s=>({name:s.name,color:s.color,sec:m[s.id]||0}));
+  if(other>0) parts.push({name:'Unlisted',color:'var(--faint)',sec:other});
+  return parts; }
 function monthlyHistoryHTML(){
   const now=new Date(),months=[];for(let i=7;i>=0;i--)months.push(new Date(now.getFullYear(),now.getMonth()-i,1));
   const data=months.map(d=>{const y=d.getFullYear(),m=d.getMonth(),p=n=>String(n).padStart(2,'0'),dim=new Date(y,m+1,0).getDate();const bysub={};let tot=0;
     for(let dd=1;dd<=dim;dd++){const key=y+'-'+p(m+1)+'-'+p(dd);sessionsOn(key).forEach(s=>{bysub[s.subjectId]=(bysub[s.subjectId]||0)+sdur(s);tot+=sdur(s);});}
     return {d,bysub,tot};});
   const max=Math.max(3600,...data.map(x=>x.tot));
-  const bars=data.map(x=>{let segs='';subjects.forEach(s=>{const v=x.bysub[s.id]||0;if(v>0)segs+=`<div style="flex:${v};background:${s.color}" title="${esc(s.name)}: ${hms(v)}"></div>`;});
+  const bars=data.map(x=>{let segs='',known=0;subjects.forEach(s=>{const v=x.bysub[s.id]||0;known+=v;if(v>0)segs+=`<div style="flex:${v};background:${s.color}" title="${esc(s.name)}: ${hms(v)}"></div>`;});
+    const other=x.tot-known;if(other>0)segs+=`<div style="flex:${other};background:var(--faint)" title="Unlisted: ${hms(other)}"></div>`;
     return `<div class="mh-col"><div class="mh-bar" style="height:${x.tot/max*100}%" title="${x.d.toLocaleDateString('en-GB',{month:'long'})}: ${hms(x.tot)}">${segs}</div><div class="mh-l">${x.d.toLocaleDateString('en-GB',{month:'short'})}</div></div>`;}).join('');
   return `<div class="card stat-card"><h3>Monthly history (by subject)</h3><div class="mh">${bars}</div></div>`;
 }
@@ -3714,7 +3742,7 @@ function renderTimeline(){
       <div class="tl-body"><div class="nm">${names}${tk?` · <span style="color:var(--faint);font-weight:400">${esc(tk.name)}</span>`:''}</div><div class="meta">${hms(total)} · ${istTime(g.start)} – ${istTime(g.end)}</div></div>
       <button class="tl-edit" title="Edit">✎</button><button class="tl-del" title="Delete">×</button>`;
     row.querySelector('.tl-edit').onclick=()=>openLogEdit(g);
-    row.querySelector('.tl-del').onclick=()=>askConfirm('Delete this study log?',()=>{const ids=new Set(g.rows.map(s=>s.id));sessions=sessions.filter(x=>!ids.has(x.id));save();renderCalendar();renderSubjects();refreshStats();});
+    row.querySelector('.tl-del').onclick=()=>askConfirm('Delete this study log?',()=>{const ids=new Set(g.rows.map(s=>s.id));g.rows.forEach(s=>tombstone(s.id));sessions=sessions.filter(x=>!ids.has(x.id));save();renderCalendar();renderSubjects();refreshStats();});
     tl.appendChild(row);});
   if(distr.length){
     const head=document.createElement('div'); head.className='tl-subhead'; head.textContent=`🌀 Distractions (${distr.length})`; tl.appendChild(head);
@@ -3724,7 +3752,7 @@ function renderTimeline(){
       row.innerHTML=`<div class="tl-time">${istTime(d.ts)}</div><div class="tl-dot"><span class="d" style="background:${col}"></span></div>
         <div class="tl-body"><div class="nm">${esc(d.note||'(unlabelled)')}</div><div class="meta">${sj?esc(sj.name):'Unlisted'}${tk?' · '+esc(tk.name):''}</div></div>
         <button class="tl-del" title="Delete">×</button>`;
-      row.querySelector('.tl-del').onclick=()=>askConfirm('Delete this distraction log?',()=>{distractions=distractions.filter(x=>x.id!==d.id);save();renderCalendar();});
+      row.querySelector('.tl-del').onclick=()=>askConfirm('Delete this distraction log?',()=>{tombstone(d.id);distractions=distractions.filter(x=>x.id!==d.id);save();renderCalendar();});
       tl.appendChild(row); }); }
 }
 $('calPrev').onclick=()=>{calView.setMonth(calView.getMonth()-1);renderCalendar();};
@@ -6720,7 +6748,7 @@ function startPomoPlan(mins,sess){
   phase='focus'; setPhaseButtons(); remaining=(oneShot?mins:phaseMin())*60; phaseStart=null; renderDots(); startTimer(); }
 /* start a pomodoro focus block bound to a task */
 function startTaskPomodoro(t,mins,sess){ if(breakBlocks()) return; if(active){freeze();commit(phase==='focus');} else if(workedMs>0){commit(phase==='focus');}
-  if(t.subjectId) $('activeSubject').value=t.subjectId;
+  if(t.subjectId) setActiveSubject(t.subjectId);
   currentTask=t.id; updateTimerTaskUI(); _taskTimer=true;
   mode='pomo'; document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='pomo'));
   startPomoPlan(mins,sess); }
@@ -6737,7 +6765,7 @@ function startTaskTimer(t){
   if(mode==='stopwatch') startTaskStopwatch(t); else startTaskPomodoro(t);
   reflectTimer(); }
 function startTaskStopwatch(t){ if(active){freeze();commit(true);} else if(workedMs>0){commit(true);}
-  if(t.subjectId) $('activeSubject').value=t.subjectId;
+  if(t.subjectId) setActiveSubject(t.subjectId);
   currentTask=t.id; updateTimerTaskUI(); _taskTimer=true;
   oneShot=false; customFocus=0; customSessions=0; mode='stopwatch';
   document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m==='stopwatch'));
@@ -6838,10 +6866,10 @@ function openScopeMenu(){ const m=$('fpickScopeMenu'),b=$('fpickListSel');
   m.style.left=Math.max(8,Math.min(r.left, innerWidth-8-w))+'px'; m.style.top=(r.bottom+4)+'px'; m.style.visibility='';
   m.querySelectorAll('[data-sc]').forEach(it=>it.onclick=()=>{ fpickScope=it.dataset.sc; closeScopeMenu(); renderFocusPicker(); }); }
 /* selection handlers — pick the focus target only; the existing Start button runs the timer */
-function selectFocusTask(t){ if(!t)return; currentTask=t.id; currentHabit=null; $('activeSubject').value=t.subjectId||''; updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); closeFocusPicker(); }
-function selectFocusSubject(id){ currentTask=null; currentHabit=null; $('activeSubject').value=id||''; updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); closeFocusPicker(); }
-function selectFocusHabit(h){ if(!h)return; currentHabit=h.id; currentTask=null; $('activeSubject').value=''; updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); closeFocusPicker(); }
-function clearFocus(){ currentTask=null; currentHabit=null; $('activeSubject').value=''; updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); }
+function selectFocusTask(t){ if(!t)return; currentTask=t.id; currentHabit=null; setActiveSubject(t.subjectId); updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); saveTimer(); closeFocusPicker(); }
+function selectFocusSubject(id){ currentTask=null; currentHabit=null; setActiveSubject(id); updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); saveTimer(); closeFocusPicker(); }
+function selectFocusHabit(h){ if(!h)return; currentHabit=h.id; currentTask=null; setActiveSubject(''); updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); saveTimer(); closeFocusPicker(); }
+function clearFocus(){ currentTask=null; currentHabit=null; setActiveSubject(''); updateTimerTaskUI(); renderClock(); reflectTimer&&reflectTimer(); saveTimer(); }
 $('focusPick').onclick=e=>{ e.stopPropagation(); $('fpickPop').classList.contains('open')?closeFocusPicker():openFocusPicker(); };
 $('timerQuote').onclick=cycleTimerQuote; renderTimerQuote(); startTimerQuoteRotation();
 $('fpickTabs').querySelectorAll('[data-ft]').forEach(b=>b.onclick=()=>{ fpickTab=b.dataset.ft; renderFocusPicker(); });
@@ -7610,10 +7638,11 @@ async function boot(){
   if(cloud){
     if(cloud.settings) settings=Object.assign({...DEF},cloud.settings);
     if(Array.isArray(cloud.subjects)) subjects=cloud.subjects;
-    if(Array.isArray(cloud.sessions)) sessions=cloud.sessions;
+    tombstones=mergeTomb(tombstones,cloud.tombstones);
+    sessions=mergeLog(sessions,cloud.sessions,tombstones);   // keep any session committed offline on this device
     if(cloud.dayoff) dayoff=cloud.dayoff;
     if(Array.isArray(cloud.tasks)) tasks=cloud.tasks;
-    if(Array.isArray(cloud.distractions)) distractions=cloud.distractions;
+    distractions=mergeLog(distractions,cloud.distractions,tombstones);
     if(Array.isArray(cloud.boards)) boards=cloud.boards;
     if(Array.isArray(cloud.inboxLists)) inboxLists=cloud.inboxLists;
     if(Array.isArray(cloud.habits)) habits=cloud.habits;
@@ -7624,6 +7653,7 @@ async function boot(){
     store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
     store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
     store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
+    store.set('fd_tombstones',JSON.stringify(tombstones));
   } else if(cloudOn()){ cloudSave(); }   // cloud is empty → seed it with this device's data (first device with data wins)
   normalizeData();
   applyTheme();
