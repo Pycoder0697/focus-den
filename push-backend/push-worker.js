@@ -57,7 +57,38 @@ async function runCron(env) {
   for (const device of Object.keys(data)) {
     const a = data[device];
     if (!a || !a.sub) continue;
-    const del = () => fetch(`${base}/push/${keyPath}/${encodeURIComponent(device)}.json`, { method: 'DELETE' });
+    const ref = `${base}/push/${keyPath}/${encodeURIComponent(device)}.json`;
+    const del = () => fetch(ref, { method: 'DELETE' });
+
+    // Schedule-based alarm (current client): a list of every upcoming boundary of the run,
+    // drained one cron tick at a time so a CLOSED app gets a push at EACH boundary — not just
+    // the first. Fire the latest due boundary (collapsing any missed ones into a single banner,
+    // mirroring the live app's single chime on catch-up), then persist only the still-future
+    // boundaries (or drop the alarm when none remain).
+    if (Array.isArray(a.schedule)) {
+      const items = a.schedule.filter(x => x && typeof x.fireAt === 'number');
+      const due = items.filter(x => x.fireAt <= now + 2000 && x.fireAt >= now - 3600 * 1000);
+      const stale = items.filter(x => x.fireAt < now - 3600 * 1000); // >1h late → drop, don't nag
+      const future = items.filter(x => x.fireAt > now + 2000);
+      if (!due.length && !stale.length) continue;     // nothing actionable yet — leave it
+      jobs.push((async () => {
+        let gone = false;
+        if (due.length) {
+          processed++;
+          const fire = due[due.length - 1];
+          try {
+            const res = await sendPush(a.sub, { title: fire.title || 'Focus Den', body: fire.body || '', tag: a.tag || 'fd-timer' }, env);
+            if (res.status === 404 || res.status === 410) gone = true;
+            else if (!(res.status >= 200 && res.status < 300)) { const t = await res.text().catch(() => ''); _DBG.push('push ' + res.status + ': ' + t.slice(0, 200)); }
+          } catch (e) { _DBG.push('throw: ' + String(e && e.stack ? e.stack : e)); }
+        }
+        if (gone || !future.length) { await del(); }   // subscription dead or run finished → clear
+        else { const next = future[0]; await fetch(ref, { method: 'PUT', body: JSON.stringify({ ...a, schedule: future, fireAt: next.fireAt, title: next.title, body: next.body }) }); }
+      })());
+      continue;
+    }
+
+    // Legacy single-boundary alarm (older client / fallback).
     if (!a.fireAt) continue;
     if (a.fireAt > now + 2000) continue;              // not due yet
     if (a.fireAt < now - 3600 * 1000) { jobs.push(del()); continue; } // >1h stale → drop, don't nag

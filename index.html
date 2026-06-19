@@ -2208,18 +2208,45 @@ async function ensurePushSub(){
     return pushSub;
   }catch(e){ return null; }
 }
-/* Mirror the running pomodoro phase's end into the RTDB /push alarm (server backstop), or clear
-   it. Debounced, fire-and-forget. The live app overwrites/clears this before each boundary, so a
-   closed app is the only one that actually receives a server push (no duplicate with the local). */
+/* Project EVERY upcoming phase boundary of the running pomodoro run as a push schedule
+   [{fireAt,title,body},…] — current phase end first, then each break/focus end after it
+   (mirrors completePhase + signalPhaseChange's banners). Only the current boundary is
+   included when autostart is off (a closed app won't auto-advance past it), and a one-shot
+   focus ends the run outright. Empty when no pomodoro is running. */
+function pushSchedule(){
+  if(!(active && mode==='pomo' && endStamp && endStamp>Date.now())) return [];
+  const out=[]; let t=endStamp, ph=phase, rc=roundCount; const N=pomoN(); let guard=0;
+  while(guard++<60){
+    if(ph==='focus'){
+      if(oneShot){ out.push({fireAt:Math.round(t),title:'Session complete 🎉',body:'Nice work — your focus session is done.'}); break; }
+      const rc2=rc+1;
+      if(rc2>=N){ out.push({fireAt:Math.round(t),title:'Run complete 🎉',body:'All sessions done — time for a longer rest.'}); break; }
+      const longDue=settings.rounds>0 && rc2%settings.rounds===0;
+      out.push({fireAt:Math.round(t),title:'Focus block done ✅',body:longDue?'Time for a long break.':'Time for a short break.'});
+      rc=rc2; ph=longDue?'long':'short'; t+=(longDue?settings.long:settings.short)*60000;
+    } else {
+      out.push({fireAt:Math.round(t),title:'Break over ☕',body:'Back to focus — you’ve got this.'});
+      ph='focus'; t+=pomoFocusMin()*60000;
+    }
+    if(!settings.autostart) break;   // a closed app won't auto-start the next phase
+  }
+  return out;
+}
+/* Mirror the running pomodoro run's boundaries into the RTDB /push alarm (server backstop),
+   or clear it. Debounced, fire-and-forget. The live app overwrites/clears this before each
+   boundary, so a closed app is the only one that actually receives a server push (the shared
+   tag collapses any overlap with the local notification). The full `schedule` lets the worker
+   push a sound at EVERY boundary of a closed run, not just the first; the top-level
+   fireAt/title/body keep the next boundary firing on an un-redeployed (legacy) worker too. */
 let _pushAlarmT=null;
 function pushAlarmSync(){ if(_pushAlarmT)return; _pushAlarmT=setTimeout(()=>{ _pushAlarmT=null; _pushAlarmFlush(); },600); }
 function _pushAlarmFlush(){
   if(!cloudOn()||!PUSH_VAPID_PUBLIC) return;
-  const want=!!(pushSub && settings.notify===true && active && mode==='pomo' && endStamp && endStamp>Date.now());
+  const sched=(pushSub && settings.notify===true) ? pushSchedule() : [];
   try{
-    if(want){
-      const e=phase==='focus'?{title:'Focus block done ✅',body:'Time for a break.'}:{title:'Break over ☕',body:'Back to focus.'};
-      fetch(pushRef(),{method:'PUT',body:JSON.stringify({fireAt:Math.round(endStamp),title:e.title,body:e.body,tag:'fd-timer',sub:pushSub,savedAt:Date.now()})}).catch(()=>{});
+    if(sched.length){
+      const next=sched[0];
+      fetch(pushRef(),{method:'PUT',body:JSON.stringify({fireAt:next.fireAt,title:next.title,body:next.body,schedule:sched,tag:'fd-timer',sub:pushSub,savedAt:Date.now()})}).catch(()=>{});
     } else { fetch(pushRef(),{method:'DELETE'}).catch(()=>{}); }
   }catch(e){}
 }
