@@ -2066,7 +2066,7 @@
   <p style="font-size:12.1px;color:var(--faint);margin:-2px 0 6px;line-height:1.5">Pull rows from specific Notion databases into specific board lists — they live only in that list, never in your inbox/planner. Needs a one-time Cloudflare Worker (holds your Notion token securely); the Worker URL goes above. See <b>notion-proxy-worker.js</b> in the repo for the 5-min setup.</p>
   <button class="save" id="saveSettings">Save</button>
   <button class="danger" id="resetAll">Reset all data</button>
-  <p style="text-align:center;font-size:11px;color:var(--faint);margin:10px 0 0;opacity:.7">Focus Den v2.10.0</p>
+  <p style="text-align:center;font-size:11px;color:var(--faint);margin:10px 0 0;opacity:.7">Focus Den v2.10.1</p>
 </div></div>
 
 <!-- PAUSE MODAL -->
@@ -2515,7 +2515,7 @@ const todayKey=()=>dateKey(Date.now());
 
 /* ---------- state ---------- */
 const PALETTE=['#f5a623','#ff7a33','#2f9bff','#e0218a','#ff6b4a','#4f8cff','#c026d3','#5fc24a','#3fb36b','#a78bfa','#5fd3c4'];
-const FD_VERSION='2.10.0';
+const FD_VERSION='2.10.1';
 const DEF={focus:50,short:10,long:30,sessions:4,rounds:4,goal:240,autostart:false,examDate:'',urgentDays:3,theme:'dark',notify:false,xpGoal:150,frictionOn:true,maxTasksPerDay:7,addWindows:[{s:'06:00',e:'08:00'},{s:'21:00',e:'23:00'}]};
 let settings=Object.assign({...DEF}, JSON.parse(store.get('fd_settings')||'{}'));
 let subjects=JSON.parse(store.get('fd_subjects')||'null');
@@ -2997,6 +2997,7 @@ function chime(){try{const ac=ensureCtx();   // reuse the start-gesture-unlocked
   const start=ac.currentTime+.02;
   // a bright ascending triad, played as 3 urgent bursts so it cuts through
   const notes=[880,1100,1320],burst=.5,reps=3;
+  const oscs=[],chain=[master,comp];
   for(let r=0;r<reps;r++){
     notes.forEach((f,i)=>{
       const base=start+r*burst+i*.13;
@@ -3007,10 +3008,11 @@ function chime(){try{const ac=ensureCtx();   // reuse the start-gesture-unlocked
         g.gain.setValueAtTime(0,base);
         g.gain.linearRampToValueAtTime(amp,base+.015);
         g.gain.exponentialRampToValueAtTime(.001,base+.45);
-        o.start(base);o.stop(base+.5);
+        o.start(base);o.stop(base+.5); oscs.push(o); chain.push(g,o);
       });
     });
   }
+  _freeAudio(oscs,chain);   // tear the chime's nodes down once the last burst ends (no audio-graph leak)
 }catch(e){}}
 /* System notification on session end. Fires even when the app window is in the
    background (Mac PWA + iOS Home-Screen app). Routed through the service worker
@@ -3064,6 +3066,16 @@ function syncKeepAwake(){ keepAwake(active && mode==='pomo'); }
 /* ---------- ambient sounds (generated with Web Audio — no files to break) ---------- */
 let audioCtx=null,ambientNodes=[],_tickInt=null;
 function ensureCtx(){ if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended')audioCtx.resume(); return audioCtx; }
+/* Release a finished sound's node chain. Web Audio keeps every node still connected toward
+   ctx.destination alive in the graph — source nodes auto-release after they stop, but the
+   gain/filter/compressor nodes they fed do NOT, so a generator that never disconnects leaks
+   one chain per sound. Over a long session (a tone on every pause/check, an 18-node chime at
+   every pomodoro boundary) that grows the audio graph + heap until the tab is killed. Disconnect
+   the whole chain once the source(s) end so the engine can reclaim it. */
+function _freeAudio(srcs, chain){ srcs=Array.isArray(srcs)?srcs:[srcs];
+  const free=()=>{ (chain||[]).forEach(n=>{ try{ n&&n.disconnect&&n.disconnect(); }catch(e){} }); };
+  let pend=srcs.length; if(!pend){ free(); return; }
+  srcs.forEach(s=>{ try{ s.onended=()=>{ if(--pend<=0) free(); }; }catch(e){ if(--pend<=0) free(); } }); }
 function noiseBuf(ctx){ const b=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate),d=b.getChannelData(0); for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1; return b; }
 function stopAmbient(){ if(_tickInt){clearInterval(_tickInt);_tickInt=null;} ambientNodes.forEach(n=>{try{n.stop&&n.stop();}catch(e){} try{n.disconnect&&n.disconnect();}catch(e){}}); ambientNodes=[]; }
 /* stop ambient sound AND reset its button UI — used when the timer is up / stopped */
@@ -3095,6 +3107,7 @@ function tickOnce(ctx,hi){
   const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=hi?2100:1650;bp.Q.value=7;
   const g=ctx.createGain();g.gain.value=0.1;
   src.connect(bp);bp.connect(g);g.connect(ctx.destination);src.start();
+  _freeAudio(src,[bp,g,src]);   // tick fires every 1s while the ambient clock runs — free each chain or it leaks for hours
 }
 function playTick(){ const ctx=ensureCtx();let hi=false; tickOnce(ctx,hi); _tickInt=setInterval(()=>{hi=!hi;tickOnce(ctx,hi);},1000); }
 function playBonfire(){ const ctx=ensureCtx();
@@ -3105,7 +3118,7 @@ function playBonfire(){ const ctx=ensureCtx();
   const pop=()=>{ if(!ambientNodes.length)return; const len=Math.floor(ctx.sampleRate*0.045),b=ctx.createBuffer(1,len,ctx.sampleRate),d=b.getChannelData(0);
     for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
     const s=ctx.createBufferSource();s.buffer=b;const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=900+Math.random()*1900;bp.Q.value=2.2;
-    const pg=ctx.createGain();pg.gain.value=0.04+Math.random()*0.13;s.connect(bp);bp.connect(pg);pg.connect(ctx.destination);s.start(); };
+    const pg=ctx.createGain();pg.gain.value=0.04+Math.random()*0.13;s.connect(bp);bp.connect(pg);pg.connect(ctx.destination);s.start(); _freeAudio(s,[bp,pg,s]); };
   _tickInt=setInterval(()=>{ const n=1+Math.floor(Math.random()*3); for(let i=0;i<n;i++)setTimeout(pop,Math.random()*200); },230); }
 function playCrickets(){ const ctx=ensureCtx();
   const src=ctx.createBufferSource();src.buffer=noiseBuf(ctx);src.loop=true;
@@ -3116,7 +3129,7 @@ function playCrickets(){ const ctx=ensureCtx();
     const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=f;bp.Q.value=18;
     const g=ctx.createGain();g.gain.value=0;o.connect(bp);bp.connect(g);g.connect(ctx.destination);
     let t=t0; for(let i=0;i<5;i++){ g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.06,t+.004); g.gain.linearRampToValueAtTime(0,t+.02); t+=.03; }
-    o.start(t0);o.stop(t+.05); };
+    o.start(t0);o.stop(t+.05); _freeAudio(o,[bp,g,o]); };
   _tickInt=setInterval(()=>{ chirp(); if(Math.random()<.5)setTimeout(chirp,150+Math.random()*250); },900); }
 document.querySelectorAll('#ambient button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#ambient button').forEach(x=>x.classList.toggle('on',x===b));
@@ -4075,10 +4088,12 @@ function _tone(o){ if(settings.taskSound===false)return;
     g.gain.exponentialRampToValueAtTime(peak,t0+(o.atk||0.008));
     g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
     lp.connect(g); g.connect(ctx.destination);
+    const oscs=[];
     const mk=det=>{ const osc=ctx.createOscillator(); osc.type=o.type||'sine'; if(det)osc.detune.value=det;
       osc.frequency.setValueAtTime(f0,t0); osc.frequency.exponentialRampToValueAtTime(f1,t0+dur);
-      osc.connect(lp); osc.start(t0); osc.stop(t0+dur+0.03); };
+      osc.connect(lp); osc.start(t0); osc.stop(t0+dur+0.03); oscs.push(osc); };
     mk(0); if(o.detune)mk(o.detune);              // optional second, detuned partial → softer/rounder
+    _freeAudio(oscs,[lp,g,...oscs]);              // disconnect the chain once the tone finishes (no audio-graph leak)
   }catch(e){} }
 /* a soft pitched "pop" when a task is created — brighter on click, warmer & lower on Enter. */
 function taskSound(){ const click=_taskVia==='click'; _taskVia='enter'; haptic('tap');
