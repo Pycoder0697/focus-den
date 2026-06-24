@@ -119,12 +119,15 @@
   .remote-timer .rt-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 0 var(--amber);animation:rtpulse 1.8s infinite}
   .remote-timer .rt-clock{font-weight:300;font-size:clamp(34px,7vw,52px);line-height:1;letter-spacing:-1px;font-variant-numeric:tabular-nums;color:var(--ink)}
   .remote-timer .rt-phase{font-size:12.7px;color:var(--faint);text-align:center}
-  .remote-timer .rt-dot.paused{animation:none;background:var(--faint);box-shadow:none}
-  .remote-timer .rt-ctrls{display:flex;gap:9px;margin-top:10px}
-  .remote-timer .rt-btn{font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:.3px;color:var(--ink);background:var(--field-bg);border:1px solid var(--stroke-soft);padding:7px 17px;border-radius:999px;cursor:pointer;transition:transform .12s,background .2s}
-  .remote-timer .rt-btn:active{transform:scale(.93)}
-  .remote-timer .rt-btn.rt-stop{color:#fff;background:var(--rose);border-color:transparent}
   @keyframes rtpulse{0%{box-shadow:0 0 0 0 rgba(245,166,35,.5)}70%{box-shadow:0 0 0 8px rgba(245,166,35,0)}100%{box-shadow:0 0 0 0 rgba(245,166,35,0)}}
+  /* remote-control mode: this device is driving a session that's actually running on another device.
+     The MAIN timer mirrors it live; the inputs that would fork a separate local session are locked out. */
+  .timer-card.remote-ctl .modeswitch,
+  .timer-card.remote-ctl .phases,
+  .timer-card.remote-ctl #timeAdjust{pointer-events:none;opacity:.45}
+  .timer-card.remote-ctl .focus-pick{pointer-events:none}
+  .timer-card.remote-ctl .focus-pick .fp-chev{display:none}
+  .phase-label .rc-tag{color:var(--faint);font-weight:400;font-size:.84em;letter-spacing:.2px}
   .phase-label b{color:var(--amber);font-weight:600}
   .controls{display:flex;align-items:center;gap:14px}
   .start{font-family:inherit;font-size:19.8px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--start-ink);background:var(--start-bg);border:none;padding:14px 44px;border-radius:999px;cursor:pointer;transition:transform .15s,box-shadow .25s;box-shadow:0 8px 22px -10px rgba(0,0,0,.55)}
@@ -2370,29 +2373,50 @@ function sendMirrorCmd(cmd){
     renderMirror();
   } else if(cmd==='stop'){ _mirror=null; renderMirror(); }                          // panel clears; next poll confirms
 }
-function mirrorClockText(){
-  const m=_mirror; if(!m) return '';
+function mirrorClockText(rec){
+  const m=rec||_mirror; if(!m) return '';
   if(m.mode==='stopwatch'){ const e=((m.swBase||0)+(m.segStart?Date.now()-m.segStart:0))/1000; return hms(e).replace(/^0:/,''); }
   if(m.paused){ return mmss(m.remaining||0); }                                     // frozen at the paused remainder
   const rem=m.endStamp?Math.max(0,(m.endStamp-Date.now())/1000):(m.remaining||0); return mmss(rem);
 }
+/* TRUE LIVE SYNC: when a session is live on another device and this one is idle, the device is in
+   "remote-control mode" — the MAIN timer mirrors that one session and its controls drive it. Returns
+   the live record we should mirror, or null (use the normal local timer). Our own timer always wins. */
+function remoteCtl(){
+  if(active||workedMs>0||!_mirror) return null;
+  return (_mirror.live!==undefined?_mirror.live:_mirror.active) ? _mirror : null;
+}
+let _remoteUiOn=false;
+/* Paint the remote session onto THIS device's main timer (clock, phase, focus target, dots, Start label). */
+function renderRemoteClock(m){
+  const pomo=m.mode!=='stopwatch', paused=!!m.paused;
+  $('clock').textContent=mirrorClockText(m);
+  const words={focus:'Focus',short:'Short break',long:'Long break'};
+  const ph=pomo?(words[m.phase]||'Focus'):'Stopwatch';
+  $('phaseLabel').innerHTML=`${esc(ph)} <span class="rc-tag">· ${paused?'paused':'live'} on another device</span>`;
+  $('planFinish').textContent='';
+  { const nm=$('fpName'), sub=$('fpSub'), btn=$('focusPick');                       // mirror the focus target
+    if(nm&&sub&&btn){ const what=m.taskName||m.habitName||m.subjectName||'Focus';
+      nm.textContent=what;
+      sub.innerHTML = (m.taskName&&m.subjectName) ? `<span class="fp-dot" style="background:${m.subjectColor||'var(--faint)'}"></span>${esc(m.subjectName)}` : (m.habitName?'Habit':'');
+      btn.classList.toggle('has-target', !!what); } }
+  document.querySelectorAll('.modeswitch button').forEach(b=>b.classList.toggle('active',b.dataset.m===(pomo?'pomo':'stopwatch')));
+  document.querySelectorAll('#phases button').forEach(b=>b.classList.toggle('active',b.dataset.p===m.phase));
+  $('phases').style.display=pomo?'flex':'none'; $('dots').style.display=pomo?'flex':'none';
+  $('timeAdjust').style.display='none'; $('skipBtn').style.display=pomo?'':'none';
+  if(pomo){ const el=$('dots'); if(el){ el.innerHTML=''; const N=m.n||pomoN();
+    for(let i=0;i<N;i++){ const d=document.createElement('i'); if((m.roundCount||0)>i)d.classList.add('on'); el.appendChild(d); } } }
+  const sb=$('startBtn'); if(sb) sb.textContent=paused?'Resume':'Pause';
+  document.title=mirrorClockText(m)+' · Focus Den';
+}
+/* Enter/refresh/leave remote-control mode. Called on every poll + every mirror tick. */
 function renderMirror(){
-  const el=$('remoteTimer'); if(!el) return;
-  const m=_mirror, liveRec=m&&(m.live!==undefined?m.live:m.active);
-  if(!m||!liveRec||active||workedMs>0){ el.classList.remove('show'); el.innerHTML=''; return; }
-  const phWords={focus:'Focus',short:'Short break',long:'Long break'};
-  const what=m.taskName||m.habitName||m.subjectName||'', ph=m.mode==='stopwatch'?'Stopwatch':(phWords[m.phase]||'Focus');
-  const paused=!!m.paused;
-  el.innerHTML=`<div class="rt-head"><span class="rt-dot${paused?' paused':''}"></span>${paused?'Paused on your other device':'Running on your other device'}</div>`+
-    `<div class="rt-clock">${esc(mirrorClockText())}</div>`+
-    `<div class="rt-phase">${esc(ph)}${what?' · '+esc(what):''}</div>`+
-    `<div class="rt-ctrls">`+
-      `<button class="rt-btn" data-cmd="toggle">${paused?'Resume':'Pause'}</button>`+
-      (m.mode==='pomo'?`<button class="rt-btn" data-cmd="skip">Skip</button>`:'')+
-      `<button class="rt-btn rt-stop" data-cmd="stop">Stop</button>`+
-    `</div>`;
-  el.classList.add('show');
-  el.querySelectorAll('.rt-btn').forEach(b=>b.onclick=()=>sendMirrorCmd(b.dataset.cmd));
+  const rc=remoteCtl();
+  const card=document.querySelector('.timer-card');
+  const panel=$('remoteTimer'); if(panel){ panel.classList.remove('show'); panel.innerHTML=''; }  // the side panel is retired — the MAIN timer is the synced surface
+  if(card) card.classList.toggle('remote-ctl', !!rc);
+  if(!rc){ if(_remoteUiOn){ _remoteUiOn=false; applyTimerPanel(); renderFocusHeader(); renderClock(); } return; }  // remote session ended → restore this device's own timer UI
+  _remoteUiOn=true; renderRemoteClock(rc);
 }
 /* 1s loop: advance the mirror clock + fire one local chime/notification per boundary
    so an OPEN non-running device alerts you too (closed devices get the worker push). */
@@ -2979,6 +3003,8 @@ function setPhaseButtons(){ document.querySelectorAll('#phases button').forEach(
 let _clockEditing=false;
 function renderClock(){
   if(_clockEditing) return;                 // don't clobber the inline time editor while the user is typing
+  if(remoteCtl()){ renderRemoteClock(remoteCtl()); return; }   // mirror the session running on another device
+
   if(mode==='stopwatch'){ const e=(workedMs+(active&&segStart?Date.now()-segStart:0))/1000;
     $('clock').textContent=hms(e).replace(/^0:/,'');
     $('phaseLabel').textContent=active?'Stopwatch running':(workedMs>0?'Paused — Start to resume':'Stopwatch — counts up');
@@ -3296,8 +3322,9 @@ document.querySelectorAll('#ambient button').forEach(b=>b.onclick=()=>{
   if(s==='rain')playRain();else if(s==='waves')playWaves();else if(s==='bonfire')playBonfire();else if(s==='crickets')playCrickets();else if(s==='tick')playTick();
 });
 
-$('startBtn').onclick=()=>{ if(active)pauseTimer(); else if(workedMs>0)resumeTimer(); else startTimer(); };
-$('resetBtn').onclick=resetTimer;
+$('startBtn').onclick=()=>{ if(remoteCtl())return sendMirrorCmd('toggle');          // pause/resume the session running on another device
+  if(active)pauseTimer(); else if(workedMs>0)resumeTimer(); else startTimer(); };
+$('resetBtn').onclick=()=>{ if(remoteCtl())return sendMirrorCmd('stop'); resetTimer(); };   // in remote mode, end + save the shared session
 document.querySelectorAll('.modeswitch button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 document.querySelectorAll('#phases button').forEach(b=>b.onclick=()=>setPhase(b.dataset.p));
 
@@ -3339,7 +3366,8 @@ $('clock').onclick=editClock;
 window.addEventListener('resize',()=>syncSubjCardHeight());
 
 /* skip: focus → short break, or break → focus, and start it */
-$('skipBtn').onclick=()=>{ if(mode!=='pomo')return; const was=phase;
+$('skipBtn').onclick=()=>{ const rc=remoteCtl(); if(rc){ if(rc.mode!=='stopwatch') sendMirrorCmd('skip'); return; }   // skip the phase on the controlling device
+  if(mode!=='pomo')return; const was=phase;
   if(active){freeze();commit(was==='focus');} else if(workedMs>0){commit(was==='focus');}
   phase=was==='focus'?'short':'focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null; startTimer(); };
 
@@ -3376,7 +3404,8 @@ function updateTimerTaskUI(){ syncSubjectLock(); renderFocusHeader(); }
 /* ---------- Focus header + TickTick-style picker (task is the primary parameter; subject is a tag) ---------- */
 let currentHabit=null, fpickTab='task', fpickScope='today';
 function focusTaskById(id){ return id?tasks.find(x=>x.id===id)||null:null; }
-function renderFocusHeader(){ const nm=$('fpName'), sub=$('fpSub'), btn=$('focusPick'); if(!nm||!sub||!btn)return;
+function renderFocusHeader(){ if(remoteCtl()) return;                              // remote-control mode mirrors the other device's target — don't overwrite it
+  const nm=$('fpName'), sub=$('fpSub'), btn=$('focusPick'); if(!nm||!sub||!btn)return;
   let name='Focus', subHTML='', has=true;
   const t=focusTaskById(currentTask);
   if(t){ name=t.name; // show all of the task's subjects (tags) on the sub-line
