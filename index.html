@@ -113,6 +113,13 @@
   .clock{font-weight:300;font-size:clamp(77px,13vw,140.8px);line-height:.9;letter-spacing:-3px;font-variant-numeric:tabular-nums;text-shadow:0 6px 40px rgba(0,0,0,.35);user-select:none;cursor:pointer}
   .clock-edit{font-family:inherit;font-weight:300;font-size:clamp(64px,11vw,120px);line-height:.9;letter-spacing:-3px;font-variant-numeric:tabular-nums;width:2.6em;text-align:center;color:var(--ink);background:transparent;border:none;border-bottom:3px solid var(--amber);outline:none;padding:0}
   .phase-label{font-size:14.3px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint);margin-top:-6px;text-align:center}
+  .remote-timer{display:none;flex-direction:column;align-items:center;gap:2px;margin:2px auto 10px;padding:12px 18px;border-radius:18px;background:var(--track-bg);border:1px solid var(--stroke-soft);max-width:90%}
+  .remote-timer.show{display:flex}
+  .remote-timer .rt-head{font-size:11.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:7px}
+  .remote-timer .rt-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 0 var(--amber);animation:rtpulse 1.8s infinite}
+  .remote-timer .rt-clock{font-weight:300;font-size:clamp(34px,7vw,52px);line-height:1;letter-spacing:-1px;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .remote-timer .rt-phase{font-size:12.7px;color:var(--faint);text-align:center}
+  @keyframes rtpulse{0%{box-shadow:0 0 0 0 rgba(245,166,35,.5)}70%{box-shadow:0 0 0 8px rgba(245,166,35,0)}100%{box-shadow:0 0 0 0 rgba(245,166,35,0)}}
   .phase-label b{color:var(--amber);font-weight:600}
   .controls{display:flex;align-items:center;gap:14px}
   .start{font-family:inherit;font-size:19.8px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--start-ink);background:var(--start-bg);border:none;padding:14px 44px;border-radius:999px;cursor:pointer;transition:transform .15s,box-shadow .25s;box-shadow:0 8px 22px -10px rgba(0,0,0,.55)}
@@ -1698,6 +1705,7 @@
       <span class="fp-top"><span class="fp-name" id="fpName">Focus</span><span class="fp-chev">›</span></span>
       <div class="fp-sub" id="fpSub"></div>
     </button>
+    <div class="remote-timer" id="remoteTimer"></div>
     <div class="clock" id="clock">50:00</div>
     <div class="phase-label" id="phaseLabel">Time to focus</div>
     <div class="time-adjust" id="timeAdjust">
@@ -2189,7 +2197,11 @@ const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.ran
    until then push stays off and only the local notifications fire. Pairs with the Cloudflare
    cron worker (push-backend/) which sends the push when an alarm's time arrives. ---- */
 const PUSH_VAPID_PUBLIC='BPKI7SXl3sPiRTGiNl6QA9nFJe46ezY-_UlzGC3S33601gJ0RT89_To_HSHO87WhISv6fW17Lqi-33Ow3g4XNKM';   // base64url 65-byte P-256 point — must equal the worker's VAPID_PUBLIC
-const pushRef=()=>`${CLOUD.url.replace(/\/+$/,'')}/push/${encodeURIComponent(CLOUD.key)}/${encodeURIComponent(DEVICE)}.json`;
+const pushBase=()=>`${CLOUD.url.replace(/\/+$/,'')}/push/${encodeURIComponent(CLOUD.key)}`;
+const pushRef=()=>`${pushBase()}/${encodeURIComponent(DEVICE)}.json`;          // legacy per-device alarm (cleared on upgrade)
+const pushSubRef=()=>`${pushBase()}/subs/${encodeURIComponent(DEVICE)}.json`;  // this device's push subscription + liveness heartbeat
+const pushAlarmRef=()=>`${pushBase()}/alarm.json`;                             // ONE shared alarm the worker fans out to every device
+const liveTimerRef=()=>`${pushBase()}/live.json`;                             // ONE shared live-timer mirror — so the running session is visible on every device
 let pushSub=null;             // this device's PushSubscription (as JSON) once subscribed
 function urlB64ToU8(s){ s=String(s).replace(/-/g,'+').replace(/_/g,'/'); const pad='='.repeat((4-s.length%4)%4); const raw=atob(s+pad); const o=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++)o[i]=raw.charCodeAt(i); return o; }
 /* Subscribe this installed PWA to push once permission is granted. No-ops on the web build,
@@ -2204,6 +2216,10 @@ async function ensurePushSub(){
     let sub=await reg.pushManager.getSubscription();
     if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlB64ToU8(PUSH_VAPID_PUBLIC)});
     pushSub=sub.toJSON();
+    if(cloudOn()){
+      pushHeartbeat();                                // register this device in /push/<key>/subs so the worker can fan out boundary pushes to it
+      try{ fetch(pushRef(),{method:'DELETE'}); }catch(e){}  // drop any stale legacy per-device alarm (superseded by the shared /alarm)
+    }
     pushAlarmSync();                                  // mirror any already-running timer at once
     return pushSub;
   }catch(e){ return null; }
@@ -2238,17 +2254,99 @@ function pushSchedule(){
    tag collapses any overlap with the local notification). The full `schedule` lets the worker
    push a sound at EVERY boundary of a closed run, not just the first; the top-level
    fireAt/title/body keep the next boundary firing on an un-redeployed (legacy) worker too. */
-let _pushAlarmT=null;
+/* Heartbeat: register this device's push subscription + a fresh `alive` timestamp under
+   /push/<key>/subs/<device>. The cron worker fans a boundary push out to EVERY device whose
+   alive is STALE (app closed) and skips fresh ones (app open → it already notified locally),
+   so exactly one notification lands per device regardless of which device runs the timer. */
+function pushHeartbeat(){
+  if(!cloudOn()||!PUSH_VAPID_PUBLIC||!pushSub||settings.notify!==true) return;
+  try{ fetch(pushSubRef(),{method:'PUT',body:JSON.stringify({sub:pushSub,alive:Date.now(),device:DEVICE})}).catch(()=>{}); }catch(e){}
+}
+let _pushAlarmT=null, _pushOwned=false;
 function pushAlarmSync(){ if(_pushAlarmT)return; _pushAlarmT=setTimeout(()=>{ _pushAlarmT=null; _pushAlarmFlush(); },600); }
 function _pushAlarmFlush(){
   if(!cloudOn()||!PUSH_VAPID_PUBLIC) return;
+  pushHeartbeat();                                              // keep this device's liveness fresh whenever the timer state changes
   const sched=(pushSub && settings.notify===true) ? pushSchedule() : [];
   try{
     if(sched.length){
-      const next=sched[0];
-      fetch(pushRef(),{method:'PUT',body:JSON.stringify({fireAt:next.fireAt,title:next.title,body:next.body,schedule:sched,tag:'fd-timer',sub:pushSub,savedAt:Date.now()})}).catch(()=>{});
-    } else { fetch(pushRef(),{method:'DELETE'}).catch(()=>{}); }
+      _pushOwned=true; const next=sched[0];
+      // ONE shared alarm carrying the whole schedule — the worker drains it and pushes to all closed devices
+      fetch(pushAlarmRef(),{method:'PUT',body:JSON.stringify({fireAt:next.fireAt,title:next.title,body:next.body,schedule:sched,tag:'fd-timer',owner:DEVICE,savedAt:Date.now()})}).catch(()=>{});
+    } else if(_pushOwned){
+      // our run ended → clear the shared alarm (only if we were the one that set it, so we never wipe another device's live run)
+      _pushOwned=false; fetch(pushAlarmRef(),{method:'DELETE'}).catch(()=>{});
+    }
   }catch(e){}
+}
+/* =====================================================================
+   CROSS-DEVICE LIVE TIMER MIRROR — the device running a focus session
+   publishes its live state to ONE shared cloud record (/push/<key>/live,
+   under the already-permitted /push subtree, so no Firebase-rules change).
+   Every other device polls it and shows a real-time "Running on your other
+   device" panel + chimes/notifies at each phase boundary, so a session
+   started on the laptop is fully visible (and alerts you) on the phone, and
+   vice-versa. Push (closed app) is handled separately by the worker.
+   ===================================================================== */
+let _timerOwned=false, _timerStateT=null;
+function timerStateSync(){ if(_timerStateT)return; _timerStateT=setTimeout(()=>{ _timerStateT=null; _timerStateFlush(); },500); }
+function liveTimerRecord(){
+  const t=currentTask?tasks.find(x=>x.id===currentTask):null;
+  const h=currentHabit?habits.find(x=>x.id===currentHabit):null;
+  const sid=activeSubjectId(), s=sid?subjById(sid):null;
+  return { owner:DEVICE, device:DEVICE, active:!!active, mode, phase,
+    endStamp:endStamp||null, phaseStart:phaseStart||null, remaining:remaining||0,
+    roundCount:roundCount||0, oneShot:!!oneShot, n:pomoN(),
+    swBase:workedMs||0, segStart:segStart||null,
+    taskName:t?t.name:'', subjectName:s?s.name:'', subjectColor:s?s.color:'', habitName:h?h.name:'',
+    schedule:(mode==='pomo'?pushSchedule():[]), savedAt:Date.now() };
+}
+function _timerStateFlush(){
+  if(!cloudOn()) return;
+  const live=active||workedMs>0;                                 // a running OR paused session on this device
+  try{
+    if(live){ _timerOwned=true; fetch(liveTimerRef(),{method:'PUT',body:JSON.stringify(liveTimerRecord())}).catch(()=>{}); }
+    else if(_timerOwned){ _timerOwned=false; fetch(liveTimerRef(),{method:'PUT',body:JSON.stringify({owner:DEVICE,active:false,endedAt:Date.now(),savedAt:Date.now()})}).catch(()=>{}); }
+  }catch(e){}
+}
+/* ---- the viewing side: poll the shared record + render/notify a mirror ---- */
+let _mirror=null, _mirrorNotified={};
+async function pollTimerState(){
+  if(!cloudOn()) return;
+  if(active||workedMs>0){ if(_mirror){ _mirror=null; renderMirror(); } return; }   // our own live timer always wins
+  let rec=null; try{ const r=await fetch(liveTimerRef(),{cache:'no-store'}); if(r.ok) rec=await r.json(); }catch(e){ return; }
+  const stale = rec&&rec.savedAt&&(Date.now()-rec.savedAt>120000);                 // heartbeat republishes ≤30s, so 120s ⇒ that device is gone
+  if(!rec || rec.owner===DEVICE || !rec.active || stale){ if(_mirror){ _mirror=null; renderMirror(); } return; }
+  _mirror=rec; renderMirror();
+}
+function mirrorClockText(){
+  const m=_mirror; if(!m) return '';
+  if(m.mode==='stopwatch'){ const e=((m.swBase||0)+(m.segStart?Date.now()-m.segStart:0))/1000; return hms(e).replace(/^0:/,''); }
+  const rem=m.endStamp?Math.max(0,(m.endStamp-Date.now())/1000):(m.remaining||0); return mmss(rem);
+}
+function renderMirror(){
+  const el=$('remoteTimer'); if(!el) return;
+  if(!_mirror||!_mirror.active||active||workedMs>0){ el.classList.remove('show'); el.innerHTML=''; return; }
+  const m=_mirror, phWords={focus:'Focus',short:'Short break',long:'Long break'};
+  const what=m.taskName||m.habitName||m.subjectName||'', ph=m.mode==='stopwatch'?'Stopwatch':(phWords[m.phase]||'Focus');
+  el.innerHTML=`<div class="rt-head"><span class="rt-dot"></span>Running on your other device</div>`+
+    `<div class="rt-clock">${esc(mirrorClockText())}</div>`+
+    `<div class="rt-phase">${esc(ph)}${what?' · '+esc(what):''}</div>`;
+  el.classList.add('show');
+}
+/* 1s loop: advance the mirror clock + fire one local chime/notification per boundary
+   so an OPEN non-running device alerts you too (closed devices get the worker push). */
+function mirrorTick(){
+  if(!_mirror||!_mirror.active){ return; }
+  if(active||workedMs>0){ _mirror=null; renderMirror(); return; }
+  const now=Date.now();
+  (Array.isArray(_mirror.schedule)?_mirror.schedule:[]).forEach(b=>{
+    if(b&&typeof b.fireAt==='number'&&b.fireAt<=now+250&&now-b.fireAt<3600000&&!_mirrorNotified[b.fireAt]){
+      _mirrorNotified[b.fireAt]=true; chime(); flash(); fdNotify(b.title||'Focus Den',b.body||'');
+    }
+  });
+  for(const k in _mirrorNotified){ if(now-Number(k)>2*3600000) delete _mirrorNotified[k]; }   // prune old marks
+  renderMirror();
 }
 /* resolve sync config: URL params (?fdurl=&fdkey= — reliable inside the Notion iframe) override saved → baked defaults */
 (function loadCloudCfg(){
@@ -2566,7 +2664,7 @@ function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_
    All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
 function timerSnap(){ return { active, mode, phase, subjectId:(typeof $==='function'&&$('activeSubject')?$('activeSubject').value:''),
   currentTask, currentHabit, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, customFocus, customSessions, _taskTimer, savedAt:Date.now() }; }
-function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); if(typeof syncKeepAwake==='function') syncKeepAwake(); }
+function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); timerStateSync(); if(typeof syncKeepAwake==='function') syncKeepAwake(); }
 
 /* ====================================================================
    UNIFIED TASK MODEL  — a single `tasks` array is the source of truth.
@@ -7384,7 +7482,9 @@ $('settingsBtn').onclick=()=>{$('setFocus').value=settings.focus;$('setSessions'
 /* reflect the real state: "on" only when enabled AND the OS still grants permission */
 function refreshNotifyToggle(){ const ok=('Notification' in window)&&Notification.permission==='granted'&&settings.notify===true; $('setNotify').classList.toggle('on',ok); }
 $('setNotify').onclick=async ()=>{
-  if(settings.notify===true){ settings.notify=false; refreshNotifyToggle(); save(); pushAlarmSync(); return; }   // turn off (also clears the server alarm)
+  if(settings.notify===true){ settings.notify=false; refreshNotifyToggle(); save(); pushAlarmSync();   // turn off (also clears the server alarm)
+    try{ if(cloudOn()) fetch(pushSubRef(),{method:'DELETE'}); }catch(e){}   // de-register this device so the worker stops pushing boundary banners to it
+    return; }
   if(!('Notification' in window)){ alert('This browser doesn’t support notifications.'); return; }
   let perm=Notification.permission;
   if(perm!=='granted'){ try{ perm=await Notification.requestPermission(); }catch(e){} }
@@ -7710,8 +7810,13 @@ async function boot(){
   gameRollover(); gameRefreshChip();   // settle freezes/streak, then paint the rail flame
   // two-way cloud convergence: pull other-device / Notion-sync edits periodically and on refocus
   setInterval(pollCloud,6000);
+  // cross-device live timer: pull the shared running-session record + tick the mirror clock,
+  // and keep our own liveness/state fresh so a long steady phase never looks stale to other devices
+  setInterval(pollTimerState,5000); pollTimerState();
+  setInterval(mirrorTick,1000);
+  setInterval(()=>{ pushHeartbeat(); if(active||workedMs>0) timerStateSync(); },30000);
   // capture the live timer the instant the tab is backgrounded — iOS Safari may reload it before we get another chance
-  document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else { pollCloud(); if(active && mode!=='stopwatch') tickFn(); } });
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else { pollCloud(); pollTimerState(); pushHeartbeat(); if(active && mode!=='stopwatch') tickFn(); } });
   window.addEventListener('pagehide',saveTimer);
   // Notion DB → board list sync: near-realtime both ways (push is instant; pull polls ~10s while visible, 60s hidden, and immediately on refocus)
   loadNotionMeta();   // restore the sync baseline first, so a check made right after load pushes instead of being swallowed/reverted by the racing initial poll

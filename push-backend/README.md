@@ -8,18 +8,26 @@ in-app local notifications (which only fire while the app is open/backgrounded-a
 Works on the **installed** PWA only: macOS dock app, and iOS Home-Screen app (iOS 16.4+).
 Not in a browser tab, not in the Notion iframe.
 
-## How it fits together
-- App (`index.html`) → on a running pomodoro, writes `/push/<KEY>/<device> = {fireAt, title, body, sub}`
-  to the RTDB and clears/overwrites it as phases change. (Separate `/push` subtree, so the
-  app's state blob never clobbers it.)
-- Worker (`push-worker.js`) → every minute, sends a push for any alarm whose `fireAt` has
-  arrived, then deletes it. Self-contained VAPID (RFC 8292) + aes128gcm (RFC 8291) via WebCrypto.
-- Service worker (`../sw.js`) → `push` handler shows the banner; `notificationclick` focuses/opens
-  the app.
+## How it fits together (cross-device fan-out)
+Notifications now land on **every** device regardless of which one runs the timer. Three keys
+live under the `/push/<KEY>` subtree (separate from the app's state blob, so neither clobbers
+the other):
+- `/push/<KEY>/subs/<device> = {sub, alive, device}` — each device registers its PushSubscription
+  here plus a liveness **heartbeat** (`alive`, refreshed every ~30 s while the app is visible).
+- `/push/<KEY>/alarm = {schedule:[{fireAt,title,body}…], tag, owner, savedAt}` — the device running
+  the pomodoro writes ONE shared alarm carrying every upcoming boundary, overwriting it as phases change.
+- `/push/<KEY>/live = {…live timer state…}` — the running device mirrors its live timer here so other
+  devices can **see** the running session (handled in-app, not by the worker).
 
-Because the live app advances the alarm before each boundary, a **closed** app is the only
-one that actually receives a server push — no duplicate with the local notification (and the
-shared `tag: fd-timer` collapses any overlap anyway).
+Worker (`push-worker.js`) → every minute, for each due boundary in `alarm.schedule` it pushes to
+**every device whose `alive` heartbeat is STALE** (app closed) and **skips fresh ones** (app open →
+it already fired the notification locally). So exactly one banner lands per device — the running
+device and any open device notify locally; closed devices get the server push. Dead subscriptions
+(404/410) are pruned from `subs`. Self-contained VAPID (RFC 8292) + aes128gcm (RFC 8291) via WebCrypto.
+Legacy per-device `/push/<KEY>/<device>` alarms from older clients are still drained for back-compat.
+
+Service worker (`../sw.js`) → `push` handler shows the banner; `notificationclick` focuses/opens
+the app. The shared `tag: fd-timer` collapses any overlap.
 
 ## One-time setup
 
@@ -65,8 +73,11 @@ wrangler secret put RTDB_KEY            # the app's CLOUD.key (currently 'Jacr06
 ## Notes
 - **Timing:** cron granularity is 1 minute, so the closed-app push can be up to ~60 s late.
   The local notification (app open) is exact; this is only the closed-app backstop.
-- **Scope:** the server pings the *next* boundary after you leave; it does not run the whole
-  pomodoro chain in the cloud (when you're away from the app you're not doing the cycle anyway).
+- **Scope:** the server drains `alarm.schedule` one boundary per cron tick, fanning each out to all
+  closed devices; it does not run the pomodoro chain in the cloud.
+- **Cross-device:** start a session on the laptop and the phone shows a live "Running on your other
+  device" panel and chimes at each boundary (open) or gets a push (closed), and vice-versa — no
+  Firebase-rules change needed (everything is under the already-permitted `/push` subtree).
 - **Cost:** Cloudflare Workers free tier (cron triggers included). No Firebase Blaze needed —
   the worker talks to the RTDB over REST, same as the app.
 - **Security:** only the VAPID *public* key ships to the client. The private JWK lives solely

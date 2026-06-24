@@ -42,6 +42,7 @@ export default {
 };
 
 let _DBG = [];
+const RESERVED = { subs: 1, alarm: 1, live: 1 }; // children of /push/<key> that are NOT legacy per-device alarms
 async function runCron(env) {
   _DBG = [];
   const base = (env.RTDB_URL || '').replace(/\/+$/, '');
@@ -54,7 +55,48 @@ async function runCron(env) {
   const now = Date.now();
   let processed = 0;
   const jobs = [];
+
+  /* ---- SHARED alarm → fan out to every CLOSED device ---------------------
+   * The running app writes ONE alarm (/push/<key>/alarm) carrying the whole
+   * schedule, and every device registers itself under /push/<key>/subs/<device>
+   * with a heartbeat `alive`. For each due boundary we push to every device
+   * whose heartbeat is STALE (app closed) and skip fresh ones (app open → it
+   * already fired the notification locally), so exactly one banner lands per
+   * device no matter which device runs the timer. */
+  const subs = (data.subs && typeof data.subs === 'object') ? data.subs : {};
+  const alarm = data.alarm;
+  const ALIVE_MS = 75 * 1000;  // heartbeat younger than this ⇒ app open ⇒ skip (it self-notifies)
+  if (alarm && Array.isArray(alarm.schedule)) {
+    const aRef = `${base}/push/${keyPath}/alarm.json`;
+    const items = alarm.schedule.filter(x => x && typeof x.fireAt === 'number');
+    const due = items.filter(x => x.fireAt <= now + 2000 && x.fireAt >= now - 3600 * 1000);
+    const future = items.filter(x => x.fireAt > now + 2000);
+    if (due.length) {
+      const fire = due[due.length - 1]; // collapse any missed boundaries into one banner (mirrors the live app's single catch-up chime)
+      for (const device of Object.keys(subs)) {
+        const s = subs[device];
+        if (!s || !s.sub) continue;
+        if (now - (s.alive || 0) < ALIVE_MS) continue; // app is open on that device → it notified locally, don't double-push
+        processed++;
+        jobs.push((async () => {
+          try {
+            const res = await sendPush(s.sub, { title: fire.title || 'Focus Den', body: fire.body || '', tag: alarm.tag || 'fd-timer' }, env);
+            if (res.status === 404 || res.status === 410) await fetch(`${base}/push/${keyPath}/subs/${encodeURIComponent(device)}.json`, { method: 'DELETE' });
+            else if (!(res.status >= 200 && res.status < 300)) { const t = await res.text().catch(() => ''); _DBG.push('push ' + res.status + ': ' + t.slice(0, 200)); }
+          } catch (e) { _DBG.push('throw: ' + String(e && e.stack ? e.stack : e)); }
+        })());
+      }
+    }
+    // advance the shared alarm: keep only still-future boundaries, or drop it when the run is done
+    if (due.length || (items.length && !future.length)) {
+      if (future.length) jobs.push(fetch(aRef, { method: 'PUT', body: JSON.stringify({ ...alarm, schedule: future, fireAt: future[0].fireAt, title: future[0].title, body: future[0].body }) }));
+      else jobs.push(fetch(aRef, { method: 'DELETE' }));
+    }
+  }
+
+  /* ---- LEGACY per-device alarms (older clients) -------------------------- */
   for (const device of Object.keys(data)) {
+    if (RESERVED[device]) continue;
     const a = data[device];
     if (!a || !a.sub) continue;
     const ref = `${base}/push/${keyPath}/${encodeURIComponent(device)}.json`;
