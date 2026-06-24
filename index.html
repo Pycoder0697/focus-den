@@ -7772,6 +7772,7 @@ $('bgReset').onclick=()=>{try{localStorage.removeItem('fd_bg');}catch(e){}delete
 (function(){const b=store.get('fd_bg');if(b)applyBg(b);})();
 
 /* ---------- boot: load cloud (if enabled) → resume → render ---------- */
+let _bootPushLogs=false;
 async function boot(){
   applyTheme();
   loadFilters(); updateFilterBadge();          // restore advanced-filter chips (device-local) so a Safari reload keeps them
@@ -7781,10 +7782,16 @@ async function boot(){
     if(cloud.settings) settings=Object.assign({...DEF},cloud.settings);
     if(Array.isArray(cloud.subjects)) subjects=cloud.subjects;
     tombstones=mergeTomb(tombstones,cloud.tombstones);
+    const _cloudSessN=Array.isArray(cloud.sessions)?cloud.sessions.length:0, _cloudDistN=Array.isArray(cloud.distractions)?cloud.distractions.length:0;
     sessions=mergeLog(sessions,cloud.sessions,tombstones);   // keep any session committed offline on this device
     if(cloud.dayoff) dayoff=cloud.dayoff;
     if(Array.isArray(cloud.tasks)) tasks=cloud.tasks;
     distractions=mergeLog(distractions,cloud.distractions,tombstones);
+    // a device that recorded study sessions OFFLINE only had them locally — the union above keeps them,
+    // but nothing pushes them UP on a plain reopen (no mutation ⇒ no save). If the merge surfaced any
+    // local-only log rows, push the superset back to the cloud now. Safe: tasks/subjects/etc were just
+    // set to the cloud's current values above, so this can only ADD the missing sessions, never clobber.
+    if((sessions.length>_cloudSessN || distractions.length>_cloudDistN) && cloudOn()) _bootPushLogs=true;
     if(Array.isArray(cloud.boards)) boards=cloud.boards;
     if(Array.isArray(cloud.inboxLists)) inboxLists=cloud.inboxLists;
     if(Array.isArray(cloud.habits)) habits=cloud.habits;
@@ -7797,6 +7804,7 @@ async function boot(){
     store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
     store.set('fd_tombstones',JSON.stringify(tombstones));
   } else if(cloudOn()){ cloudSave(); }   // cloud is empty → seed it with this device's data (first device with data wins)
+  if(_bootPushLogs) cloudSave();         // push local-only sessions/distractions surfaced by the boot merge (union-safe — see above)
   normalizeData();
   applyTheme();
   applyTimerCollapsed();
