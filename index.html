@@ -2486,7 +2486,7 @@ function applyRemote(cloud){
   store.set('fd_habits',JSON.stringify(habits));store.set('fd_moodgroups',JSON.stringify(moodGroups));
   store.set('fd_moodscales',JSON.stringify(moodScales));store.set('fd_game',JSON.stringify(game));
   store.set('fd_tombstones',JSON.stringify(tombstones));
-  applyTheme(); refreshDplus(); renderSubjectSelect&&renderSubjectSelect(); refreshTaskSurfaces&&refreshTaskSurfaces(); refreshStats&&refreshStats(); renderCalendar&&renderCalendar();
+  applyTheme(); refreshDplus(); renderSubjectSelect&&renderSubjectSelect(); renderSubjects&&renderSubjects(); refreshTaskSurfaces&&refreshTaskSurfaces(); refreshStats&&refreshStats(); renderCalendar&&renderCalendar();
   if($('tab-countdown')&&$('tab-countdown').classList.contains('show')) renderCountdownTab();
   if($('tab-habits')&&$('tab-habits').classList.contains('show')) renderHabitsTab();
   gameRefreshChip&&gameRefreshChip(); if($('tab-quest')&&$('tab-quest').classList.contains('show')) renderQuest();
