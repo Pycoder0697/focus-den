@@ -119,6 +119,11 @@
   .remote-timer .rt-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 0 var(--amber);animation:rtpulse 1.8s infinite}
   .remote-timer .rt-clock{font-weight:300;font-size:clamp(34px,7vw,52px);line-height:1;letter-spacing:-1px;font-variant-numeric:tabular-nums;color:var(--ink)}
   .remote-timer .rt-phase{font-size:12.7px;color:var(--faint);text-align:center}
+  .remote-timer .rt-dot.paused{animation:none;background:var(--faint);box-shadow:none}
+  .remote-timer .rt-ctrls{display:flex;gap:9px;margin-top:10px}
+  .remote-timer .rt-btn{font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:.3px;color:var(--ink);background:var(--field-bg);border:1px solid var(--stroke-soft);padding:7px 17px;border-radius:999px;cursor:pointer;transition:transform .12s,background .2s}
+  .remote-timer .rt-btn:active{transform:scale(.93)}
+  .remote-timer .rt-btn.rt-stop{color:#fff;background:var(--rose);border-color:transparent}
   @keyframes rtpulse{0%{box-shadow:0 0 0 0 rgba(245,166,35,.5)}70%{box-shadow:0 0 0 8px rgba(245,166,35,0)}100%{box-shadow:0 0 0 0 rgba(245,166,35,0)}}
   .phase-label b{color:var(--amber);font-weight:600}
   .controls{display:flex;align-items:center;gap:14px}
@@ -2202,6 +2207,7 @@ const pushRef=()=>`${pushBase()}/${encodeURIComponent(DEVICE)}.json`;          /
 const pushSubRef=()=>`${pushBase()}/subs/${encodeURIComponent(DEVICE)}.json`;  // this device's push subscription + liveness heartbeat
 const pushAlarmRef=()=>`${pushBase()}/alarm.json`;                             // ONE shared alarm the worker fans out to every device
 const liveTimerRef=()=>`${pushBase()}/live.json`;                             // ONE shared live-timer mirror — so the running session is visible on every device
+const liveCmdRef=()=>`${pushBase()}/live_cmd.json`;                           // remote-control channel: a viewing device writes ONE command here, the owner drains + applies it
 let pushSub=null;             // this device's PushSubscription (as JSON) once subscribed
 function urlB64ToU8(s){ s=String(s).replace(/-/g,'+').replace(/_/g,'/'); const pad='='.repeat((4-s.length%4)%4); const raw=atob(s+pad); const o=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++)o[i]=raw.charCodeAt(i); return o; }
 /* Subscribe this installed PWA to push once permission is granted. No-ops on the web build,
@@ -2294,7 +2300,7 @@ function liveTimerRecord(){
   const t=currentTask?tasks.find(x=>x.id===currentTask):null;
   const h=currentHabit?habits.find(x=>x.id===currentHabit):null;
   const sid=activeSubjectId(), s=sid?subjById(sid):null;
-  return { owner:DEVICE, device:DEVICE, active:!!active, mode, phase,
+  return { owner:DEVICE, device:DEVICE, active:!!active, live:(active||workedMs>0), paused:(!active&&workedMs>0), mode, phase,
     endStamp:endStamp||null, phaseStart:phaseStart||null, remaining:remaining||0,
     roundCount:roundCount||0, oneShot:!!oneShot, n:pomoN(),
     swBase:workedMs||0, segStart:segStart||null,
@@ -2313,32 +2319,87 @@ function _timerStateFlush(){
 let _mirror=null, _mirrorNotified={};
 async function pollTimerState(){
   if(!cloudOn()) return;
-  if(active||workedMs>0){ if(_mirror){ _mirror=null; renderMirror(); } return; }   // our own live timer always wins
+  if(active||workedMs>0){ if(_mirror){ _mirror=null; renderMirror(); } pollRemoteCmd(); return; }   // WE own the live timer → it always wins, AND we drain remote-control commands aimed at us
   let rec=null; try{ const r=await fetch(liveTimerRef(),{cache:'no-store'}); if(r.ok) rec=await r.json(); }catch(e){ return; }
   const stale = rec&&rec.savedAt&&(Date.now()-rec.savedAt>120000);                 // heartbeat republishes ≤30s, so 120s ⇒ that device is gone
-  if(!rec || rec.owner===DEVICE || !rec.active || stale){ if(_mirror){ _mirror=null; renderMirror(); } return; }
+  const liveRec = rec && (rec.live!==undefined ? rec.live : rec.active);           // a paused-but-live owner publishes active:false + live:true (older records only have active)
+  if(!rec || rec.owner===DEVICE || !liveRec || stale){ if(_mirror){ _mirror=null; renderMirror(); } return; }
   _mirror=rec; renderMirror();
+}
+/* OWNER side: read the single command record, apply anything new aimed at this device, then clear it.
+   Only runs while we own a live timer (called from pollTimerState's own-timer branch). */
+let _lastCmdAt=0;
+async function pollRemoteCmd(){
+  let c=null; try{ const r=await fetch(liveCmdRef(),{cache:'no-store'}); if(r.ok) c=await r.json(); }catch(e){ return; }
+  if(!c||!c.cmd||!c.at) return;
+  if(c.target && c.target!==DEVICE) return;                       // aimed at a different owner
+  if(c.at<=_lastCmdAt || Date.now()-c.at>60000) return;           // already handled, or too stale to act on
+  _lastCmdAt=c.at;
+  try{ fetch(liveCmdRef(),{method:'DELETE'}).catch(()=>{}); }catch(e){}
+  applyRemoteCmd(c.cmd);
+}
+/* Execute a remote command on the owner device. Pause uses freeze() (a clean pause with NO modal,
+   unlike the local Pause button) so an unattended owner just stops cleanly and can be resumed. */
+function applyRemoteCmd(cmd){
+  const pv=$('ovPause'); if(pv) pv.classList.remove('show');                       // a remote command supersedes this device's own open pause prompt
+  if(cmd==='pause'){ if(active) freeze(); }
+  else if(cmd==='resume'){ if(!active && workedMs>0) resumeTimer(); }
+  else if(cmd==='toggle'){ if(active) freeze(); else if(workedMs>0) resumeTimer(); }
+  else if(cmd==='skip'){ if(mode==='pomo'){ const was=phase;
+      if(active){freeze();commit(was==='focus');} else if(workedMs>0){commit(was==='focus');}
+      phase=was==='focus'?'short':'focus'; setPhaseButtons(); remaining=phaseMin()*60; phaseStart=null; startTimer(); } }
+  else if(cmd==='stop'){ if(active) freeze(); commit(true); afterStop(); }        // save & finish (same as ovPause "Save")
+  else if(cmd==='discard'){ if(active) freeze(); commit(false); afterStop(); }
+  saveTimer();                                                                     // republish the updated live state at once so the controlling device sees the result fast
+}
+/* VIEWER side: send a control command to the owner + optimistically reflect it so the tap feels instant. */
+function sendMirrorCmd(cmd){
+  if(!_mirror||!cloudOn()) return;
+  const at=Date.now(), owner=_mirror.owner;
+  try{ fetch(liveCmdRef(),{method:'PUT',body:JSON.stringify({cmd,by:DEVICE,at,target:owner})}).catch(()=>{}); }catch(e){}
+  if(cmd==='toggle'){
+    if(_mirror.paused){                                                            // resuming
+      _mirror.paused=false; _mirror.active=true; _mirror.live=true;
+      if(_mirror.mode!=='stopwatch'){ _mirror.endStamp=Date.now()+(_mirror.remaining||0)*1000; }
+      else { _mirror.segStart=Date.now(); }
+    } else {                                                                        // pausing
+      _mirror.paused=true; _mirror.active=false; _mirror.live=true;
+      if(_mirror.mode!=='stopwatch'&&_mirror.endStamp){ _mirror.remaining=Math.max(0,(_mirror.endStamp-Date.now())/1000); }
+      else if(_mirror.mode==='stopwatch'&&_mirror.segStart){ _mirror.swBase=(_mirror.swBase||0)+(Date.now()-_mirror.segStart); _mirror.segStart=null; }
+    }
+    renderMirror();
+  } else if(cmd==='stop'){ _mirror=null; renderMirror(); }                          // panel clears; next poll confirms
 }
 function mirrorClockText(){
   const m=_mirror; if(!m) return '';
   if(m.mode==='stopwatch'){ const e=((m.swBase||0)+(m.segStart?Date.now()-m.segStart:0))/1000; return hms(e).replace(/^0:/,''); }
+  if(m.paused){ return mmss(m.remaining||0); }                                     // frozen at the paused remainder
   const rem=m.endStamp?Math.max(0,(m.endStamp-Date.now())/1000):(m.remaining||0); return mmss(rem);
 }
 function renderMirror(){
   const el=$('remoteTimer'); if(!el) return;
-  if(!_mirror||!_mirror.active||active||workedMs>0){ el.classList.remove('show'); el.innerHTML=''; return; }
-  const m=_mirror, phWords={focus:'Focus',short:'Short break',long:'Long break'};
+  const m=_mirror, liveRec=m&&(m.live!==undefined?m.live:m.active);
+  if(!m||!liveRec||active||workedMs>0){ el.classList.remove('show'); el.innerHTML=''; return; }
+  const phWords={focus:'Focus',short:'Short break',long:'Long break'};
   const what=m.taskName||m.habitName||m.subjectName||'', ph=m.mode==='stopwatch'?'Stopwatch':(phWords[m.phase]||'Focus');
-  el.innerHTML=`<div class="rt-head"><span class="rt-dot"></span>Running on your other device</div>`+
+  const paused=!!m.paused;
+  el.innerHTML=`<div class="rt-head"><span class="rt-dot${paused?' paused':''}"></span>${paused?'Paused on your other device':'Running on your other device'}</div>`+
     `<div class="rt-clock">${esc(mirrorClockText())}</div>`+
-    `<div class="rt-phase">${esc(ph)}${what?' · '+esc(what):''}</div>`;
+    `<div class="rt-phase">${esc(ph)}${what?' · '+esc(what):''}</div>`+
+    `<div class="rt-ctrls">`+
+      `<button class="rt-btn" data-cmd="toggle">${paused?'Resume':'Pause'}</button>`+
+      (m.mode==='pomo'?`<button class="rt-btn" data-cmd="skip">Skip</button>`:'')+
+      `<button class="rt-btn rt-stop" data-cmd="stop">Stop</button>`+
+    `</div>`;
   el.classList.add('show');
+  el.querySelectorAll('.rt-btn').forEach(b=>b.onclick=()=>sendMirrorCmd(b.dataset.cmd));
 }
 /* 1s loop: advance the mirror clock + fire one local chime/notification per boundary
    so an OPEN non-running device alerts you too (closed devices get the worker push). */
 function mirrorTick(){
-  if(!_mirror||!_mirror.active){ return; }
+  if(!_mirror||!(_mirror.live!==undefined?_mirror.live:_mirror.active)){ return; }
   if(active||workedMs>0){ _mirror=null; renderMirror(); return; }
+  if(_mirror.paused){ renderMirror(); return; }                                    // frozen — no clock advance, no boundary chimes
   const now=Date.now();
   (Array.isArray(_mirror.schedule)?_mirror.schedule:[]).forEach(b=>{
     if(b&&typeof b.fireAt==='number'&&b.fireAt<=now+250&&now-b.fireAt<3600000&&!_mirrorNotified[b.fireAt]){
@@ -7820,7 +7881,7 @@ async function boot(){
   setInterval(pollCloud,6000);
   // cross-device live timer: pull the shared running-session record + tick the mirror clock,
   // and keep our own liveness/state fresh so a long steady phase never looks stale to other devices
-  setInterval(pollTimerState,5000); pollTimerState();
+  setInterval(pollTimerState,3000); pollTimerState();   // 3s ⇒ snappy cross-device control (owner drains commands here too)
   setInterval(mirrorTick,1000);
   setInterval(()=>{ pushHeartbeat(); if(active||workedMs>0) timerStateSync(); },30000);
   // capture the live timer the instant the tab is backgrounded — iOS Safari may reload it before we get another chance
