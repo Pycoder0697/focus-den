@@ -2787,9 +2787,13 @@ let tombstones=(()=>{ try{ return JSON.parse(store.get('fd_tombstones')||'{}')||
 const TOMB_TTL=90*86400000; // forget a deletion after 90 days (long enough that every device has converged)
 function pruneTombstones(o){ const now=Date.now(); for(const k in o){ if(now-o[k]>TOMB_TTL) delete o[k]; } return o; }
 function tombstone(id){ if(id!=null) tombstones[String(id)]=Date.now(); }
+// Firebase RTDB stores a JS array but can return it as an integer-KEYED OBJECT ({0:…,1:…}) when
+// there's any gap — Array.isArray() would then see "not an array" and silently drop every remote row,
+// stranding a device on its local-only log. Coerce both sides through asRows() so a coerced object still merges.
+const asRows=x=>Array.isArray(x)?x:(x&&typeof x==='object'?Object.values(x):[]);
 function mergeLog(local,remote,tomb){ const out=new Map();
-  (Array.isArray(remote)?remote:[]).forEach(x=>{ if(x&&x.id!=null) out.set(String(x.id),x); });
-  (Array.isArray(local)?local:[]).forEach(x=>{ if(x&&x.id!=null&&!out.has(String(x.id))) out.set(String(x.id),x); });
+  asRows(remote).forEach(x=>{ if(x&&x.id!=null) out.set(String(x.id),x); });
+  asRows(local).forEach(x=>{ if(x&&x.id!=null&&!out.has(String(x.id))) out.set(String(x.id),x); });
   if(tomb) for(const id in tomb) out.delete(String(id));
   return [...out.values()]; }
 function mergeTomb(a,b){ const o=Object.assign({},a||{}); for(const k in (b||{})) o[k]=Math.max(o[k]||0,b[k]); return pruneTombstones(o); }
@@ -7932,7 +7936,19 @@ async function boot(){
   applyTheme();
   loadFilters(); updateFilterBadge();          // restore advanced-filter chips (device-local) so a Safari reload keeps them
   setSync('loading');
-  const cloud=await cloudLoad();
+  // Load the cloud blob, distinguishing a GENUINELY-EMPTY cloud (got a response, body is null)
+  // from a FETCH FAILURE (network hiccup / timeout / non-200). cloudLoad() collapses both to null,
+  // and the old `else cloudSave()` below then seeded the cloud from THIS device on a mere network
+  // hiccup — overwriting a healthy cloud (e.g. the laptop's 3:55:53) with this device's stale data
+  // and stranding it. We must NEVER push on a failed read.
+  let cloud=null, _cloudFetchFailed=false;
+  if(cloudOn()){
+    const _ac=('AbortController'in window)?new AbortController():null; const _to=_ac&&setTimeout(()=>_ac.abort(),9000);
+    try{ const r=await fetch(cloudRef(),{cache:'no-store',signal:_ac?_ac.signal:undefined});
+      if(r.ok){ cloud=await r.json(); } else { _cloudFetchFailed=true; } }
+    catch(e){ _cloudFetchFailed=true; }
+    finally{ if(_to)clearTimeout(_to); }
+  }
   if(cloud){
     if(cloud.settings) settings=Object.assign({...DEF},cloud.settings);
     if(Array.isArray(cloud.subjects)) subjects=cloud.subjects;
@@ -7958,7 +7974,8 @@ async function boot(){
     store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
     store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
     store.set('fd_tombstones',JSON.stringify(tombstones));
-  } else if(cloudOn()){ cloudSave(); }   // cloud is empty → seed it with this device's data (first device with data wins)
+  } else if(cloudOn() && !_cloudFetchFailed){ cloudSave(); }   // cloud is genuinely EMPTY (response read, no data) → seed it. NEVER seed on a fetch failure (would clobber a healthy cloud with stale local data).
+  else if(_cloudFetchFailed){ setSync('err'); }                // couldn't read cloud → keep local untouched, let pollCloud reconcile once the network is back
   if(_bootPushLogs) cloudSave();         // push local-only sessions/distractions surfaced by the boot merge (union-safe — see above)
   normalizeData();
   applyTheme();
