@@ -2206,7 +2206,7 @@ const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.ran
    Mac on a pre-fix build whose oversized snapshot push kept failing. version.json carries the
    deployed build id; a left-open device polls it and reloads itself ONCE when it differs (never
    mid-timer). Keep FD_BUILD === version.json's "build" on every deploy. */
-const FD_BUILD='2026-06-25f';
+const FD_BUILD='2026-06-25g';
 let _reloadedForUpdate=false; const _bootedAt=Date.now();
 async function checkForUpdate(){ try{
   const r=await fetch('version.json?_='+Date.now(),{cache:'no-store'}); if(!r.ok)return;
@@ -2523,22 +2523,26 @@ function cloudSave(){ if(!cloudOn())return; setSync('saving'); clearTimeout(_clo
    blob — preserving every other cloud field — so a device can NEVER strand its study log again,
    regardless of why cloudSave failed. Union-only ⇒ it can only add, never lose or revert. */
 let _reconcileBusy=false;
+function syncDiag(o){ if(!cloudOn())return; try{ fetch(CLOUD.url.replace(/\/+$/,'')+'/push/'+encodeURIComponent(CLOUD.key)+'/diag2/'+encodeURIComponent(DEVICE)+'.json',{method:'PUT',body:JSON.stringify({...o,at:Date.now(),build:FD_BUILD})}); }catch(e){} }
 async function reconcileLogsUp(){ if(!cloudOn()||_reconcileBusy)return; _reconcileBusy=true;
   try{
     const cloud=await (await fetch(cloudRef(),{cache:'no-store'})).json();
-    if(!cloud||typeof cloud!=='object')return;                         // failed read → leave it for the next tick
+    if(!cloud||typeof cloud!=='object'){ syncDiag({fn:'reconcile',note:'cloud-read-empty'}); return; }
     const tomb=mergeTomb(tombstones,cloud.tombstones);
     const cloudS=asRows(cloud.sessions), cloudD=asRows(cloud.distractions);
     const sIds=new Set(cloudS.map(c=>String(c.id))), dIds=new Set(cloudD.map(c=>String(c.id)));
-    const extra = sessions.some(s=>s&&s.id!=null&&!tomb[s.id]&&!sIds.has(String(s.id)))
-               || distractions.some(s=>s&&s.id!=null&&!tomb[s.id]&&!dIds.has(String(s.id)));
-    if(!extra){ _lastSyncOk=Date.now(); setSync('ok'); return; }         // cloud already has everything we do
+    const tk=todayKey();
+    const localToday=sessions.filter(s=>s&&dateKey(s.start)===tk), cloudToday=cloudS.filter(s=>s&&dateKey(s.start)===tk);
+    const localSecs=Math.round(localToday.reduce((a,s)=>a+sdur(s),0)), cloudSecs=Math.round(cloudToday.reduce((a,s)=>a+sdur(s),0));
+    const extraRows=sessions.filter(s=>s&&s.id!=null&&!tomb[s.id]&&!sIds.has(String(s.id)));
+    const extra = extraRows.length>0 || distractions.some(s=>s&&s.id!=null&&!tomb[s.id]&&!dIds.has(String(s.id)));
+    if(!extra){ _lastSyncOk=Date.now(); setSync('ok'); syncDiag({fn:'reconcile',note:'no-extra',localRows:sessions.length,localToday:localToday.length,cloudToday:cloudToday.length,localSecs,cloudSecs}); return; }
     cloud.sessions=mergeLog(cloudS,sessions,tomb); cloud.distractions=mergeLog(cloudD,distractions,tomb);
     cloud.tombstones=tomb; cloud._updatedAt=Date.now(); cloud._device=DEVICE;
-    const r=await fetch(cloudRef(),{method:'PUT',body:JSON.stringify(cloud)});
-    if(r.ok){ _lastRemoteSig=DEVICE+':'+cloud._updatedAt; _lastSeenRemote=cloud._updatedAt; _lastSyncOk=Date.now(); setSync('ok'); }
-    else setSync('err');
-  }catch(e){ setSync('err'); }
+    const body=JSON.stringify(cloud); const r=await fetch(cloudRef(),{method:'PUT',body});
+    if(r.ok){ _lastRemoteSig=DEVICE+':'+cloud._updatedAt; _lastSeenRemote=cloud._updatedAt; _lastSyncOk=Date.now(); setSync('ok'); syncDiag({fn:'reconcile',note:'PUSHED',extra:extraRows.length,localSecs,cloudSecs,kb:Math.round(body.length/1024),put:r.status}); }
+    else { setSync('err'); syncDiag({fn:'reconcile',note:'PUT-FAILED',extra:extraRows.length,put:r.status,body:(await r.text()).slice(0,120),kb:Math.round(body.length/1024)}); }
+  }catch(e){ setSync('err'); syncDiag({fn:'reconcile',note:'THREW',err:(e&&e.message||String(e)).slice(0,160)}); }
   finally{ _reconcileBusy=false; }
 }
 function setSync(s){ const b=document.getElementById('syncBadge'); if(!b)return; if(!cloudOn()){b.style.display='none';return;} b.style.display='';
