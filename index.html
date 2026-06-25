@@ -2206,7 +2206,7 @@ const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.ran
    Mac on a pre-fix build whose oversized snapshot push kept failing. version.json carries the
    deployed build id; a left-open device polls it and reloads itself ONCE when it differs (never
    mid-timer). Keep FD_BUILD === version.json's "build" on every deploy. */
-const FD_BUILD='2026-06-25e';
+const FD_BUILD='2026-06-25f';
 let _reloadedForUpdate=false; const _bootedAt=Date.now();
 async function checkForUpdate(){ try{
   const r=await fetch('version.json?_='+Date.now(),{cache:'no-store'}); if(!r.ok)return;
@@ -2220,23 +2220,6 @@ async function checkForUpdate(){ try{
 function writeMetaBeacon(){ if(!cloudOn())return;
   try{ fetch(CLOUD.url.replace(/\/+$/,'')+'/focusden/'+encodeURIComponent(CLOUD.key)+'_meta/'+DEVICE+'.json',
     {method:'PUT',body:JSON.stringify({build:FD_BUILD,at:Date.now(),device:DEVICE})}); }catch(e){} }
-/* DIAGNOSTIC: probe whether THIS device can PUT to /focusden at increasing sizes, and report the exact
-   result to the /push subtree (which is known to work) so it's readable remotely. Pinpoints why a device
-   writes the tiny beacon fine but never lands the ~130 KB core snapshot. Self-cleans its probe key. */
-async function cloudSelfTest(){ if(!cloudOn())return;
-  const base=CLOUD.url.replace(/\/+$/,''), k=encodeURIComponent(CLOUD.key);
-  const probe=base+'/focusden/'+k+'_probe_'+encodeURIComponent(DEVICE)+'.json';
-  const diag=base+'/push/'+k+'/diag/'+encodeURIComponent(DEVICE)+'.json';
-  const results=[];
-  for(const kb of [1,20,60,130,260]){
-    const body=JSON.stringify({d:DEVICE,blob:'x'.repeat(kb*1024-40)}); let line;
-    try{ const r=await fetch(probe,{method:'PUT',body}); line=kb+'KB:'+r.status+(r.ok?'':' '+(await r.text()).replace(/\s+/g,' ').slice(0,120)); }
-    catch(e){ line=kb+'KB:THREW '+((e&&e.message||String(e))).slice(0,160); }
-    results.push(line);
-  }
-  try{ await fetch(probe,{method:'DELETE'}); }catch(e){}
-  try{ await fetch(diag,{method:'PUT',body:JSON.stringify({build:FD_BUILD,at:Date.now(),ua:(navigator.userAgent||'').slice(0,90),results})}); }catch(e){}
-}
 /* ---- Web Push: focus/break-end notification when the app is fully CLOSED (backstop for the
    in-app local ones). Paste the VAPID public key from push-backend/generate-vapid.mjs below;
    until then push stays off and only the local notifications fire. Pairs with the Cloudflare
@@ -2508,6 +2491,12 @@ function mergeMediaInto(m){ if(!m||typeof m!=='object')return false; let ch=fals
   const p=(m.photos&&typeof m.photos==='object')?m.photos:{}; settings.journal=settings.journal||{};
   for(const d in p){ if(!p[d])continue; const e=settings.journal[d]||(settings.journal[d]={}); if(!e.photo){ e.photo=p[d]; ch=true; } }
   return ch; }
+/* Persist settings to localStorage WITHOUT the base64 photos. The photos (~2.85 MB) inside fd_settings
+   were overflowing Safari's ~5 MB localStorage quota, so subsequent writes (fd_sessions!) silently fell
+   back to memory-only via the store wrapper and were LOST on reload — the real mechanism behind a device
+   showing study time that never persisted. Photos live in the cloud _media record + in-memory settings,
+   so dropping them from the LOCAL copy is safe; pollMedia re-attaches them after each boot. */
+function persistSettings(){ store.set('fd_settings',JSON.stringify(leanSettings())); }
 let _mediaT=null,_lastMediaSig='';
 function cloudSaveMedia(){ if(!cloudOn())return; const m=collectMedia();
   const sig=m.visionImg.length+'|'+Object.keys(m.photos).sort().map(d=>d+':'+m.photos[d].length).join(',');
@@ -2516,7 +2505,7 @@ function cloudSaveMedia(){ if(!cloudOn())return; const m=collectMedia();
   _mediaT=setTimeout(async()=>{ try{ await fetch(mediaRef(),{method:'PUT',body:JSON.stringify(m)}); }catch(e){} finally{ _mediaT=null; } },1200); }
 async function pollMedia(){ if(!cloudOn())return; let m=null;
   try{ const r=await fetch(mediaRef(),{cache:'no-store'}); if(r.ok) m=await r.json(); }catch(e){ return; }
-  if(m && mergeMediaInto(m)){ try{store.set('fd_settings',JSON.stringify(settings));}catch(e){}
+  if(m && mergeMediaInto(m)){ try{persistSettings();}catch(e){}
     if($('tab-horizon')&&$('tab-horizon').classList.contains('show')) renderHorizonTab&&renderHorizonTab(); } }
 let _cloudT=null, _lastLocalWrite=0, _lastSeenRemote=0, _lastRemoteSig='';
 let _lastSyncOk=Date.now(), _cloudRetry=0;
@@ -2580,7 +2569,7 @@ function applyRemote(cloud){
   // the shadow to it so this device's next save() doesn't echo-push the same value back to Notion
   for(const t of tasks){ if(t.notionSourceId&&t.notionPageId) _notionShadow.set(t.notionPageId,notionFields(t)); }
   persistNotionMeta();
-  store.set('fd_settings',JSON.stringify(settings));store.set('fd_subjects',JSON.stringify(subjects));
+  persistSettings();store.set('fd_subjects',JSON.stringify(subjects));
   store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
   store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
   store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
@@ -2898,7 +2887,7 @@ function mergeLog(local,remote,tomb){ const out=new Map();
   if(tomb) for(const id in tomb) out.delete(String(id));
   return [...out.values()]; }
 function mergeTomb(a,b){ const o=Object.assign({},a||{}); for(const k in (b||{})) o[k]=Math.max(o[k]||0,b[k]); return pruneTombstones(o); }
-function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_subjects',JSON.stringify(subjects));
+function save(){persistSettings();store.set('fd_subjects',JSON.stringify(subjects));
   store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
   store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
   store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
@@ -8070,7 +8059,7 @@ async function boot(){
     if(Array.isArray(cloud.countdowns)) countdowns=cloud.countdowns;
     if(cloud.game && typeof cloud.game==='object') game=cloud.game;
     if(cloud._updatedAt){ _lastSeenRemote=cloud._updatedAt; _lastLocalWrite=cloud._updatedAt; _lastRemoteSig=(cloud._device||'')+':'+cloud._updatedAt; } // boot already merged this blob — don't re-apply on first poll
-    store.set('fd_settings',JSON.stringify(settings));store.set('fd_subjects',JSON.stringify(subjects));
+    persistSettings();store.set('fd_subjects',JSON.stringify(subjects));
     store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
     store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
     store.set('fd_boards',JSON.stringify(boards));store.set('fd_inboxlists',JSON.stringify(inboxLists));
@@ -8092,7 +8081,6 @@ async function boot(){
   gameRollover(); gameRefreshChip();   // settle freezes/streak, then paint the rail flame
   // two-way cloud convergence: pull other-device / Notion-sync edits periodically and on refocus
   writeMetaBeacon();                     // record this device's build in the cloud (diagnosable remotely)
-  cloudSelfTest();                       // probe /focusden write sizes from this device, report to /push/diag (temporary diagnostic)
   checkForUpdate(); setInterval(checkForUpdate,300000);   // self-update a left-open device onto a newer deployed build
   setInterval(pollCloud,6000);
   setInterval(pollMedia,30000);          // photos change rarely — pull them on a slow channel, separate from the core poll
