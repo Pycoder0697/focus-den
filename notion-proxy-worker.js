@@ -163,10 +163,15 @@ export default {
       const meta = await metaR.json();
       if (!metaR.ok) return json({ ok: false, error: meta.message || `Notion HTTP ${metaR.status}` }, metaR.status === 404 ? 400 : 502);
       const schema = detectSchema(meta);
-      // optional field-mapping overrides from Focus Den's config (empty value = disable that field)
-      if (params.has('date')) schema.dateProp = params.get('date') || null;
-      if (params.has('desc')) schema.descProp = params.get('desc') || null;
-      if (params.has('dur')) schema.durProp = params.get('dur') || null;
+      // optional field-mapping overrides from Focus Den's config (empty value = disable that field).
+      // VALIDATE the override against the live schema: a property the user mapped that was later renamed
+      // or deleted must NOT be echoed back, or every write patch would reference a non-existent property
+      // and Notion 400s the whole thing (done/duration/name/date all fail). Unknown/incompatible → drop it.
+      const dbProps = meta.properties || {};
+      const validProp = (name, types) => (name && dbProps[name] && (!types || types.includes(dbProps[name].type))) ? name : null;
+      if (params.has('date')) schema.dateProp = validProp(params.get('date'), ['date']);
+      if (params.has('desc')) schema.descProp = validProp(params.get('desc'), ['rich_text', 'title']);
+      if (params.has('dur')) schema.durProp = validProp(params.get('dur'), ['number']);
       // catalog of the database's properties so the app can offer mapping choices
       const fields = Object.keys(meta.properties || {}).map((name) => ({ name, type: meta.properties[name].type }));
 

@@ -2577,12 +2577,14 @@ async function notionSyncOne(src){
   if(!data||data.ok===false) return {error:(data&&data.error)||'Bad response'};
   if(data.schema) src.schema=data.schema;   // {titleProp, doneProp:{…}, dateProp, descProp} (overrides already applied) — needed to write edits back
   if(Array.isArray(data.fields)) src.fields=data.fields;   // property catalog for the field-mapping config UI
+  let changed=false;
+  if(sanitizeNotionMap(src)) changed=true;   // drop any mapping to a renamed/deleted column BEFORE it can poison a write patch or wipe local data
   const rows=Array.isArray(data.results)?data.results:[];
   const mine=tasks.filter(t=>t.notionSourceId===src.id);
   const byPage=new Map(mine.filter(t=>t.notionPageId).map(t=>[t.notionPageId,t])); // pending creates (no pageId yet) aren't matchable
   const hasDate=!!(src.schema&&src.schema.dateProp);   // only sync dates when the DB actually has a Date property
   const hasDesc=!!(src.schema&&src.schema.descProp);   // only sync descriptions when a text property is mapped
-  const seen=new Set(); let changed=false;
+  const seen=new Set();
   rows.forEach(row=>{ const pid=row.id||row.pageId; if(!pid)return; seen.add(pid);
     const name=(row.title||'').trim()||'(untitled)'; const done=!!row.done;
     const rDue=hasDate?(row.due||''):'', rEnd=hasDate?(row.dueEnd||''):'';
@@ -2613,6 +2615,23 @@ async function notionSyncOne(src){
   src.lastSync=Date.now(); src.lastErr=''; src.count=seen.size;
   return {count:seen.size, changed};
 }
+/* A stale field mapping — a Notion column the user mapped that was later RENAMED or DELETED — makes every
+   write patch reference a property that no longer exists, and Notion 400s the WHOLE patch. The result:
+   done, duration, name AND date all silently fail to save, then the next pull reverts the local check.
+   Guard both ways: sanitizeNotionMap drops a dead mapping after each sync (self-heals the stored config),
+   and notionPruneProps strips any unknown property from a patch as a last line of defence. */
+function sanitizeNotionMap(src){
+  const names=new Set((Array.isArray(src.fields)?src.fields:[]).map(f=>f.name)); if(!names.size) return false;
+  src.map=src.map||{}; let ch=false;
+  ['dateProp','descProp','durProp'].forEach(k=>{
+    if(src.map[k] && !names.has(src.map[k])){ src.map[k]=''; ch=true; }                    // '' = disabled (next GET sends an empty override so the worker stops re-applying it)
+    if(src.schema && src.schema[k] && !names.has(src.schema[k])){ src.schema[k]=null; ch=true; } // and disable it for THIS cycle so the pull doesn't wipe local desc either
+  });
+  return ch; }
+function notionPruneProps(props,src){ if(!props) return props;
+  const names=new Set((Array.isArray(src.fields)?src.fields:[]).map(f=>f.name)); if(!names.size) return props; // no catalog yet → don't strip (avoid dropping a valid first push)
+  for(const k of Object.keys(props)) if(!names.has(k)) delete props[k];
+  return Object.keys(props).length?props:null; }
 /* build a Notion `properties` patch from a source's detected schema (checkbox / status / select all handled) */
 function buildNotionProps(schema,vals){ if(!schema) return null; const p={};
   if(vals.title!=null && schema.titleProp) p[schema.titleProp]={title:[{text:{content:vals.title}}]};
@@ -2634,7 +2653,7 @@ function buildNotionProps(schema,vals){ if(!schema) return null; const p={};
 async function notionPushTask(t){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
   const src=notionSources.find(s=>s.id===t.notionSourceId); if(!src||!src.schema) return;
   const fields=notionFields(t);   // snapshot EXACTLY what we send, so success baselines to the pushed value — not a maybe-newer t (a later edit then still diffs and re-pushes)
-  const props=buildNotionProps(src.schema,{title:fields.name,done:fields.done,due:fields.due,dueEnd:fields.dueEnd,start:fields.start,desc:fields.desc,secs:fields.secs}); if(!props) return;
+  const props=notionPruneProps(buildNotionProps(src.schema,{title:fields.name,done:fields.done,due:fields.due,dueEnd:fields.dueEnd,start:fields.start,desc:fields.desc,secs:fields.secs}),src); if(!props) return; // strip any property the DB no longer has so one stale column can't 400 the whole patch
   const pid=t.notionPageId; _notionInflight.add(pid); _notionRecent.set(pid,Date.now());
   try{ const r=await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,properties:props})});
        const d=await r.json().catch(()=>null);
@@ -2649,7 +2668,7 @@ function notionSourceForList(boardId,listId){ return notionSources.find(s=>s.ena
 /* create a new Notion row for task `t` in the given source (used by both the board-add path and
    the recurrence clone, which targets the parent's source explicitly). Claims t immediately. */
 async function notionCreateRow(t,src){ if(!t||!src||!src.schema||!notionOn()) return;
-  const props=buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',start:t.start||'',desc:t.desc||'',secs:taskSecs(t)}); if(!props) return;
+  const props=notionPruneProps(buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',start:t.start||'',desc:t.desc||'',secs:taskSecs(t)}),src); if(!props) return;
   t.notionSourceId=src.id; t.notionPageId='';            // claim immediately so a racing pull won't duplicate it
   _notionCreating++;
   try{ const r=await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({create:src.dbId,properties:props})});

@@ -105,7 +105,17 @@ self.addEventListener('push', (event) => {
     tag: data.tag || 'fd-timer', renotify: true,
     data: { url: './' }
   };
-  event.waitUntil(self.registration.showNotification(title, opts));
+  event.waitUntil((async () => {
+    // Twin-alarm guard: the closed-app push and the live app's own end-of-phase chime are two layers
+    // for the SAME boundary. If a Focus Den window is open AND visible, it already chimed locally
+    // (signalPhaseChange / mirrorTick), so the worker's push would just re-sound the alarm ~a cron tick
+    // later. Suppress it whenever a visible window exists; a closed or backgrounded(-hidden) app still
+    // gets the banner. This is independent of the worker's heartbeat logic, so it holds even if a stale
+    // ghost subscription slips a push through.
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (wins.some((w) => w.visibilityState === 'visible')) return;
+    await self.registration.showNotification(title, opts);
+  })());
 });
 
 // Tapping the banner focuses an open Focus Den window or opens one.
