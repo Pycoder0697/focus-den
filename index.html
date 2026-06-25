@@ -2206,7 +2206,7 @@ const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.ran
    Mac on a pre-fix build whose oversized snapshot push kept failing. version.json carries the
    deployed build id; a left-open device polls it and reloads itself ONCE when it differs (never
    mid-timer). Keep FD_BUILD === version.json's "build" on every deploy. */
-const FD_BUILD='2026-06-25d';
+const FD_BUILD='2026-06-25e';
 let _reloadedForUpdate=false; const _bootedAt=Date.now();
 async function checkForUpdate(){ try{
   const r=await fetch('version.json?_='+Date.now(),{cache:'no-store'}); if(!r.ok)return;
@@ -2220,6 +2220,23 @@ async function checkForUpdate(){ try{
 function writeMetaBeacon(){ if(!cloudOn())return;
   try{ fetch(CLOUD.url.replace(/\/+$/,'')+'/focusden/'+encodeURIComponent(CLOUD.key)+'_meta/'+DEVICE+'.json',
     {method:'PUT',body:JSON.stringify({build:FD_BUILD,at:Date.now(),device:DEVICE})}); }catch(e){} }
+/* DIAGNOSTIC: probe whether THIS device can PUT to /focusden at increasing sizes, and report the exact
+   result to the /push subtree (which is known to work) so it's readable remotely. Pinpoints why a device
+   writes the tiny beacon fine but never lands the ~130 KB core snapshot. Self-cleans its probe key. */
+async function cloudSelfTest(){ if(!cloudOn())return;
+  const base=CLOUD.url.replace(/\/+$/,''), k=encodeURIComponent(CLOUD.key);
+  const probe=base+'/focusden/'+k+'_probe_'+encodeURIComponent(DEVICE)+'.json';
+  const diag=base+'/push/'+k+'/diag/'+encodeURIComponent(DEVICE)+'.json';
+  const results=[];
+  for(const kb of [1,20,60,130,260]){
+    const body=JSON.stringify({d:DEVICE,blob:'x'.repeat(kb*1024-40)}); let line;
+    try{ const r=await fetch(probe,{method:'PUT',body}); line=kb+'KB:'+r.status+(r.ok?'':' '+(await r.text()).replace(/\s+/g,' ').slice(0,120)); }
+    catch(e){ line=kb+'KB:THREW '+((e&&e.message||String(e))).slice(0,160); }
+    results.push(line);
+  }
+  try{ await fetch(probe,{method:'DELETE'}); }catch(e){}
+  try{ await fetch(diag,{method:'PUT',body:JSON.stringify({build:FD_BUILD,at:Date.now(),ua:(navigator.userAgent||'').slice(0,90),results})}); }catch(e){}
+}
 /* ---- Web Push: focus/break-end notification when the app is fully CLOSED (backstop for the
    in-app local ones). Paste the VAPID public key from push-backend/generate-vapid.mjs below;
    until then push stays off and only the local notifications fire. Pairs with the Cloudflare
@@ -8075,6 +8092,7 @@ async function boot(){
   gameRollover(); gameRefreshChip();   // settle freezes/streak, then paint the rail flame
   // two-way cloud convergence: pull other-device / Notion-sync edits periodically and on refocus
   writeMetaBeacon();                     // record this device's build in the cloud (diagnosable remotely)
+  cloudSelfTest();                       // probe /focusden write sizes from this device, report to /push/diag (temporary diagnostic)
   checkForUpdate(); setInterval(checkForUpdate,300000);   // self-update a left-open device onto a newer deployed build
   setInterval(pollCloud,6000);
   setInterval(pollMedia,30000);          // photos change rarely — pull them on a slow channel, separate from the core poll
