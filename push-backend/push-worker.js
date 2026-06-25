@@ -65,7 +65,9 @@ async function runCron(env) {
    * device no matter which device runs the timer. */
   const subs = (data.subs && typeof data.subs === 'object') ? data.subs : {};
   const alarm = data.alarm;
-  const ALIVE_MS = 75 * 1000;  // heartbeat younger than this ⇒ app open ⇒ skip (it self-notifies)
+  const ALIVE_MS = 90 * 1000;  // heartbeat younger than this ⇒ app open ⇒ skip (it self-notifies). Margin over the
+                               // 30s client heartbeat so a backgrounded-but-alive tab (timers throttle to ~60s) still reads as open.
+  const epOf = (s) => (s && s.sub && s.sub.endpoint) || '';
   if (alarm && Array.isArray(alarm.schedule)) {
     const aRef = `${base}/push/${keyPath}/alarm.json`;
     const items = alarm.schedule.filter(x => x && typeof x.fireAt === 'number');
@@ -73,10 +75,24 @@ async function runCron(env) {
     const future = items.filter(x => x.fireAt > now + 2000);
     if (due.length) {
       const fire = due[due.length - 1]; // collapse any missed boundaries into one banner (mirrors the live app's single catch-up chime)
+      // Suppress by push ENDPOINT, not device id: a browser keeps the SAME endpoint when its fd_device id
+      // churns (cleared storage / in-memory fallback), so a ghost subs/<oldId> with no heartbeat would look
+      // "stale" forever and get pushed — landing a duplicate banner on a device that's open and already chimed.
+      // Any endpoint owned by a FRESH heartbeat is open ⇒ never push it; also dedup so one endpoint gets at most one push.
+      const freshEndpoints = new Set();
+      for (const d of Object.keys(subs)) { const ep = epOf(subs[d]); if (ep && now - (subs[d].alive || 0) < ALIVE_MS) freshEndpoints.add(ep); }
+      const pushedEndpoints = new Set();
       for (const device of Object.keys(subs)) {
         const s = subs[device];
         if (!s || !s.sub) continue;
-        if (now - (s.alive || 0) < ALIVE_MS) continue; // app is open on that device → it notified locally, don't double-push
+        const ep = epOf(s);
+        if (ep && freshEndpoints.has(ep)) {                            // app open on this browser (under this or another device id)
+          if (now - (s.alive || 0) >= ALIVE_MS) jobs.push(fetch(`${base}/push/${keyPath}/subs/${encodeURIComponent(device)}.json`, { method: 'DELETE' })); // self-heal: drop the stale ghost entry
+          continue;
+        }
+        if (ep && pushedEndpoints.has(ep)) continue;                   // already pushed to this browser in this tick
+        if (now - (s.alive || 0) < ALIVE_MS) continue;                 // open (endpointless legacy entry) → it self-notified
+        if (ep) pushedEndpoints.add(ep);
         processed++;
         jobs.push((async () => {
           try {
