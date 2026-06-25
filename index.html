@@ -2447,8 +2447,41 @@ function mirrorTick(){
 })();
 function applyCloudCfg(url,key){ CLOUD.url=(url||'').trim(); CLOUD.key=(key||'').trim();
   try{ if(cloudOn()) store.set('fd_cloud',JSON.stringify({url:CLOUD.url,key:CLOUD.key})); else { try{localStorage.removeItem('fd_cloud');}catch(_){} delete mem['fd_cloud']; } }catch(e){} }
-function snapshot(){return {settings,subjects,sessions,dayoff,tasks,distractions,boards,inboxLists,notionSources,countdowns,habits,moodGroups,moodScales,game,tombstones:pruneTombstones(tombstones),_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local
+function snapshot(){return {settings:leanSettings(),subjects,sessions,dayoff,tasks,distractions,boards,inboxLists,notionSources,countdowns,habits,moodGroups,moodScales,game,tombstones:pruneTombstones(tombstones),_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local; base64 images stripped (ride the media record — see below)
 async function cloudLoad(){ if(!cloudOn())return null; try{const r=await fetch(cloudRef(),{cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;} }
+
+/* ---- Heavy media (journal photos + vision board) sync OUTSIDE the core snapshot ----
+   Base64 images bloated the snapshot to ~3 MB, and re-uploading that on every save was slow and
+   unreliable on some connections. A failed multi-MB PUT silently stranded the tiny-but-critical
+   session log bundled inside it (the laptop-vs-iPhone "total time" divergence: the Mac wrote the
+   sub-KB live-timer record fine but never landed its 3 MB snapshot). So photos sync on their OWN
+   best-effort record (`<key>_media`); the core snapshot stays ~150 KB and writes reliably. Photo
+   merges are UNION-only (keyed by date) so a media write failing — or an old-build device that
+   still embeds photos in the core — can never lose a photo. settings.visionImg /
+   settings.journal[d].photo stay the local source of truth, so all rendering code is unchanged. */
+const mediaRef=()=>`${CLOUD.url.replace(/\/+$/,'')}/focusden/${encodeURIComponent(CLOUD.key)}_media.json`;
+function leanSettings(){ const s={...settings}; delete s.visionImg;   // settings clone with the big base64 images removed
+  if(s.journal){ const j={}; for(const d in s.journal){ const e=s.journal[d]; if(e&&e.photo){ const {photo,...rest}=e; j[d]=rest; } else j[d]=e; } s.journal=j; }
+  return s; }
+function collectMedia(){ const photos={}, j=settings.journal||{};
+  for(const d in j){ if(j[d]&&j[d].photo) photos[d]=j[d].photo; }
+  return {visionImg:settings.visionImg||'', photos, _updatedAt:Date.now(), _device:DEVICE}; }
+/* union remote photos into local settings — never overwrite or delete an existing local photo */
+function mergeMediaInto(m){ if(!m||typeof m!=='object')return false; let ch=false;
+  if(m.visionImg && !settings.visionImg){ settings.visionImg=m.visionImg; ch=true; }
+  const p=(m.photos&&typeof m.photos==='object')?m.photos:{}; settings.journal=settings.journal||{};
+  for(const d in p){ if(!p[d])continue; const e=settings.journal[d]||(settings.journal[d]={}); if(!e.photo){ e.photo=p[d]; ch=true; } }
+  return ch; }
+let _mediaT=null,_lastMediaSig='';
+function cloudSaveMedia(){ if(!cloudOn())return; const m=collectMedia();
+  const sig=m.visionImg.length+'|'+Object.keys(m.photos).sort().map(d=>d+':'+m.photos[d].length).join(',');
+  if(sig===_lastMediaSig)return;            // photos unchanged → don't re-upload megabytes on every save
+  _lastMediaSig=sig; clearTimeout(_mediaT);
+  _mediaT=setTimeout(async()=>{ try{ await fetch(mediaRef(),{method:'PUT',body:JSON.stringify(m)}); }catch(e){} finally{ _mediaT=null; } },1200); }
+async function pollMedia(){ if(!cloudOn())return; let m=null;
+  try{ const r=await fetch(mediaRef(),{cache:'no-store'}); if(r.ok) m=await r.json(); }catch(e){ return; }
+  if(m && mergeMediaInto(m)){ try{store.set('fd_settings',JSON.stringify(settings));}catch(e){}
+    if($('tab-horizon')&&$('tab-horizon').classList.contains('show')) renderHorizonTab&&renderHorizonTab(); } }
 let _cloudT=null, _lastLocalWrite=0, _lastSeenRemote=0, _lastRemoteSig='';
 function cloudSave(){ if(!cloudOn())return; setSync('saving'); clearTimeout(_cloudT);
   _cloudT=setTimeout(async()=>{ try{const snap=snapshot(); _lastLocalWrite=snap._updatedAt; _lastSeenRemote=snap._updatedAt; _lastRemoteSig=DEVICE+':'+snap._updatedAt; // our own write — don't re-pull/re-apply it
@@ -2459,7 +2492,7 @@ function setSync(s){ const b=document.getElementById('syncBadge'); if(!b)return;
   b.style.color=s==='err'?'var(--rose)':'var(--faint)'; }
 /* pull remote changes made on other devices / the Notion embed (last-write-wins by timestamp) */
 function applyRemote(cloud){
-  if(cloud.settings) settings=Object.assign({...DEF},cloud.settings);
+  if(cloud.settings){ const _ph=collectMedia(); settings=Object.assign({...DEF},cloud.settings); mergeMediaInto(_ph); } // lean core carries no photos — re-attach this device's so they're never dropped
   if(Array.isArray(cloud.subjects)) subjects=cloud.subjects;
   tombstones=mergeTomb(tombstones,cloud.tombstones);                  // union deletions first so the log merges honour them
   sessions=mergeLog(sessions,cloud.sessions,tombstones);              // append-only: never drop a locally-committed session
@@ -2805,7 +2838,7 @@ function save(){store.set('fd_settings',JSON.stringify(settings));store.set('fd_
   store.set('fd_habits',JSON.stringify(habits));store.set('fd_moodgroups',JSON.stringify(moodGroups));
   store.set('fd_moodscales',JSON.stringify(moodScales));store.set('fd_game',JSON.stringify(game));
   store.set('fd_tombstones',JSON.stringify(pruneTombstones(tombstones)));
-  store.set('fd_running',JSON.stringify(running));cloudSave();
+  store.set('fd_running',JSON.stringify(running));cloudSave();cloudSaveMedia();
   notionFlushChanges(); persistNotionMeta();}   // push any name/done/date change on a synced task back to Notion (two-way) + persist the baseline so a reload can't lose it
 /* device-local live-timer snapshot so an active session survives an iOS-Safari tab reload.
    All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
@@ -7950,7 +7983,7 @@ async function boot(){
     finally{ if(_to)clearTimeout(_to); }
   }
   if(cloud){
-    if(cloud.settings) settings=Object.assign({...DEF},cloud.settings);
+    if(cloud.settings){ const _ph=collectMedia(); settings=Object.assign({...DEF},cloud.settings); mergeMediaInto(_ph); } // re-attach local photos: the lean core carries none
     if(Array.isArray(cloud.subjects)) subjects=cloud.subjects;
     tombstones=mergeTomb(tombstones,cloud.tombstones);
     const _cloudSessN=Array.isArray(cloud.sessions)?cloud.sessions.length:0, _cloudDistN=Array.isArray(cloud.distractions)?cloud.distractions.length:0;
@@ -7977,6 +8010,7 @@ async function boot(){
   } else if(cloudOn() && !_cloudFetchFailed){ cloudSave(); }   // cloud is genuinely EMPTY (response read, no data) → seed it. NEVER seed on a fetch failure (would clobber a healthy cloud with stale local data).
   else if(_cloudFetchFailed){ setSync('err'); }                // couldn't read cloud → keep local untouched, let pollCloud reconcile once the network is back
   if(_bootPushLogs) cloudSave();         // push local-only sessions/distractions surfaced by the boot merge (union-safe — see above)
+  if(cloud) await pollMedia();           // pull journal photos / vision board from their separate record before first render
   normalizeData();
   applyTheme();
   applyTimerCollapsed();
@@ -7990,13 +8024,14 @@ async function boot(){
   gameRollover(); gameRefreshChip();   // settle freezes/streak, then paint the rail flame
   // two-way cloud convergence: pull other-device / Notion-sync edits periodically and on refocus
   setInterval(pollCloud,6000);
+  setInterval(pollMedia,30000);          // photos change rarely — pull them on a slow channel, separate from the core poll
   // cross-device live timer: pull the shared running-session record + tick the mirror clock,
   // and keep our own liveness/state fresh so a long steady phase never looks stale to other devices
   setInterval(pollTimerState,3000); pollTimerState();   // 3s ⇒ snappy cross-device control (owner drains commands here too)
   setInterval(mirrorTick,1000);
   setInterval(()=>{ pushHeartbeat(); if(active||workedMs>0) timerStateSync(); },30000);
   // capture the live timer the instant the tab is backgrounded — iOS Safari may reload it before we get another chance
-  document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else { pollCloud(); pollTimerState(); pushHeartbeat(); if(active && mode!=='stopwatch') tickFn(); } });
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else { pollCloud(); pollMedia(); pollTimerState(); pushHeartbeat(); if(active && mode!=='stopwatch') tickFn(); } });
   window.addEventListener('pagehide',saveTimer);
   // Notion DB → board list sync: near-realtime both ways (push is instant; pull polls ~10s while visible, 60s hidden, and immediately on refocus)
   loadNotionMeta();   // restore the sync baseline first, so a check made right after load pushes instead of being swallowed/reverted by the racing initial poll
