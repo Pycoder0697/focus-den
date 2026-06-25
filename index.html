@@ -2201,6 +2201,25 @@ const CLOUD={
 const cloudOn=()=>CLOUD.url.startsWith('http')&&CLOUD.key.length>3;
 const cloudRef=()=>`${CLOUD.url.replace(/\/+$/,'')}/focusden/${encodeURIComponent(CLOUD.key)}.json`;
 const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.random().toString(36).slice(2,8);localStorage.setItem('fd_device',d);}return d;}catch(e){return 'dev'+Math.random().toString(36).slice(2,6);}})();
+/* Build stamp + self-update. A PWA left open keeps its old in-memory build forever (the SW is
+   network-first, but the document only re-fetches its HTML on a real reload). That stranded the
+   Mac on a pre-fix build whose oversized snapshot push kept failing. version.json carries the
+   deployed build id; a left-open device polls it and reloads itself ONCE when it differs (never
+   mid-timer). Keep FD_BUILD === version.json's "build" on every deploy. */
+const FD_BUILD='2026-06-25c';
+let _reloadedForUpdate=false; const _bootedAt=Date.now();
+async function checkForUpdate(){ try{
+  const r=await fetch('version.json?_='+Date.now(),{cache:'no-store'}); if(!r.ok)return;
+  const v=await r.json(); if(!v||!v.build||v.build===FD_BUILD)return;
+  if(!_reloadedForUpdate && (Date.now()-_bootedAt>20000) && !(typeof active!=='undefined'&&active)){  // not within 20s of boot, not mid-timer
+    _reloadedForUpdate=true;
+    try{ if('serviceWorker'in navigator){ const reg=await navigator.serviceWorker.getRegistration(); if(reg)await reg.update(); } }catch(e){}
+    location.reload();
+  } }catch(e){} }
+/* tiny per-device build beacon so build/version is diagnosable from the cloud (never strands anything) */
+function writeMetaBeacon(){ if(!cloudOn())return;
+  try{ fetch(CLOUD.url.replace(/\/+$/,'')+'/focusden/'+encodeURIComponent(CLOUD.key)+'_meta/'+DEVICE+'.json',
+    {method:'PUT',body:JSON.stringify({build:FD_BUILD,at:Date.now(),device:DEVICE})}); }catch(e){} }
 /* ---- Web Push: focus/break-end notification when the app is fully CLOSED (backstop for the
    in-app local ones). Paste the VAPID public key from push-backend/generate-vapid.mjs below;
    until then push stays off and only the local notifications fire. Pairs with the Cloudflare
@@ -8023,6 +8042,8 @@ async function boot(){
   renderSubjects(); refreshStats(); renderCalendar();
   gameRollover(); gameRefreshChip();   // settle freezes/streak, then paint the rail flame
   // two-way cloud convergence: pull other-device / Notion-sync edits periodically and on refocus
+  writeMetaBeacon();                     // record this device's build in the cloud (diagnosable remotely)
+  checkForUpdate(); setInterval(checkForUpdate,300000);   // self-update a left-open device onto a newer deployed build
   setInterval(pollCloud,6000);
   setInterval(pollMedia,30000);          // photos change rarely — pull them on a slow channel, separate from the core poll
   // cross-device live timer: pull the shared running-session record + tick the mirror clock,
@@ -8031,7 +8052,7 @@ async function boot(){
   setInterval(mirrorTick,1000);
   setInterval(()=>{ pushHeartbeat(); if(active||workedMs>0) timerStateSync(); },30000);
   // capture the live timer the instant the tab is backgrounded — iOS Safari may reload it before we get another chance
-  document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else { pollCloud(); pollMedia(); pollTimerState(); pushHeartbeat(); if(active && mode!=='stopwatch') tickFn(); } });
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else { checkForUpdate(); pollCloud(); pollMedia(); pollTimerState(); pushHeartbeat(); if(active && mode!=='stopwatch') tickFn(); } });
   window.addEventListener('pagehide',saveTimer);
   // Notion DB → board list sync: near-realtime both ways (push is instant; pull polls ~10s while visible, 60s hidden, and immediately on refocus)
   loadNotionMeta();   // restore the sync baseline first, so a check made right after load pushes instead of being swallowed/reverted by the racing initial poll
