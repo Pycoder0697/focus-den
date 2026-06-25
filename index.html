@@ -2206,7 +2206,7 @@ const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.ran
    Mac on a pre-fix build whose oversized snapshot push kept failing. version.json carries the
    deployed build id; a left-open device polls it and reloads itself ONCE when it differs (never
    mid-timer). Keep FD_BUILD === version.json's "build" on every deploy. */
-const FD_BUILD='2026-06-25g';
+const FD_BUILD='2026-06-25h';
 let _reloadedForUpdate=false; const _bootedAt=Date.now();
 async function checkForUpdate(){ try{
   const r=await fetch('version.json?_='+Date.now(),{cache:'no-store'}); if(!r.ok)return;
@@ -2502,7 +2502,7 @@ function cloudSaveMedia(){ if(!cloudOn())return; const m=collectMedia();
   const sig=m.visionImg.length+'|'+Object.keys(m.photos).sort().map(d=>d+':'+m.photos[d].length).join(',');
   if(sig===_lastMediaSig)return;            // photos unchanged → don't re-upload megabytes on every save
   _lastMediaSig=sig; clearTimeout(_mediaT);
-  _mediaT=setTimeout(async()=>{ try{ await fetch(mediaRef(),{method:'PUT',body:JSON.stringify(m)}); }catch(e){} finally{ _mediaT=null; } },1200); }
+  _mediaT=setTimeout(async()=>{ try{ await fetch(mediaRef(),{method:'PUT',body:JSON.stringify(fbSafe(m))}); }catch(e){} finally{ _mediaT=null; } },1200); }
 async function pollMedia(){ if(!cloudOn())return; let m=null;
   try{ const r=await fetch(mediaRef(),{cache:'no-store'}); if(r.ok) m=await r.json(); }catch(e){ return; }
   if(m && mergeMediaInto(m)){ try{persistSettings();}catch(e){}
@@ -2511,7 +2511,7 @@ let _cloudT=null, _lastLocalWrite=0, _lastSeenRemote=0, _lastRemoteSig='';
 let _lastSyncOk=Date.now(), _cloudRetry=0;
 function cloudSave(){ if(!cloudOn())return; setSync('saving'); clearTimeout(_cloudT);
   _cloudT=setTimeout(async()=>{ try{const snap=snapshot(); _lastLocalWrite=snap._updatedAt; _lastSeenRemote=snap._updatedAt; _lastRemoteSig=DEVICE+':'+snap._updatedAt; // our own write — don't re-pull/re-apply it
-    const r=await fetch(cloudRef(),{method:'PUT',body:JSON.stringify(snap)});
+    const r=await fetch(cloudRef(),{method:'PUT',body:JSON.stringify(fbSafe(snap))});
     if(r.ok){ _lastSyncOk=Date.now(); _cloudRetry=0; setSync('ok'); }
     else { setSync('err'); if(_cloudRetry++<3) setTimeout(cloudSave,4000); reconcileLogsUp(); } }   // a failed wholesale push must NOT silently strand the log — retry + surgically reconcile it up
     catch(e){ setSync('err'); if(_cloudRetry++<3) setTimeout(cloudSave,4000); reconcileLogsUp(); }
@@ -2539,7 +2539,7 @@ async function reconcileLogsUp(){ if(!cloudOn()||_reconcileBusy)return; _reconci
     if(!extra){ _lastSyncOk=Date.now(); setSync('ok'); syncDiag({fn:'reconcile',note:'no-extra',localRows:sessions.length,localToday:localToday.length,cloudToday:cloudToday.length,localSecs,cloudSecs}); return; }
     cloud.sessions=mergeLog(cloudS,sessions,tomb); cloud.distractions=mergeLog(cloudD,distractions,tomb);
     cloud.tombstones=tomb; cloud._updatedAt=Date.now(); cloud._device=DEVICE;
-    const body=JSON.stringify(cloud); const r=await fetch(cloudRef(),{method:'PUT',body});
+    const body=JSON.stringify(fbSafe(cloud)); const r=await fetch(cloudRef(),{method:'PUT',body});
     if(r.ok){ _lastRemoteSig=DEVICE+':'+cloud._updatedAt; _lastSeenRemote=cloud._updatedAt; _lastSyncOk=Date.now(); setSync('ok'); syncDiag({fn:'reconcile',note:'PUSHED',extra:extraRows.length,localSecs,cloudSecs,kb:Math.round(body.length/1024),put:r.status}); }
     else { setSync('err'); syncDiag({fn:'reconcile',note:'PUT-FAILED',extra:extraRows.length,put:r.status,body:(await r.text()).slice(0,120),kb:Math.round(body.length/1024)}); }
   }catch(e){ setSync('err'); syncDiag({fn:'reconcile',note:'THREW',err:(e&&e.message||String(e)).slice(0,160)}); }
@@ -2879,7 +2879,13 @@ let roundCount=0;
    and keep deletions sticky via tombstones so a merge can't resurrect a row the user deleted. */
 let tombstones=(()=>{ try{ return JSON.parse(store.get('fd_tombstones')||'{}')||{}; }catch(e){ return {}; } })(); // {logId:deletedAt}
 const TOMB_TTL=90*86400000; // forget a deletion after 90 days (long enough that every device has converged)
-function pruneTombstones(o){ const now=Date.now(); for(const k in o){ if(now-o[k]>TOMB_TTL) delete o[k]; } return o; }
+function pruneTombstones(o){ const now=Date.now(); for(const k in o){ if(now-o[k]>TOMB_TTL || /[.#$\[\]\/]/.test(k)) delete o[k]; } return o; }  // also drop keys with Firebase-forbidden chars (legacy float ids) — they 400 the whole write
+/* Firebase RTDB rejects the ENTIRE write if any object KEY contains . # $ [ ] / — recursively replace
+   those in keys before any PUT so one bad key (a legacy float id, a Notion column named "A/B", etc.)
+   can never again silently block all sync. Values and arrays are untouched. */
+function fbSafe(v){ if(Array.isArray(v))return v.map(fbSafe);
+  if(v&&typeof v==='object'){ const o={}; for(const k in v) o[String(k).replace(/[.#$\[\]\/]/g,'_')]=fbSafe(v[k]); return o; }
+  return v; }
 function tombstone(id){ if(id!=null) tombstones[String(id)]=Date.now(); }
 // Firebase RTDB stores a JS array but can return it as an integer-KEYED OBJECT ({0:…,1:…}) when
 // there's any gap — Array.isArray() would then see "not an array" and silently drop every remote row,
@@ -3119,7 +3125,7 @@ const sdur=s=>dur(s.start,s.end)*(s.share||1);
 const taskSecs=t=>{ if(!t)return 0; let ms=0; for(const s of sessions) if(s.taskId===t.id) ms+=(s.end-s.start)*(s.share||1); return ms/1000; };
 // seconds → the Notion number, unit inferred from the mapped property's NAME: "Hours/Hrs" ⇒ decimal hours (2dp), else whole minutes
 function notionDurValue(durProp,secs){ return /hour|hrs?\b/i.test(durProp||'') ? Math.round(secs/36)/100 : Math.round(secs/60); }
-function pushSession(subjectId,start,end,taskId,share){ if(end-start<1000)return; const row={id:Date.now()+Math.random(),subjectId,start,end,taskId:taskId||''}; if(share&&share!==1)row.share=share; sessions.push(row); }
+function pushSession(subjectId,start,end,taskId,share){ if(end-start<1000)return; const row={id:uid('s'),subjectId,start,end,taskId:taskId||''}; if(share&&share!==1)row.share=share; sessions.push(row); }  // uid() ⇒ dot-free id (a float id became a Firebase-forbidden tombstone key and 400'd every write)
 /* log a span, splitting at IST midnight so day totals stay honest */
 function pushSpan(subjectId,start,end,taskId,share){ if(end-start<1000)return;
   let s=start, guard=0;
