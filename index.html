@@ -2106,6 +2106,7 @@
 <div class="overlay" id="ovLog"><div class="modal">
   <h2 id="logModalTitle">Add study log</h2>
   <div class="field"><label>Subject</label><select id="logSubject"></select></div>
+  <div class="field"><label>Task</label><select id="logTask"></select></div>
   <div class="field"><label>Date</label><input type="date" id="logDate"></div>
   <div class="field"><label>Start time</label><input type="time" id="logStart"></div>
   <div class="field"><label>End time</label><input type="time" id="logEnd"></div>
@@ -2448,9 +2449,9 @@ function applyCloudCfg(url,key){ CLOUD.url=(url||'').trim(); CLOUD.key=(key||'')
   try{ if(cloudOn()) store.set('fd_cloud',JSON.stringify({url:CLOUD.url,key:CLOUD.key})); else { try{localStorage.removeItem('fd_cloud');}catch(_){} delete mem['fd_cloud']; } }catch(e){} }
 function snapshot(){return {settings,subjects,sessions,dayoff,tasks,distractions,boards,inboxLists,notionSources,countdowns,habits,moodGroups,moodScales,game,tombstones:pruneTombstones(tombstones),_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local
 async function cloudLoad(){ if(!cloudOn())return null; try{const r=await fetch(cloudRef(),{cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;} }
-let _cloudT=null, _lastLocalWrite=0, _lastSeenRemote=0;
+let _cloudT=null, _lastLocalWrite=0, _lastSeenRemote=0, _lastRemoteSig='';
 function cloudSave(){ if(!cloudOn())return; setSync('saving'); clearTimeout(_cloudT);
-  _cloudT=setTimeout(async()=>{ try{const snap=snapshot(); _lastLocalWrite=snap._updatedAt; _lastSeenRemote=snap._updatedAt;
+  _cloudT=setTimeout(async()=>{ try{const snap=snapshot(); _lastLocalWrite=snap._updatedAt; _lastSeenRemote=snap._updatedAt; _lastRemoteSig=DEVICE+':'+snap._updatedAt; // our own write — don't re-pull/re-apply it
     const r=await fetch(cloudRef(),{method:'PUT',body:JSON.stringify(snap)}); setSync(r.ok?'ok':'err'); }catch(e){ setSync('err'); }
     finally{ _cloudT=null; } },700); }   // clear the flag so pollCloud resumes pulling Notion/other-device edits
 function setSync(s){ const b=document.getElementById('syncBadge'); if(!b)return; if(!cloudOn()){b.style.display='none';return;} b.style.display='';
@@ -2494,8 +2495,16 @@ function applyRemote(cloud){
 async function pollCloud(){ if(!cloudOn())return; if(_cloudT)return; // don't pull mid-save
   const ae=document.activeElement; if(ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName))return; // don't clobber active typing
   const cloud=await cloudLoad(); if(!cloud||!cloud._updatedAt)return;
-  if(cloud._device===DEVICE)return; if(cloud._updatedAt<=_lastSeenRemote||cloud._updatedAt<=_lastLocalWrite)return;
-  _lastSeenRemote=cloud._updatedAt; applyRemote(cloud); }
+  // Detect "the remote blob changed" by a device:timestamp SIGNATURE, NOT by comparing wall-clock
+  // timestamps across devices. Each device's _updatedAt is its own Date.now(); if two devices' clocks
+  // are skewed, a numeric `cloud._updatedAt<=_lastLocalWrite` gate makes the device with the faster
+  // clock permanently refuse the other's writes — so the append-only session merge never runs and
+  // study time diverges forever. A write from ANOTHER device (different _device) is always applied;
+  // re-applying the identical blob is suppressed by the signature (no render thrash, no clock math).
+  const sig=(cloud._device||'')+':'+cloud._updatedAt;
+  if(cloud._device===DEVICE){ _lastRemoteSig=sig; return; }   // our own latest write — nothing to pull
+  if(sig===_lastRemoteSig)return;                             // already merged this exact remote blob
+  _lastRemoteSig=sig; _lastSeenRemote=cloud._updatedAt; applyRemote(cloud); }
 
 /* ========================================================================
    NOTION DATABASE SYNC  — mirror specific Notion databases into specific
@@ -4040,7 +4049,13 @@ $('dayoffToggle').onclick=()=>{if(dayoff[selectedDay])delete dayoff[selectedDay]
 let logEditGroup=null;                 // when set, saveLog edits this timeline group's existing session rows instead of adding new
 const hhmm=ts=>{const d=new Date(ts);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
 function fillLogSubjects(sel){ const s=$(sel||'logSubject'); s.innerHTML=''; subjects.forEach(sj=>{const o=document.createElement('option');o.value=sj.id;o.textContent=sj.name;s.appendChild(o);}); }
-$('addLogBtn').onclick=()=>{ logEditGroup=null; fillLogSubjects(); $('logSubject').disabled=false;
+/* populate the Task dropdown with the selected subject's tasks (plus a "— none —" option); keeps the current pick if still valid */
+function fillLogTasks(keepId){ const s=$('logTask'); if(!s)return; const sid=$('logSubject').value; const prev=keepId!==undefined?keepId:s.value;
+  s.innerHTML=''; const none=document.createElement('option'); none.value=''; none.textContent='— none —'; s.appendChild(none);
+  tasksForSubject(sid).forEach(t=>{const o=document.createElement('option');o.value=t.id;o.textContent=t.name;s.appendChild(o);});
+  s.value = (prev && tasksForSubject(sid).some(t=>t.id===prev)) ? prev : ''; }
+$('logSubject').onchange=()=>fillLogTasks('');
+$('addLogBtn').onclick=()=>{ logEditGroup=null; fillLogSubjects(); fillLogTasks(''); $('logSubject').disabled=false; $('logTask').disabled=false;
   $('logModalTitle').textContent='Add study log'; $('logModalTitle').style.color='';
   $('logDate').value=selectedDay; $('logStart').value='09:00'; $('logEnd').value='10:00'; $('ovLog').classList.add('show'); };
 /* open the modal pre-filled to edit an already-logged study block (change its times / subject) */
@@ -4048,15 +4063,16 @@ function openLogEdit(g){ logEditGroup=g; fillLogSubjects();
   $('logModalTitle').textContent='Edit study log'; $('logModalTitle').style.color='';
   $('logDate').value=dateKey(g.start); $('logStart').value=hhmm(g.start); $('logEnd').value=hhmm(g.end);
   // multi-subject blocks split time across subjects — subject is not editable there, only times
-  const multi=g.rows.length>1; $('logSubject').disabled=multi;
-  $('logSubject').value=multi?'':(g.rows[0].subjectId||''); $('ovLog').classList.add('show'); }
+  const multi=g.rows.length>1; $('logSubject').disabled=multi; $('logTask').disabled=multi;
+  $('logSubject').value=multi?'':(g.rows[0].subjectId||''); fillLogTasks(multi?'':(g.rows[0].taskId||'')); $('ovLog').classList.add('show'); }
 $('saveLog').onclick=()=>{ const sid=$('logSubject').value,d=$('logDate').value,st=$('logStart').value,en=$('logEnd').value;
   if(!d||!st||!en)return; const start=new Date(`${d}T${st}:00`).getTime(),end=new Date(`${d}T${en}:00`).getTime();
   if(end<=start){ $('logModalTitle').textContent='End must be after start'; $('logModalTitle').style.color='var(--rose)'; return; }
-  if(logEditGroup){ const ids=new Set(logEditGroup.rows.map(s=>s.id));
-    sessions.forEach(s=>{ if(ids.has(s.id)){ s.start=start; s.end=end; if(!logEditGroup.rows.length||logEditGroup.rows.length===1)s.subjectId=sid; } });
+  const tid=$('logTask').value||undefined;
+  if(logEditGroup){ const ids=new Set(logEditGroup.rows.map(s=>s.id)); const single=logEditGroup.rows.length<=1;
+    sessions.forEach(s=>{ if(ids.has(s.id)){ s.start=start; s.end=end; if(single){s.subjectId=sid; s.taskId=tid;} } });
     logEditGroup=null; }
-  else pushSpan(sid,start,end);
+  else pushSpan(sid,start,end,tid);
   save(); $('ovLog').classList.remove('show'); selectedDay=dateKey(start); renderCalendar(); renderSubjects(); refreshStats(); };
 
 /* ICS export */
@@ -7639,7 +7655,7 @@ $('cloudConnect').onclick=()=>{ applyCloudCfg($('setCloudUrl').value,$('setCloud
   cloudLoad().then(remote=>{
     if(remote && remote._updatedAt && (Array.isArray(remote.tasks)||Array.isArray(remote.subjects))){
       askConfirm('Cloud already has data. Load it onto THIS device? (Cancel = upload this device\'s data to the cloud, overwriting it.)',
-        ()=>{ _lastSeenRemote=remote._updatedAt; applyRemote(remote); refreshCloudState(); },
+        ()=>{ _lastSeenRemote=remote._updatedAt; _lastRemoteSig=(remote._device||'')+':'+remote._updatedAt; applyRemote(remote); refreshCloudState(); },
         ()=>{ cloudSave(); refreshCloudState(); });
     } else { cloudSave(); refreshCloudState(); } // empty cloud → seed from local
   });
@@ -7936,7 +7952,7 @@ async function boot(){
     if(Array.isArray(cloud.habits)) habits=cloud.habits;
     if(Array.isArray(cloud.countdowns)) countdowns=cloud.countdowns;
     if(cloud.game && typeof cloud.game==='object') game=cloud.game;
-    if(cloud._updatedAt){ _lastSeenRemote=cloud._updatedAt; _lastLocalWrite=cloud._updatedAt; }
+    if(cloud._updatedAt){ _lastSeenRemote=cloud._updatedAt; _lastLocalWrite=cloud._updatedAt; _lastRemoteSig=(cloud._device||'')+':'+cloud._updatedAt; } // boot already merged this blob — don't re-apply on first poll
     store.set('fd_settings',JSON.stringify(settings));store.set('fd_subjects',JSON.stringify(subjects));
     store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
     store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
