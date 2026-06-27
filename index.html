@@ -2206,7 +2206,7 @@ const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.ran
    Mac on a pre-fix build whose oversized snapshot push kept failing. version.json carries the
    deployed build id; a left-open device polls it and reloads itself ONCE when it differs (never
    mid-timer). Keep FD_BUILD === version.json's "build" on every deploy. */
-const FD_BUILD='2026-06-25i';
+const FD_BUILD='2026-06-27a';
 let _reloadedForUpdate=false; const _bootedAt=Date.now();
 async function checkForUpdate(){ try{
   const r=await fetch('version.json?_='+Date.now(),{cache:'no-store'}); if(!r.ok)return;
@@ -2466,7 +2466,7 @@ function mirrorTick(){
 })();
 function applyCloudCfg(url,key){ CLOUD.url=(url||'').trim(); CLOUD.key=(key||'').trim();
   try{ if(cloudOn()) store.set('fd_cloud',JSON.stringify({url:CLOUD.url,key:CLOUD.key})); else { try{localStorage.removeItem('fd_cloud');}catch(_){} delete mem['fd_cloud']; } }catch(e){} }
-function snapshot(){return {settings:leanSettings(),subjects,sessions,dayoff,tasks,distractions,boards,inboxLists,notionSources,countdowns,habits,moodGroups,moodScales,game,tombstones:pruneTombstones(tombstones),_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local; base64 images stripped (ride the media record — see below)
+function snapshot(){return {settings:leanSettings(),subjects,sessions,dayoff,tasks,distractions,boards,inboxLists,notionSources,countdowns,habits,moodGroups,moodScales,game,tombstones:pruneTombstones(tombstones),subjLinks,_updatedAt:Date.now(),_device:DEVICE};} // 'running' stays device-local; base64 images stripped (ride the media record — see below)
 async function cloudLoad(){ if(!cloudOn())return null; try{const r=await fetch(cloudRef(),{cache:'no-store'});if(!r.ok)return null;return await r.json();}catch(e){return null;} }
 
 /* ---- Heavy media (journal photos + vision board) sync OUTSIDE the core snapshot ----
@@ -2552,6 +2552,7 @@ function applyRemote(cloud){
   if(cloud.settings){ const _ph=collectMedia(); settings=Object.assign({...DEF},cloud.settings); mergeMediaInto(_ph); } // lean core carries no photos — re-attach this device's so they're never dropped
   if(Array.isArray(cloud.subjects)) subjects=cloud.subjects;
   tombstones=mergeTomb(tombstones,cloud.tombstones);                  // union deletions first so the log merges honour them
+  mergeSubjLinks(cloud.subjLinks);                                    // converge subject pairings by most-recent edit (applied after tasks load)
   sessions=mergeLog(sessions,cloud.sessions,tombstones);              // append-only: never drop a locally-committed session
   if(cloud.dayoff) dayoff=cloud.dayoff;
   if(Array.isArray(cloud.tasks)) tasks=cloud.tasks;
@@ -2565,6 +2566,7 @@ function applyRemote(cloud){
   if(Array.isArray(cloud.moodScales)) moodScales=cloud.moodScales;
   if(cloud.game && typeof cloud.game==='object') game=cloud.game;
   normalizeData();
+  applySubjLinks();                                 // re-apply the converged subject onto the wholesale-synced tasks (can't be clobbered by a stale push)
   // a change that arrived via cloud was already pushed to Notion by its origin device — re-baseline
   // the shadow to it so this device's next save() doesn't echo-push the same value back to Notion
   for(const t of tasks){ if(t.notionSourceId&&t.notionPageId) _notionShadow.set(t.notionPageId,notionFields(t)); }
@@ -2800,7 +2802,7 @@ async function notionSyncAll(opts){ opts=opts||{};
   finally{ _notionSyncing=false; }
   notionFlushChanges();   // reconcile after the pull: re-push any local edit that earlier failed/raced (no-op when local already matches Notion)
   persistNotionMeta();
-  if(changed){ save(); refreshTaskSurfaces&&refreshTaskSurfaces(); }   // only touch storage/DOM when Notion actually changed → safe to poll every ~10s
+  if(changed){ applySubjLinks(); save(); refreshTaskSurfaces&&refreshTaskSurfaces(); }   // restore subject onto any re-imported row, then persist; only touch storage/DOM when Notion actually changed → safe to poll every ~10s
   if($('ovNotion')&&$('ovNotion').classList.contains('show')) renderNotionList();
   if(opts.report) setNotionStatus(fail?`Synced ${ok}, ${fail} failed — check IDs / sharing.`:`Synced ${ok} database${ok===1?'':'s'} · ${new Date().toLocaleTimeString()}`);
 }
@@ -2893,6 +2895,32 @@ function mergeLog(local,remote,tomb){ const out=new Map();
   if(tomb) for(const id in tomb) out.delete(String(id));
   return [...out.values()]; }
 function mergeTomb(a,b){ const o=Object.assign({},a||{}); for(const k in (b||{})) o[k]=Math.max(o[k]||0,b[k]); return pruneTombstones(o); }
+/* ---- Subject-link convergence (RELIABILITY) -----------------------------------
+   `tasks` syncs WHOLESALE last-write-wins. So a stale device — typically the
+   always-open Notion embed, which mutates Notion tasks on its own ~10s poll —
+   pushing its task array inside the ~15s pull window can silently ERASE a
+   subject tag the user just paired on another device. That's the "subject
+   coming off by itself" bug, and it must never recur.
+   Fix: every genuine subject edit is timestamped in a small shared map keyed by
+   `notionPageId||id` (the pageId survives a Notion re-import that mints a fresh
+   task id). The map rides cloud sync, merges per-key by most-recent `_u`
+   (so the latest edit wins in EITHER direction — including an intentional clear,
+   which records `ids:[]`), and is then re-applied onto whatever subject the
+   wholesale sync left on each task. Result: subject pairing converges to the
+   last human edit and can't be clobbered by a stale snapshot. */
+let subjLinks=(()=>{ try{ return JSON.parse(store.get('fd_subjlinks')||'{}')||{}; }catch(e){ return {}; } })(); // {key:{ids:[],_u}}
+const SUBJLINK_TTL=180*86400000;                 // forget a link long after every device has converged
+const subjKey=t=>(t&&(t.notionPageId||t.id))||'';
+let _subjApplying=false;                          // suppress re-stamping while restoring from the map
+function recordSubjLink(t){ const k=subjKey(t); if(!k)return; subjLinks[k]={ids:[...subjectIdsOf(t)],_u:Date.now()}; }
+function persistSubjLinks(){ try{ store.set('fd_subjlinks',JSON.stringify(subjLinks)); }catch(e){} }
+function mergeSubjLinks(remote){ if(!remote||typeof remote!=='object')return; for(const k in remote){ const r=remote[k];
+  if(!r||!Array.isArray(r.ids))continue; const cur=subjLinks[k]; if(!cur||(r._u||0)>(cur._u||0)) subjLinks[k]={ids:[...r.ids],_u:r._u||0}; } }
+function applySubjLinks(){ const now=Date.now(); _subjApplying=true;
+  for(const k in subjLinks){ if(now-(subjLinks[k]._u||0)>SUBJLINK_TTL) delete subjLinks[k]; }   // prune stale links
+  tasks.forEach(t=>{ const l=subjLinks[subjKey(t)]; if(!l)return;
+    if(subjectIdsOf(t).join(',')!==l.ids.join(',')) setTaskSubjects(t,l.ids); });               // merged map wins over the wholesale-synced subject
+  _subjApplying=false; persistSubjLinks(); }
 function save(){persistSettings();store.set('fd_subjects',JSON.stringify(subjects));
   store.set('fd_sessions',JSON.stringify(sessions));store.set('fd_dayoff',JSON.stringify(dayoff));
   store.set('fd_tasks',JSON.stringify(tasks));store.set('fd_distract',JSON.stringify(distractions));
@@ -2900,7 +2928,7 @@ function save(){persistSettings();store.set('fd_subjects',JSON.stringify(subject
   store.set('fd_notionsrc',JSON.stringify(notionSources));store.set('fd_countdowns',JSON.stringify(countdowns));
   store.set('fd_habits',JSON.stringify(habits));store.set('fd_moodgroups',JSON.stringify(moodGroups));
   store.set('fd_moodscales',JSON.stringify(moodScales));store.set('fd_game',JSON.stringify(game));
-  store.set('fd_tombstones',JSON.stringify(pruneTombstones(tombstones)));
+  store.set('fd_tombstones',JSON.stringify(pruneTombstones(tombstones)));persistSubjLinks();
   store.set('fd_running',JSON.stringify(running));cloudSave();cloudSaveMedia();
   notionFlushChanges(); persistNotionMeta();}   // push any name/done/date change on a synced task back to Notion (two-way) + persist the baseline so a reload can't lose it
 /* device-local live-timer snapshot so an active session survives an iOS-Safari tab reload.
@@ -4164,7 +4192,11 @@ function openLogEdit(g){ logEditGroup=g; fillLogSubjects();
   $('logDate').value=dateKey(g.start); $('logStart').value=hhmm(g.start); $('logEnd').value=hhmm(g.end);
   // multi-subject blocks split time across subjects — subject is not editable there, only times
   const multi=g.rows.length>1; $('logSubject').disabled=multi; $('logTask').disabled=multi;
-  $('logSubject').value=multi?'':(g.rows[0].subjectId||''); fillLogTasks(multi?'':(g.rows[0].taskId||'')); $('ovLog').classList.add('show'); }
+  // a session logged before its task was tagged has an empty subjectId — fall back to the task's current
+  // subject so the modal matches what the timeline shows (and saving then repairs the row's subjectId)
+  const tk=g.taskId?tasks.find(x=>x.id===g.taskId):null;
+  const sid0=g.rows[0].subjectId||(tk?(tk.subjectId||''):'');
+  $('logSubject').value=multi?'':sid0; fillLogTasks(multi?'':(g.taskId||'')); $('ovLog').classList.add('show'); }
 $('saveLog').onclick=()=>{ const sid=$('logSubject').value,d=$('logDate').value,st=$('logStart').value,en=$('logEnd').value;
   if(!d||!st||!en)return; const start=new Date(`${d}T${st}:00`).getTime(),end=new Date(`${d}T${en}:00`).getTime();
   if(end<=start){ $('logModalTitle').textContent='End must be after start'; $('logModalTitle').style.color='var(--rose)'; return; }
@@ -4800,7 +4832,8 @@ const XMARK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 /* ---- subjects-as-tags: subjectIds[] is the full set; t.subjectId mirrors subjectIds[0] (primary) ---- */
 function subjectIdsOf(t){ return Array.isArray(t.subjectIds) ? t.subjectIds : (t.subjectId?[t.subjectId]:[]); }
 function primarySubjectId(t){ return subjectIdsOf(t)[0]||''; }
-function setTaskSubjects(t,ids){ t.subjectIds=[...new Set((ids||[]).filter(Boolean))]; t.subjectId=t.subjectIds[0]||''; }
+function setTaskSubjects(t,ids){ t.subjectIds=[...new Set((ids||[]).filter(Boolean))]; t.subjectId=t.subjectIds[0]||'';
+  if(!_subjApplying){ recordSubjLink(t); persistSubjLinks(); } }   // timestamp every genuine subject edit so sync can't silently drop it
 function addTaskSubject(t,id){ if(!id)return; const ids=subjectIdsOf(t); if(!ids.includes(id)) setTaskSubjects(t,[...ids,id]); }
 function removeTaskSubject(t,id){ setTaskSubjects(t, subjectIdsOf(t).filter(x=>x!==id)); }
 function toggleTaskSubject(t,id){ if(!id)return; subjectIdsOf(t).includes(id)?removeTaskSubject(t,id):addTaskSubject(t,id); }
@@ -7839,7 +7872,7 @@ $('saveSettings').onclick=()=>{const c=(v,a,b,d)=>{v=parseInt(v);return isNaN(v)
   if(settings.notionProxy&&settings.notionProxy!==npPrev) notionSyncAll();
   scheduleNotionPoll(); };   // (re)start or stop the near-realtime pull loop to match the new proxy setting
 $('resetAll').onclick=()=>askConfirm('Erase ALL data — subjects, sessions, to-dos, day-offs? Cannot be undone.',()=>{
-  localStorage.clear?.();['fd_settings','fd_subjects','fd_sessions','fd_dayoff','fd_tasks','fd_distract','fd_boards','fd_inboxlists','fd_notionsrc','fd_running','fd_bg','fd_device','fd_cloud'].forEach(k=>{try{localStorage.removeItem(k);}catch(e){}delete mem[k];});location.reload();});
+  localStorage.clear?.();['fd_settings','fd_subjects','fd_sessions','fd_dayoff','fd_tasks','fd_distract','fd_boards','fd_inboxlists','fd_notionsrc','fd_subjlinks','fd_running','fd_bg','fd_device','fd_cloud'].forEach(k=>{try{localStorage.removeItem(k);}catch(e){}delete mem[k];});location.reload();});
 [ 'ovSettings','ovLog','ovConfirm','ovTodo','ovPause','ovDistract','ovNotion','ovCountdown','ovHabit','ovMoodDetail','ovMoodEdit' ].forEach(id=>$(id).onclick=e=>{if(e.target===$(id))$(id).classList.remove('show');});
 $('ovFriction').onclick=e=>{ if(e.target===$('ovFriction')) closeFriction(); };   // backdrop tap cancels the add (task is discarded, never pushed)
 
@@ -8049,6 +8082,7 @@ async function boot(){
     if(cloud.settings){ const _ph=collectMedia(); settings=Object.assign({...DEF},cloud.settings); mergeMediaInto(_ph); } // re-attach local photos: the lean core carries none
     if(Array.isArray(cloud.subjects)) subjects=cloud.subjects;
     tombstones=mergeTomb(tombstones,cloud.tombstones);
+    mergeSubjLinks(cloud.subjLinks);                          // converge subject pairings on boot too
     const _cloudSessN=Array.isArray(cloud.sessions)?cloud.sessions.length:0, _cloudDistN=Array.isArray(cloud.distractions)?cloud.distractions.length:0;
     sessions=mergeLog(sessions,cloud.sessions,tombstones);   // keep any session committed offline on this device
     if(cloud.dayoff) dayoff=cloud.dayoff;
@@ -8075,6 +8109,9 @@ async function boot(){
   if(_bootPushLogs) cloudSave();         // push local-only sessions/distractions surfaced by the boot merge (union-safe — see above)
   if(cloud) await pollMedia();           // pull journal photos / vision board from their separate record before first render
   normalizeData();
+  // one-time seed: protect EXISTING subject pairings immediately (created-time stamp ⇒ any real future edit still wins)
+  tasks.forEach(t=>{ const k=subjKey(t); if(k && subjectIdsOf(t).length && !subjLinks[k]) subjLinks[k]={ids:[...subjectIdsOf(t)],_u:t.created||1}; });
+  applySubjLinks();                      // converge subject pairings onto the booted task array
   applyTheme();
   applyTimerCollapsed();
   setSync('ok');
