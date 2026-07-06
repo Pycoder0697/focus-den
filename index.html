@@ -528,6 +528,8 @@
   .pr-mantra{margin-top:10px;padding:10px 14px;border-left:3px solid var(--accent);background:var(--glass);
     border-radius:0 10px 10px 0;font-family:'Fraunces',serif;font-style:italic;font-size:15px;color:var(--ink)}
   .pr-mantra::before{content:"“"}.pr-mantra::after{content:"”"}
+  .pr-mot-list{margin-top:4px}
+  .pr-mot-list li{font-weight:600;color:var(--ink)}
   /* Vision board */
   .vb-wrap{border-radius:14px;overflow:hidden;border:1px solid var(--stroke-soft);background:var(--glass)}
   .vb-img{display:block;width:100%;height:auto}
@@ -2479,15 +2481,16 @@ async function cloudLoad(){ if(!cloudOn())return null; try{const r=await fetch(c
    still embeds photos in the core — can never lose a photo. settings.visionImg /
    settings.journal[d].photo stay the local source of truth, so all rendering code is unchanged. */
 const mediaRef=()=>`${CLOUD.url.replace(/\/+$/,'')}/focusden/${encodeURIComponent(CLOUD.key)}_media.json`;
-function leanSettings(){ const s={...settings}; delete s.visionImg;   // settings clone with the big base64 images removed
+function leanSettings(){ const s={...settings}; delete s.visionImg; delete s.motivationImg;   // settings clone with the big base64 images removed
   if(s.journal){ const j={}; for(const d in s.journal){ const e=s.journal[d]; if(e&&e.photo){ const {photo,...rest}=e; j[d]=rest; } else j[d]=e; } s.journal=j; }
   return s; }
 function collectMedia(){ const photos={}, j=settings.journal||{};
   for(const d in j){ if(j[d]&&j[d].photo) photos[d]=j[d].photo; }
-  return {visionImg:settings.visionImg||'', photos, _updatedAt:Date.now(), _device:DEVICE}; }
+  return {visionImg:settings.visionImg||'', motivationImg:settings.motivationImg||'', photos, _updatedAt:Date.now(), _device:DEVICE}; }
 /* union remote photos into local settings — never overwrite or delete an existing local photo */
 function mergeMediaInto(m){ if(!m||typeof m!=='object')return false; let ch=false;
   if(m.visionImg && !settings.visionImg){ settings.visionImg=m.visionImg; ch=true; }
+  if(m.motivationImg && !settings.motivationImg){ settings.motivationImg=m.motivationImg; ch=true; }
   const p=(m.photos&&typeof m.photos==='object')?m.photos:{}; settings.journal=settings.journal||{};
   for(const d in p){ if(!p[d])continue; const e=settings.journal[d]||(settings.journal[d]={}); if(!e.photo){ e.photo=p[d]; ch=true; } }
   return ch; }
@@ -2499,7 +2502,7 @@ function mergeMediaInto(m){ if(!m||typeof m!=='object')return false; let ch=fals
 function persistSettings(){ store.set('fd_settings',JSON.stringify(leanSettings())); }
 let _mediaT=null,_lastMediaSig='';
 function cloudSaveMedia(){ if(!cloudOn())return; const m=collectMedia();
-  const sig=m.visionImg.length+'|'+Object.keys(m.photos).sort().map(d=>d+':'+m.photos[d].length).join(',');
+  const sig=m.visionImg.length+'|'+m.motivationImg.length+'|'+Object.keys(m.photos).sort().map(d=>d+':'+m.photos[d].length).join(',');
   if(sig===_lastMediaSig)return;            // photos unchanged → don't re-upload megabytes on every save
   _lastMediaSig=sig; clearTimeout(_mediaT);
   _mediaT=setTimeout(async()=>{ try{ await fetch(mediaRef(),{method:'PUT',body:JSON.stringify(fbSafe(m))}); }catch(e){} finally{ _mediaT=null; } },1200); }
@@ -6168,12 +6171,13 @@ function wireHorizonCols(scope){ wireTasks(scope); wireTaskGestures(scope); wire
 
 /* ====================================================================
    PRIME — the pre-day mindset ritual (Horizon ▸ Prime pane).
-   Vision board · Visualisation · Affirmations · Daily mission · Gratitude,
-   in that order — things to do before the day begins.
+   Vision board · Motivation · Visualisation · Affirmations · Daily mission ·
+   Gratitude, in that order — things to do before the day begins.
    Read-mostly content; the daily mission is written into
    settings.missions[todayKey()] (rides cloud sync via settings). The vision
    image is settings.visionImg (a downscaled data URL) || the repo file
-   vision-board.jpg.
+   vision-board.jpg; the motivation image is settings.motivationImg ||
+   the repo file motivation.jpg — same pattern, same heavy-media sync path.
    ==================================================================== */
 const PRIME_VIS=[
   ['Phase 1 · Study session',[
@@ -6259,6 +6263,12 @@ const PRIME_AFF=[
     'Every focused study session compounds into success.',
     'I trust the process, I trust my preparation, and I am becoming the officer I aspire to be.']]
 ];
+const PRIME_MOT=[
+  'Why did you choose this path?',
+  'Make the most out of the time you have invested for this.',
+  'Compare yourself with people who have toiled for this.',
+  "You don't have to wait 4 years like an Olympics athlete."
+];
 const PRIME_GRAT=[
   ['Opportunity',[
     'I am grateful to have another day to work toward my goal.',
@@ -6290,6 +6300,7 @@ function primeGroupsHTML(groups){ return groups.map(([t,items])=>
   `<div class="pr-grp"><div class="pr-grp-t">${esc(t)}</div><ul class="pr-list">${items.map(b=>`<li>${esc(b)}</li>`).join('')}</ul></div>`).join(''); }
 function renderPrime(host){
   const img = settings.visionImg || 'vision-board.jpg';
+  const motImg = settings.motivationImg || 'motivation.jpg';
   const visSecs = PRIME_VIS.map(([t,bul,mantra])=>
     `<div class="pr-phase"><div class="pr-grp-t">${esc(t)}</div><ul class="pr-list">${bul.map(b=>`<li>${esc(b)}</li>`).join('')}</ul>`+
     `<div class="pr-mantra">${esc(mantra)}</div></div>`).join('');
@@ -6304,6 +6315,18 @@ function renderPrime(host){
           <div class="vb-fallback">No vision board yet — drop <code>vision-board.jpg</code> into the app folder, or pick an image below.</div>
         </div>
         <div class="vb-actions"><button class="pr-btn" id="vbPick">Change image</button>${settings.visionImg?'<button class="pr-btn ghost" id="vbReset">Use default</button>':''}<input type="file" id="vbFile" accept="image/*" hidden></div>
+      </div>
+    </details>
+
+    <details class="prime-sec" open>
+      <summary><span class="ps-ic">💫</span> Motivation</summary>
+      <div class="ps-body">
+        <div class="vb-wrap">
+          <img class="vb-img" src="${esc(motImg)}" alt="Why I want to become a civil servant" onerror="this.closest('.vb-wrap').classList.add('vb-missing')">
+          <div class="vb-fallback">No motivation image yet — drop <code>motivation.jpg</code> into the app folder, or pick an image below.</div>
+        </div>
+        <div class="vb-actions"><button class="pr-btn" id="motPick">Change image</button>${settings.motivationImg?'<button class="pr-btn ghost" id="motReset">Use default</button>':''}<input type="file" id="motFile" accept="image/*" hidden></div>
+        <ul class="pr-list pr-mot-list">${PRIME_MOT.map(b=>`<li>${esc(b)}</li>`).join('')}</ul>
       </div>
     </details>
 
@@ -6333,6 +6356,9 @@ function renderPrime(host){
   const pick=host.querySelector('#vbPick'), file=host.querySelector('#vbFile');
   if(pick&&file){ pick.onclick=()=>file.click(); file.onchange=()=>{ const f=file.files&&file.files[0]; if(f)loadVisionImg(f); }; }
   const reset=host.querySelector('#vbReset'); if(reset)reset.onclick=()=>{ delete settings.visionImg; save(); renderHorizonTab(); };
+  const motPick=host.querySelector('#motPick'), motFile=host.querySelector('#motFile');
+  if(motPick&&motFile){ motPick.onclick=()=>motFile.click(); motFile.onchange=()=>{ const f=motFile.files&&motFile.files[0]; if(f)loadMotivationImg(f); }; }
+  const motReset=host.querySelector('#motReset'); if(motReset)motReset.onclick=()=>{ delete settings.motivationImg; save(); renderHorizonTab(); };
 }
 /* Read an image file and downscale it to a light JPEG data URL (keeps the
    cloud-synced blob small). max = longest edge in px, q = JPEG quality. */
@@ -6347,6 +6373,7 @@ function compressImage(file,cb,max=1100,q=0.72){
   rd.readAsDataURL(file);
 }
 function loadVisionImg(file){ compressImage(file,d=>{ settings.visionImg=d; save(); renderHorizonTab(); },1400,0.82); }
+function loadMotivationImg(file){ compressImage(file,d=>{ settings.motivationImg=d; save(); renderHorizonTab(); },1400,0.82); }
 
 /* ====================================================================
    REFLECT — the end-of-day journal & reflection (Horizon ▸ Reflect pane),
