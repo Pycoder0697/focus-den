@@ -2635,7 +2635,7 @@ const _notionRecent=new Map();        // pageId → ts of last local push (a rac
    live tasks against this and pushes whatever changed — so ANY mutation site (date picker, drag-drop,
    calendar, timeline, matrix…) reflects back into Notion without each having to call notionPushTask. */
 const _notionShadow=new Map();        // pageId → {name,done,due,dueEnd,desc}
-const notionFields=t=>({name:t.name||'',done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',start:t.start||'',desc:t.desc||'',secs:Math.round(taskSecs(t))});
+const notionFields=t=>({name:t.name||'',done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',start:t.start||'',desc:t.desc||'',secs:Math.round(taskSecs(t)),subj:subjectNamesOf(t).slice().sort().join('|')}); // subj: canonical (sorted) subject names ⇒ the flush-diff detects an in-app subject change and pushes it back to Notion's multi-select
 function notionMarkSynced(t){ if(t&&t.notionPageId) _notionShadow.set(t.notionPageId,notionFields(t)); } // baseline matches Notion ⇒ no echo-push
 /* persist the sync baseline + recent-push window across reloads. Without this, a check made right
    after a page load (before the first poll repopulates the in-memory shadow) is treated as "first
@@ -2657,7 +2657,7 @@ function notionFlushChanges(){ if(!notionOn()) return;
   for(const t of tasks){ if(!t.notionSourceId||!t.notionPageId) continue;
     const cur=notionFields(t), prev=_notionShadow.get(t.notionPageId);
     if(!prev){ _notionShadow.set(t.notionPageId,cur); continue; } // first sight (freshly imported) — establish baseline, don't push
-    if(prev.name!==cur.name||prev.done!==cur.done||prev.due!==cur.due||prev.dueEnd!==cur.dueEnd||prev.start!==cur.start||prev.desc!==cur.desc||prev.secs!==cur.secs){
+    if(prev.name!==cur.name||prev.done!==cur.done||prev.due!==cur.due||prev.dueEnd!==cur.dueEnd||prev.start!==cur.start||prev.desc!==cur.desc||prev.secs!==cur.secs||prev.subj!==cur.subj){
       // DON'T pre-baseline the shadow here — only a SUCCESSFUL push may, so a failed/aborted push is retried
       // on the next save() or poll instead of being lost. Skip if a push for this row is already in flight.
       if(!_notionInflight.has(t.notionPageId)) notionPushTask(t); } } }
@@ -2714,8 +2714,8 @@ async function notionSyncOne(src){
           if(rDue){ t.horizon='day'; t.hkey=''; } else if(t.horizon==='day'){ t.horizon=''; } changed=true; }
         if(hasDate && timeSupported && (t.start||'')!==rTime){ t.start=rTime; changed=true; }   // a time-of-day edited in Notion pulls back too
         if(hasDesc && (t.desc||'')!==rDesc){ t.desc=rDesc; changed=true; } // …but a just-pushed local edit isn't reverted by a read that raced it
-        if(hasSubj){ const sids=resolveSubjectIds(rSubs);   // Notion's multi-select is authoritative for subject on a mapped source (empty ⇒ clears it)
-          if(subjectIdsOf(t).join(',')!==sids.join(',')){ setTaskSubjects(t,sids); changed=true; } } // setTaskSubjects records the subjLink so the cloud-sync convergence (applySubjLinks) won't revert Notion's value
+        if(hasSubj){ const sids=resolveSubjectIds(rSubs);   // TWO-WAY subject: Notion's multi-select pulls down here (empty ⇒ clears); an in-app change pushed <15s ago is `fresh` so it isn't reverted — Notion wins only a sustained conflict
+          if(subjectIdsOf(t).join(',')!==sids.join(',')){ setTaskSubjects(t,sids); changed=true; } } // setTaskSubjects records the subjLink so the cloud-sync convergence (applySubjLinks) won't revert it either
         notionMarkSynced(t); }                          // shadow now matches Notion ⇒ the next save() won't echo-push it back
       // CRITICAL: do NOT baseline the shadow for a `fresh` (just-pushed) row. We deliberately skipped applying
       // Notion's value, so we DON'T know Notion matches local — leave the shadow to the push's own success/fail
@@ -2759,6 +2759,8 @@ function buildNotionProps(schema,vals){ if(!schema) return null; const p={};
       p[schema.dateProp]={date:{start:dStart, ...(vals.dueEnd?{end:vals.dueEnd}:{})}}; } }
   if(vals.desc!==undefined && schema.descProp)  // two-way description — empty clears the text property
     p[schema.descProp]={rich_text:notionRichText(vals.desc)};
+  if(vals.subjNames!==undefined && schema.subjProp)  // two-way subject — the multi-select is set to exactly the task's subjects (empty clears; a new name auto-creates the Notion option)
+    p[schema.subjProp]={multi_select:(vals.subjNames||[]).map(n=>({name:String(n)}))};
   if(vals.secs!==undefined && schema.durProp)   // one-way duration — net logged study time → a Notion Number (hrs/mins by column name)
     p[schema.durProp]={number:notionDurValue(schema.durProp,vals.secs)};
   return Object.keys(p).length?p:null; }
@@ -2766,7 +2768,7 @@ function buildNotionProps(schema,vals){ if(!schema) return null; const p={};
 async function notionPushTask(t){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
   const src=notionSources.find(s=>s.id===t.notionSourceId); if(!src||!src.schema) return;
   const fields=notionFields(t);   // snapshot EXACTLY what we send, so success baselines to the pushed value — not a maybe-newer t (a later edit then still diffs and re-pushes)
-  const props=notionPruneProps(buildNotionProps(src.schema,{title:fields.name,done:fields.done,due:fields.due,dueEnd:fields.dueEnd,start:fields.start,desc:fields.desc,secs:fields.secs}),src); if(!props) return; // strip any property the DB no longer has so one stale column can't 400 the whole patch
+  const props=notionPruneProps(buildNotionProps(src.schema,{title:fields.name,done:fields.done,due:fields.due,dueEnd:fields.dueEnd,start:fields.start,desc:fields.desc,secs:fields.secs,subjNames:subjectNamesOf(t)}),src); if(!props) return; // strip any property the DB no longer has so one stale column can't 400 the whole patch
   const pid=t.notionPageId; _notionInflight.add(pid); _notionRecent.set(pid,Date.now());
   try{ const r=await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({page:pid,properties:props})});
        const d=await r.json().catch(()=>null);
@@ -2781,7 +2783,7 @@ function notionSourceForList(boardId,listId){ return notionSources.find(s=>s.ena
 /* create a new Notion row for task `t` in the given source (used by both the board-add path and
    the recurrence clone, which targets the parent's source explicitly). Claims t immediately. */
 async function notionCreateRow(t,src){ if(!t||!src||!src.schema||!notionOn()) return;
-  const props=notionPruneProps(buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',start:t.start||'',desc:t.desc||'',secs:taskSecs(t)}),src); if(!props) return;
+  const props=notionPruneProps(buildNotionProps(src.schema,{title:t.name,done:notionDoneOf(t),due:t.due||'',dueEnd:t.dueEnd||'',start:t.start||'',desc:t.desc||'',secs:taskSecs(t),subjNames:subjectNamesOf(t)}),src); if(!props) return;
   t.notionSourceId=src.id; t.notionPageId='';            // claim immediately so a racing pull won't duplicate it
   _notionCreating++;
   try{ const r=await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),body:JSON.stringify({create:src.dbId,properties:props})});
@@ -3158,6 +3160,8 @@ function subjectForName(name){ name=String(name||'').trim(); if(!name) return ''
   if(!s){ s={id:uid('s'),name,color:PALETTE[subjects.length%PALETTE.length],todos:[]}; subjects.push(s); }
   return s.id; }
 function resolveSubjectIds(names){ const out=[]; for(const n of (names||[])){ const id=subjectForName(n); if(id&&!out.includes(id)) out.push(id); } return out; }
+/* a task's subjects as Notion multi-select option NAMES — what we push back to Notion for two-way subject sync */
+function subjectNamesOf(t){ return subjectIdsOf(t).map(id=>(subjById(id)||{}).name).filter(Boolean); }
 const hms=s=>{s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');};
 const mmss=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');};
 const dur=(a,b)=>(b-a)/1000;
