@@ -2811,6 +2811,7 @@ async function notionSyncAll(opts){ opts=opts||{};
   // try/finally: a fetch that aborts/throws must STILL release the lock, or every later poll dies
   try{ for(const s of live){ const r=await notionSyncOne(s); if(r.error){ s.lastErr=r.error; fail++; } else { ok++; if(r.changed) changed=true; } } }
   finally{ _notionSyncing=false; }
+  if(ok>0 && reconcileNotionSubjects()) changed=true;   // a subject option DELETED in Notion deletes the app subject too — only after a successful sync (never on a network blip)
   notionFlushChanges();   // reconcile after the pull: re-push any local edit that earlier failed/raced (no-op when local already matches Notion)
   persistNotionMeta();
   if(changed){ applySubjLinks(); save(); refreshTaskSurfaces&&refreshTaskSurfaces(); }   // restore subject onto any re-imported row, then persist; only touch storage/DOM when Notion actually changed → safe to poll every ~10s
@@ -3162,6 +3163,28 @@ function subjectForName(name){ name=String(name||'').trim(); if(!name) return ''
 function resolveSubjectIds(names){ const out=[]; for(const n of (names||[])){ const id=subjectForName(n); if(id&&!out.includes(id)) out.push(id); } return out; }
 /* a task's subjects as Notion multi-select option NAMES — what we push back to Notion for two-way subject sync */
 function subjectNamesOf(t){ return subjectIdsOf(t).map(id=>(subjById(id)||{}).name).filter(Boolean); }
+/* delete a subject the same way the Subjects-page ⋯ does: untag it from every task (tasks stay), drop it
+   from the list; logged sessions keep their subjectId (bucketed "Unlisted"). Data-only — caller saves/renders. */
+function removeSubject(id){ if(!subjById(id)) return false;
+  tasksForSubject(id).forEach(t=>removeTaskSubject(t,id));
+  subjects=subjects.filter(x=>x.id!==id);
+  try{ expandedSubj.delete(id); }catch(e){}
+  return true; }
+/* Two-way subject-CATALOG sync: an option ADDED in a Notion multi-select already becomes a subject when a row
+   is tagged with it (resolveSubjectIds); this handles the reverse — an option DELETED in Notion deletes the
+   matching Focus Den subject too. Safe by construction: a subject is only ever pruned once it has been seen as
+   a Notion option (`s.notionManaged`), so a purely app-side subject is never touched; and the caller only runs
+   this after a SUCCESSFUL sync, so a network blip can't wipe subjects. Multi-source-safe: a subject survives if
+   it's still an option in ANY subject-mapped source (union of all their option lists). */
+function reconcileNotionSubjects(){
+  const live=notionSources.filter(s=>s.enabled!==false && s.schema && s.schema.subjProp && Array.isArray(s.schema.subjOptions));
+  if(!live.length) return false;                       // no source maps a subject multi-select ⇒ never prune
+  const optSet=new Set(); live.forEach(s=>s.schema.subjOptions.forEach(n=>optSet.add(String(n).trim().toLowerCase())));
+  const has=s=>optSet.has((s.name||'').trim().toLowerCase());
+  let ch=false;
+  subjects.forEach(s=>{ if(has(s) && !s.notionManaged){ s.notionManaged=true; ch=true; } }); // mark: this subject is a Notion option now, so a future deletion may prune it
+  for(const s of subjects.filter(s=>s.notionManaged && !has(s))){ if(removeSubject(s.id)) ch=true; } // prune: its option was deleted in Notion
+  return ch; }
 const hms=s=>{s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');};
 const mmss=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');};
 const dur=(a,b)=>(b-a)/1000;

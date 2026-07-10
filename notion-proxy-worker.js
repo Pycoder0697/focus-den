@@ -10,7 +10,7 @@
  *     READ   GET  /?db=<databaseId>[&date=<prop>][&desc=<prop>][&dur=<prop>][&subj=<prop>]
  *            -> { ok:true, results:[ {id,title,done,due,dueEnd,dueTime,desc,subjects,props,url}, ... ],
  *                schema:{ titleProp, doneProp:{name,type,doneValue,undoneValue},
- *                         dateProp, descProp, durProp, subjProp },
+ *                         dateProp, descProp, durProp, subjProp, subjOptions:[names] },
  *                fields:[ {name,type}, ... ] }
  *              `props` = up to 4 extra display-only properties [{name,value}],
  *              TickTick-style -- title/done/date/description are excluded (mapped).
@@ -182,6 +182,10 @@ export default {
       if (params.has('desc')) schema.descProp = validProp(params.get('desc'), ['rich_text', 'title']);
       if (params.has('dur')) schema.durProp = validProp(params.get('dur'), ['number']);
       if (params.has('subj')) schema.subjProp = validProp(params.get('subj'), ['multi_select']);
+      // the subject multi-select's FULL option list (its catalog) — lets Focus Den detect an option
+      // deleted in Notion and delete the matching app subject too (two-way subject-catalog sync).
+      schema.subjOptions = (schema.subjProp && dbProps[schema.subjProp] && dbProps[schema.subjProp].multi_select)
+        ? (dbProps[schema.subjProp].multi_select.options || []).map((o) => o.name) : [];
       // catalog of the database's properties so the app can offer mapping choices
       const fields = Object.keys(meta.properties || {}).map((name) => ({ name, type: meta.properties[name].type }));
 
