@@ -2674,12 +2674,13 @@ async function notionSyncOne(src){
   if(m.dateProp!==undefined) url+='&date='+encodeURIComponent(m.dateProp||'');
   if(m.descProp!==undefined) url+='&desc='+encodeURIComponent(m.descProp||'');
   if(m.durProp!==undefined)  url+='&dur='+encodeURIComponent(m.durProp||'');
+  if(m.subjProp!==undefined) url+='&subj='+encodeURIComponent(m.subjProp||'');
   try{ const r=await notionFetch(url,{cache:'no-store',headers:notionHeaders()});
        data=await r.json().catch(()=>null);
        if(!r.ok) return {error:(data&&data.error)||('HTTP '+r.status)}; }
   catch(e){ return {error:'Network / proxy unreachable'}; }
   if(!data||data.ok===false) return {error:(data&&data.error)||'Bad response'};
-  if(data.schema) src.schema=data.schema;   // {titleProp, doneProp:{…}, dateProp, descProp} (overrides already applied) — needed to write edits back
+  if(data.schema) src.schema=data.schema;   // {titleProp, doneProp:{…}, dateProp, descProp, durProp, subjProp} (overrides already applied) — needed to write edits back
   if(Array.isArray(data.fields)) src.fields=data.fields;   // property catalog for the field-mapping config UI
   let changed=false;
   if(sanitizeNotionMap(src)) changed=true;   // drop any mapping to a renamed/deleted column BEFORE it can poison a write patch or wipe local data
@@ -2688,6 +2689,7 @@ async function notionSyncOne(src){
   const byPage=new Map(mine.filter(t=>t.notionPageId).map(t=>[t.notionPageId,t])); // pending creates (no pageId yet) aren't matchable
   const hasDate=!!(src.schema&&src.schema.dateProp);   // only sync dates when the DB actually has a Date property
   const hasDesc=!!(src.schema&&src.schema.descProp);   // only sync descriptions when a text property is mapped
+  const hasSubj=!!(src.schema&&src.schema.subjProp);   // only sync subjects when a multi-select is mapped (Notion is authoritative for it)
   const seen=new Set();
   rows.forEach(row=>{ const pid=row.id||row.pageId; if(!pid)return; seen.add(pid);
     const name=(row.title||'').trim()||'(untitled)'; const done=!!row.done;
@@ -2695,6 +2697,7 @@ async function notionSyncOne(src){
     const timeSupported=('dueTime' in row);   // older proxy builds omit the field ⇒ leave local start time untouched
     const rTime=(hasDate&&timeSupported)?(row.dueTime||''):'';   // Notion date's time-of-day (IST HH:MM)
     const rDesc=hasDesc?(row.desc||''):'';
+    const rSubs=hasSubj?(Array.isArray(row.subjects)?row.subjects:[]):null;   // subject names declared in Notion (null ⇒ not mapped, leave app subjects alone)
     const rProps=Array.isArray(row.props)?row.props:[];
     let t=byPage.get(pid);
     if(!t){ if(_notionCreating>0) return;             // an unmatched row may be our own in-flight create — import it next cycle instead of duplicating
@@ -2702,6 +2705,7 @@ async function notionSyncOne(src){
         done,doneOn:done?todayKey():'',repeat:'none',start:rTime,dur:0,created:Date.now(),order:nextOrder(),
         horizon:(rDue?'day':''),hkey:'',parentId:'',inboxListId:'',notionProps:rProps,
         boardId:src.boardId,listId:src.listId,notionSourceId:src.id,notionPageId:pid,notionUrl:row.url||''};
+      if(hasSubj) setTaskSubjects(t,resolveSubjectIds(rSubs)); // …plus its Notion-declared subject(s), creating any that don't exist yet (setTaskSubjects records the subjLink so cloud convergence keeps it)
       tasks.push(t); changed=true; notionMarkSynced(t); } // NEW rows land in the pinned board list, carrying their Notion due date + description…
     else {                                              // …after that, placement is yours — sync mirrors name + done + date + description both ways…
       const fresh=_notionRepairing || _notionInflight.has(pid) || ((_notionRecent.get(pid)||0) > Date.now()-15000); // _notionRepairing: don't let a racing poll revert a check the one-time repair hasn't re-pushed yet
@@ -2710,6 +2714,8 @@ async function notionSyncOne(src){
           if(rDue){ t.horizon='day'; t.hkey=''; } else if(t.horizon==='day'){ t.horizon=''; } changed=true; }
         if(hasDate && timeSupported && (t.start||'')!==rTime){ t.start=rTime; changed=true; }   // a time-of-day edited in Notion pulls back too
         if(hasDesc && (t.desc||'')!==rDesc){ t.desc=rDesc; changed=true; } // …but a just-pushed local edit isn't reverted by a read that raced it
+        if(hasSubj){ const sids=resolveSubjectIds(rSubs);   // Notion's multi-select is authoritative for subject on a mapped source (empty ⇒ clears it)
+          if(subjectIdsOf(t).join(',')!==sids.join(',')){ setTaskSubjects(t,sids); changed=true; } } // setTaskSubjects records the subjLink so the cloud-sync convergence (applySubjLinks) won't revert Notion's value
         notionMarkSynced(t); }                          // shadow now matches Notion ⇒ the next save() won't echo-push it back
       // CRITICAL: do NOT baseline the shadow for a `fresh` (just-pushed) row. We deliberately skipped applying
       // Notion's value, so we DON'T know Notion matches local — leave the shadow to the push's own success/fail
@@ -2730,7 +2736,7 @@ async function notionSyncOne(src){
 function sanitizeNotionMap(src){
   const names=new Set((Array.isArray(src.fields)?src.fields:[]).map(f=>f.name)); if(!names.size) return false;
   src.map=src.map||{}; let ch=false;
-  ['dateProp','descProp','durProp'].forEach(k=>{
+  ['dateProp','descProp','durProp','subjProp'].forEach(k=>{
     if(src.map[k] && !names.has(src.map[k])){ src.map[k]=''; ch=true; }                    // '' = disabled (next GET sends an empty override so the worker stops re-applying it)
     if(src.schema && src.schema[k] && !names.has(src.schema[k])){ src.schema[k]=null; ch=true; } // and disable it for THIS cycle so the pull doesn't wipe local desc either
   });
@@ -3143,6 +3149,15 @@ function quadrant(t){ return (isImportant(t)?2:0)+(isUrgent(t)?1:0); } // 3=U+I,
 
 const $=id=>document.getElementById(id);
 const subjById=id=>subjects.find(s=>s.id===id);
+/* Resolve a Notion multi-select option name to a Focus Den subject id: match an existing subject by
+   case-insensitive name, else CREATE one (this is how a subject "declared from Notion" — including a
+   brand-new one you invented in the multi-select — becomes a real subject). uid('s') ⇒ collision-free
+   even when several new subjects arrive in the same pull tick. */
+function subjectForName(name){ name=String(name||'').trim(); if(!name) return '';
+  const lc=name.toLowerCase(); let s=subjects.find(x=>(x.name||'').trim().toLowerCase()===lc);
+  if(!s){ s={id:uid('s'),name,color:PALETTE[subjects.length%PALETTE.length],todos:[]}; subjects.push(s); }
+  return s.id; }
+function resolveSubjectIds(names){ const out=[]; for(const n of (names||[])){ const id=subjectForName(n); if(id&&!out.includes(id)) out.push(id); } return out; }
 const hms=s=>{s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');};
 const mmss=s=>{s=Math.max(0,Math.round(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');};
 const dur=(a,b)=>(b-a)/1000;
@@ -7839,18 +7854,21 @@ function renderNotionList(){ const wrap=$('notionList'); if(!wrap)return;
     const sub=s.lastErr?`<span style="color:var(--rose)">⚠ ${esc(s.lastErr)}</span>`
       :(s.lastSync?`${s.count||0} row${s.count===1?'':'s'} · synced ${new Date(s.lastSync).toLocaleTimeString()}`:'never synced');
     const fields=Array.isArray(s.fields)?s.fields:[];
-    const txtF=fields.filter(f=>f.type==='rich_text'), dateF=fields.filter(f=>f.type==='date'), numF=fields.filter(f=>f.type==='number');
-    const curDesc=(s.schema&&s.schema.descProp)||'', curDate=(s.schema&&s.schema.dateProp)||'', curDur=(s.schema&&s.schema.durProp)||'';
+    const txtF=fields.filter(f=>f.type==='rich_text'), dateF=fields.filter(f=>f.type==='date'), numF=fields.filter(f=>f.type==='number'), msF=fields.filter(f=>f.type==='multi_select');
+    const curDesc=(s.schema&&s.schema.descProp)||'', curDate=(s.schema&&s.schema.dateProp)||'', curDur=(s.schema&&s.schema.durProp)||'', curSubj=(s.schema&&s.schema.subjProp)||'';
     const propOpts=(list,selName)=>['<option value="">— None —</option>'].concat(
       list.map(f=>`<option value="${esc(f.name)}" ${f.name===selName?'selected':''}>${esc(f.name)}</option>`)).join('');
     const durUI = numF.length ? `<span style="font-size:13.2px;color:var(--muted)">Time spent</span>
         <select data-ns="durprop" title="Which Notion number property gets the logged study time (Hours column ⇒ hours, else minutes)" style="flex:1;min-width:90px">${propOpts(numF,curDur)}</select>` : '';
+    const subjUI = msF.length ? `<span style="font-size:13.2px;color:var(--muted)">Subject</span>
+        <select data-ns="subjprop" title="Which Notion multi-select declares the subject(s) — options become subject tags, and new options create new subjects" style="flex:1;min-width:90px">${propOpts(msF,curSubj)}</select>` : '';
     const mapUI = fields.length ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:6px">
         <span style="font-size:13.2px;color:var(--muted);min-width:64px">Description</span>
         <select data-ns="descprop" title="Which Notion text property is the task description" style="flex:1;min-width:90px">${propOpts(txtF,curDesc)}</select>
         <span style="font-size:13.2px;color:var(--muted)">Date</span>
         <select data-ns="dateprop" title="Which Notion date property is the due date" style="flex:1;min-width:90px">${propOpts(dateF,curDate)}</select>
         ${durUI}
+        ${subjUI}
       </div>` : '';
     return `<div class="ns-row" data-id="${s.id}" style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:6px">
       <div style="display:flex;gap:6px;align-items:center">
@@ -7879,6 +7897,7 @@ function renderNotionList(){ const wrap=$('notionList'); if(!wrap)return;
     const dpSel=row.querySelector('[data-ns="descprop"]'); if(dpSel) dpSel.onchange=()=>{ s.map=s.map||{}; s.map.descProp=dpSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
     const dtSel=row.querySelector('[data-ns="dateprop"]'); if(dtSel) dtSel.onchange=()=>{ s.map=s.map||{}; s.map.dateProp=dtSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
     const duSel=row.querySelector('[data-ns="durprop"]'); if(duSel) duSel.onchange=()=>{ s.map=s.map||{}; s.map.durProp=duSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
+    const sjSel=row.querySelector('[data-ns="subjprop"]'); if(sjSel) sjSel.onchange=()=>{ s.map=s.map||{}; s.map.subjProp=sjSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
     row.querySelector('[data-ns="sync"]').onclick=()=>{ s.boardId=bsel.value; s.listId=lsel.value; save(); notionSyncAll({report:true}); };
     row.querySelector('[data-ns="del"]').onclick=()=>askConfirm('Remove this database? Its synced cards leave the board (your hand-made tasks are untouched).',
       ()=>{ tasks=tasks.filter(t=>t.notionSourceId!==s.id); notionSources=notionSources.filter(x=>x.id!==s.id); save(); renderNotionList(); refreshTaskSurfaces&&refreshTaskSurfaces(); }); });

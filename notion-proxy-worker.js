@@ -7,10 +7,10 @@
  *   integration token must never ship inside the public index.html.
  *   This tiny Worker holds the token server-side and exposes two endpoints:
  *
- *     READ   GET  /?db=<databaseId>[&date=<prop>][&desc=<prop>][&dur=<prop>]
- *            -> { ok:true, results:[ {id,title,done,due,dueEnd,dueTime,desc,props,url}, ... ],
+ *     READ   GET  /?db=<databaseId>[&date=<prop>][&desc=<prop>][&dur=<prop>][&subj=<prop>]
+ *            -> { ok:true, results:[ {id,title,done,due,dueEnd,dueTime,desc,subjects,props,url}, ... ],
  *                schema:{ titleProp, doneProp:{name,type,doneValue,undoneValue},
- *                         dateProp, descProp, durProp },
+ *                         dateProp, descProp, durProp, subjProp },
  *                fields:[ {name,type}, ... ] }
  *              `props` = up to 4 extra display-only properties [{name,value}],
  *              TickTick-style -- title/done/date/description are excluded (mapped).
@@ -81,6 +81,12 @@
  *           Den writes back here, and a Notion edit pulls back. Auto-detection is
  *           name-matched only (never a random text column); the app's field-
  *           mapping config can override it to any text property (or none).
+ *   subj  : a multi_select property named like a subject (Subject, Subjects, Topic,
+ *           Area, Paper, ...) -- PULL: each selected option becomes a Focus Den
+ *           subject tag on the task, and any option that isn't a subject yet is
+ *           created automatically (so you can declare -- and invent -- subjects
+ *           straight from Notion). Name-matched only; overridable from the app's
+ *           field-mapping config to any multi_select (or none).
  *   dur   : a Number property named like time/duration (Time spent, Duration,
  *           Hours, Minutes, ...) -- ONE-WAY: Focus Den writes the task's net
  *           logged study time here (sum of all its timer sessions). A column
@@ -96,6 +102,9 @@ const DONE_WORDS = ['done', 'complete', 'completed', 'closed', 'archived'];
 const DESC_WORDS = /^(description|desc|notes?|details?|summary|content|comments?|body|memo)$/i;
 // a Number property that holds logged study time (Focus Den writes the net session total here, one-way)
 const DUR_WORDS = /(time spent|time|duration|hours?|hrs?|mins?|minutes?|elapsed|logged)/i;
+// a multi_select property that declares which subject(s) a row belongs to -> Focus Den subject tags.
+// Name-matched only (never a random multi_select) so it can't hijack an unrelated column; overridable from the app.
+const SUBJ_WORDS = /^(subjects?|topics?|areas?|subject areas?|papers?)$/i;
 
 export default {
   async fetch(request, env) {
@@ -172,6 +181,7 @@ export default {
       if (params.has('date')) schema.dateProp = validProp(params.get('date'), ['date']);
       if (params.has('desc')) schema.descProp = validProp(params.get('desc'), ['rich_text', 'title']);
       if (params.has('dur')) schema.durProp = validProp(params.get('dur'), ['number']);
+      if (params.has('subj')) schema.subjProp = validProp(params.get('subj'), ['multi_select']);
       // catalog of the database's properties so the app can offer mapping choices
       const fields = Object.keys(meta.properties || {}).map((name) => ({ name, type: meta.properties[name].type }));
 
@@ -246,7 +256,13 @@ function detectSchema(db) {
   let durProp = null;
   for (const name in props) if (props[name].type === 'number' && DUR_WORDS.test(name.trim())) { durProp = name; break; }
 
-  return { titleProp, doneProp, dateProp, descProp, durProp };
+  // a multi_select property naming the row's subject(s) -> Focus Den subject tags (pull; auto-creates any
+  // subject that doesn't exist yet in the app). Name-matched only; the app's field-mapping config can
+  // override it to any multi_select (or none).
+  let subjProp = null;
+  for (const name in props) if (props[name].type === 'multi_select' && SUBJ_WORDS.test(name.trim())) { subjProp = name; break; }
+
+  return { titleProp, doneProp, dateProp, descProp, durProp, subjProp };
 }
 
 /* Turn a raw Notion page into the small shape Focus Den expects. */
@@ -275,8 +291,12 @@ function mapRow(page, schema) {
   if (schema.descProp && props[schema.descProp] && props[schema.descProp].type === 'rich_text')
     desc = (props[schema.descProp].rich_text || []).map((t) => t.plain_text).join('');
 
-  // up to 4 extra display-only properties (TickTick shows up to 4 data points) -- skip the integrated title/done/date/description
-  const skip = new Set([schema.titleProp, schema.doneProp && schema.doneProp.name, schema.dateProp, schema.descProp, schema.durProp].filter(Boolean));
+  let subjects = [];                        // subject(s) declared for this row (a multi_select) -> Focus Den subject tags
+  if (schema.subjProp && props[schema.subjProp] && props[schema.subjProp].type === 'multi_select')
+    subjects = (props[schema.subjProp].multi_select || []).map((o) => (o.name || '').trim()).filter(Boolean);
+
+  // up to 4 extra display-only properties (TickTick shows up to 4 data points) -- skip the integrated title/done/date/description/subject
+  const skip = new Set([schema.titleProp, schema.doneProp && schema.doneProp.name, schema.dateProp, schema.descProp, schema.durProp, schema.subjProp].filter(Boolean));
   const extra = [];
   for (const name in props) {
     if (extra.length >= 4) break;
@@ -285,7 +305,7 @@ function mapRow(page, schema) {
     if (value) extra.push({ name, value });
   }
 
-  return { id: page.id, title: title.trim(), done, due, dueEnd, dueTime, desc, props: extra, url: page.url || '' };
+  return { id: page.id, title: title.trim(), done, due, dueEnd, dueTime, desc, subjects, props: extra, url: page.url || '' };
 }
 
 /* A Notion date value is either date-only ("2026-06-17") or a datetime ("2026-06-17T09:30:00.000+05:30").
