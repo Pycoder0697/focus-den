@@ -2261,7 +2261,7 @@ const DEVICE=(()=>{try{let d=localStorage.getItem('fd_device');if(!d){d=Math.ran
    Mac on a pre-fix build whose oversized snapshot push kept failing. version.json carries the
    deployed build id; a left-open device polls it and reloads itself ONCE when it differs (never
    mid-timer). Keep FD_BUILD === version.json's "build" on every deploy. */
-const FD_BUILD='2026-06-27a';
+const FD_BUILD='2026-07-11a';
 let _reloadedForUpdate=false; const _bootedAt=Date.now();
 async function checkForUpdate(){ try{
   const r=await fetch('version.json?_='+Date.now(),{cache:'no-store'}); if(!r.ok)return;
@@ -2684,13 +2684,9 @@ async function notionFetch(url,opts,ms){ ms=ms||12000; const ctl=new AbortContro
 let _notionSyncing=false, _notionTimer=null;
 const _notionInflight=new Set();      // pageIds with a write in flight
 const _notionRecent=new Map();        // pageId → ts of last local push (a racing pull won't clobber it within the window)
-/* Notion start/stop buttons: a mapped checkbox is an edge-triggered command. `_notionTimerShadow`
-   holds the box value we last reconciled; a flip drives startTaskStopwatch/stop on the linked task.
-   `_notionTimerRunPage` = the pageId whose live stopwatch the app is mirroring onto its checkbox;
-   `_notionTimerRecent` swallows the pull echo of our own write-back so it isn't read as a user press. */
-const _notionTimerShadow=new Map();   // pageId → last-seen timer checkbox value
-const _notionTimerRecent=new Map();   // pageId → ts of our own last checkbox write
-let _notionTimerRunPage=null;         // pageId of the task whose running stopwatch the box currently reflects
+/* Notion start/stop buttons are handled SERVER-SIDE now (push-backend/push-worker.js) so a button
+   press works with the app fully closed and never double-logs across open clients. See
+   notionPullClosedSessions() below — the client only imports the sessions the worker queues. */
 /* shadow-diff: the last name/done/due we know Notion has, per synced task. Every save() diffs the
    live tasks against this and pushes whatever changed — so ANY mutation site (date picker, drag-drop,
    calendar, timeline, matrix…) reflects back into Notion without each having to call notionPushTask. */
@@ -2721,42 +2717,36 @@ function notionFlushChanges(){ if(!notionOn()) return;
       // DON'T pre-baseline the shadow here — only a SUCCESSFUL push may, so a failed/aborted push is retried
       // on the next save() or poll instead of being lost. Skip if a push for this row is already in flight.
       if(!_notionInflight.has(t.notionPageId)) notionPushTask(t); } } }
-/* ===== Notion start/stop buttons =====================================================
-   A source can map a checkbox (schema.timerProp) that two Notion buttons check/uncheck. Focus Den
-   edge-triggers on the flip: box→checked starts a stopwatch focus on the linked task (carrying its
-   subject via the existing mapping); box→unchecked stops+logs it. The app also writes the box back so
-   it always mirrors the live session — so stopping in-app unchecks it, and the next Start is a real flip. */
-function notionTimerPropOf(t){ if(!t||!t.notionSourceId) return ''; const src=notionSources.find(s=>s.id===t.notionSourceId); return (src&&src.schema&&src.schema.timerProp)||''; }
-/* called per synced row every pull — act only on a genuine box flip made in Notion */
-function notionTimerReconcile(t,pid,nv){
-  if((_notionTimerRecent.get(pid)||0)>Date.now()-6000) return;  // our own recent write-back — ignore its pull echo (or a stale pre-write read)
-  const had=_notionTimerShadow.has(pid), prev=_notionTimerShadow.get(pid);
-  _notionTimerShadow.set(pid,nv);
-  if(!had || nv===prev) return;                                 // first sight (baseline only ⇒ no auto-start on import/boot) or no change
-  notionTimerTrigger(t,nv);
+/* ===== Notion start/stop buttons — SERVER-AUTHORITATIVE ==============================
+   Two Notion buttons check/uncheck a mapped checkbox (schema.timerProp). A SINGLE cron worker
+   (push-backend/push-worker.js) — never the clients — edge-triggers on the flip and owns the whole
+   session: box→checked records a start, box→unchecked writes a finished session row to an ISOLATED
+   queue (/push/<key>/ntimer/log). This is deliberate: every open client used to react to the same
+   flip, so the always-open Notion embed AND the laptop each ran their own stopwatch → overlapping
+   double-logged sessions, and each re-checked the box the other had just unchecked → Stop "not
+   working". One server authority = exactly one session per Start→Stop, AND it works with the app
+   fully closed. The client's only job now is to IMPORT the finished sessions the worker queued.
+   The worker writes ONLY under /push/<key>/ntimer (never the app's state blob), so it can never
+   corrupt the study log; the app adds each row by id (union — never removes). */
+async function notionPullClosedSessions(){
+  if(!cloudOn()) return;
+  let log=null;
+  try{ const r=await fetch(pushBase()+'/ntimer/log.json',{cache:'no-store'}); if(r.ok) log=await r.json(); }catch(e){ return; }
+  if(!log||typeof log!=='object') return;
+  const eids=Object.keys(log); if(!eids.length) return;
+  let added=false;
+  for(const eid of eids){ const row=log[eid];
+    if(row && row.id && row.start && row.end && !tombstones[row.id] && !sessions.some(s=>String(s.id)===String(row.id))){
+      const rec={id:row.id, subjectId:row.subjectId||'', start:row.start, end:row.end, taskId:row.taskId||''};
+      if(row.share!=null) rec.share=row.share;   // multi-subject slice (single-subject rows carry none ⇒ ×1, unchanged)
+      sessions.push(rec); added=true;
+    }
+  }
+  if(added){ try{ store.set('fd_sessions',JSON.stringify(sessions)); }catch(e){} }   // persist locally BEFORE draining the queue so a crash can't lose it
+  for(const eid of eids){ fetch(pushBase()+'/ntimer/log/'+encodeURIComponent(eid)+'.json',{method:'DELETE'}).catch(()=>{}); }
+  if(added){ save(); refreshStats&&refreshStats(); refreshTaskSurfaces&&refreshTaskSurfaces(); renderCalendar&&renderCalendar();
+    if($('tab-log')&&$('tab-log').classList.contains('show')&&typeof renderLog==='function') renderLog(); }
 }
-function notionTimerTrigger(t,on){
-  if(on){ if(active && mode==='stopwatch' && currentTask===t.id) return;  // already focusing this task
-    startTaskStopwatch(t); reflectTimer&&reflectTimer(); }
-  else if(currentTask===t.id){ if(active) freeze(); commit(true); afterStop(); reflectTimer&&reflectTimer(); }  // stop only the box's own task
-  notionTimerReflect();
-}
-/* Mirror the app's live stopwatch focus onto the linked Notion checkbox (called from saveTimer()),
-   so the box tracks reality whoever/whatever started or stopped the session. */
-function notionTimerReflect(){ if(!notionOn()) return;
-  let page=null, task=null;
-  if(active && mode==='stopwatch' && currentTask){ const t=tasks.find(x=>x.id===currentTask);
-    if(t && t.notionPageId && notionTimerPropOf(t)){ page=t.notionPageId; task=t; } }
-  if(page===_notionTimerRunPage) return;                        // no transition ⇒ nothing to write
-  const oldPage=_notionTimerRunPage; _notionTimerRunPage=page;
-  if(oldPage && oldPage!==page){ const ot=tasks.find(x=>x.notionPageId===oldPage); if(ot) notionPushTimer(ot,false); }
-  if(task) notionPushTimer(task,true);
-}
-async function notionPushTimer(t,on){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
-  const prop=notionTimerPropOf(t); if(!prop) return; const pid=t.notionPageId;
-  _notionTimerShadow.set(pid,!!on); _notionTimerRecent.set(pid,Date.now());  // we set the box ⇒ its next pull isn't a user press
-  try{ await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),
-    body:JSON.stringify({page:pid,properties:{[prop]:{checkbox:!!on}}})}); }catch(e){} }
 /* Notion rich_text values cap each text object at 2000 chars — chunk a long description so it never truncates */
 function notionRichText(s){ s=String(s||''); if(!s) return []; const out=[]; for(let i=0;i<s.length;i+=2000) out.push({text:{content:s.slice(i,i+2000)}}); return out; }
 /* pull one source's rows from the proxy and reconcile them into its board list (no save() here — caller batches) */
@@ -2787,7 +2777,6 @@ async function notionSyncOne(src){
   const hasDate=!!(src.schema&&src.schema.dateProp);   // only sync dates when the DB actually has a Date property
   const hasDesc=!!(src.schema&&src.schema.descProp);   // only sync descriptions when a text property is mapped
   const hasSubj=!!(src.schema&&src.schema.subjProp);   // only sync subjects when a multi-select is mapped (Notion is authoritative for it)
-  const hasTimer=!!(src.schema&&src.schema.timerProp); // start/stop buttons: a mapped checkbox drives the timer when it flips
   const seen=new Set();
   rows.forEach(row=>{ const pid=row.id||row.pageId; if(!pid)return; seen.add(pid);
     const name=(row.title||'').trim()||'(untitled)'; const done=!!row.done;
@@ -2818,8 +2807,7 @@ async function notionSyncOne(src){
       // CRITICAL: do NOT baseline the shadow for a `fresh` (just-pushed) row. We deliberately skipped applying
       // Notion's value, so we DON'T know Notion matches local — leave the shadow to the push's own success/fail
       // handling. Baselining here would mask a FAILED push (shadow lies "Notion has X"), so the change never retries.
-      t.notionProps=rProps; t.notionUrl=row.url||t.notionUrl||''; }
-    if(hasTimer) notionTimerReconcile(t,pid,!!row.timer); });  // start/stop button flips act regardless of the 15s fresh guard above
+      t.notionProps=rProps; t.notionUrl=row.url||t.notionUrl||''; } });
   // a row removed/archived in Notion disappears from its board list here too — but never drop a pending create (no pageId yet)
   const n0=tasks.length;
   tasks=tasks.filter(t=>t.notionSourceId!==src.id || !t.notionPageId || seen.has(t.notionPageId));
@@ -3046,7 +3034,7 @@ function save(){persistSettings();store.set('fd_subjects',JSON.stringify(subject
    All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
 function timerSnap(){ return { active, mode, phase, subjectId:(typeof $==='function'&&$('activeSubject')?$('activeSubject').value:''),
   currentTask, currentHabit, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, customFocus, customSessions, _taskTimer, savedAt:Date.now() }; }
-function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); timerStateSync(); if(typeof notionTimerReflect==='function') notionTimerReflect(); if(typeof syncKeepAwake==='function') syncKeepAwake(); }
+function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); timerStateSync(); if(typeof syncKeepAwake==='function') syncKeepAwake(); }
 
 /* ====================================================================
    UNIFIED TASK MODEL  — a single `tasks` array is the source of truth.
@@ -8581,6 +8569,7 @@ async function boot(){
   writeMetaBeacon();                     // record this device's build in the cloud (diagnosable remotely)
   checkForUpdate(); setInterval(checkForUpdate,300000);   // self-update a left-open device onto a newer deployed build
   setInterval(pollCloud,6000);
+  notionPullClosedSessions(); setInterval(notionPullClosedSessions,20000);   // import sessions the cron worker logged from Notion Start/Stop buttons (works with the app closed)
   setInterval(pollMedia,30000);          // photos change rarely — pull them on a slow channel, separate from the core poll
   reconcileLogsUp(); setInterval(reconcileLogsUp,45000);   // safety net: never let local-only study sessions stay stranded off the cloud
   // cross-device live timer: pull the shared running-session record + tick the mirror clock,
@@ -8589,7 +8578,7 @@ async function boot(){
   setInterval(mirrorTick,1000);
   setInterval(()=>{ pushHeartbeat(); if(active||workedMs>0) timerStateSync(); },30000);
   // capture the live timer the instant the tab is backgrounded — iOS Safari may reload it before we get another chance
-  document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else { checkForUpdate(); pollCloud(); pollMedia(); reconcileLogsUp(); pollTimerState(); pushHeartbeat(); if(active && mode!=='stopwatch') tickFn(); } });
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveTimer(); else { checkForUpdate(); pollCloud(); pollMedia(); reconcileLogsUp(); notionPullClosedSessions(); pollTimerState(); pushHeartbeat(); if(active && mode!=='stopwatch') tickFn(); } });
   window.addEventListener('pagehide',saveTimer);
   // Notion DB → board list sync: near-realtime both ways (push is instant; pull polls ~10s while visible, 60s hidden, and immediately on refocus)
   loadNotionMeta();   // restore the sync baseline first, so a check made right after load pushes instead of being swallowed/reverted by the racing initial poll
