@@ -206,16 +206,19 @@ async function reconcileNotionTimers(env, base, keyPath, now) {
     return subs.map((sid) => ({ id: uid(), subjectId: sid, share: 1 / subs.length, ...b }));
   };
 
+  // A Worker can't fetch another same-account Worker via its workers.dev URL (404s), so go through the
+  // NOTION service binding when present; the host in the URL is ignored by the binding (only path+query matter).
+  const proxyFetch = (u, o) => (env.NOTION ? env.NOTION.fetch(u, o) : fetch(u, o));
   for (const src of timerSources) {
-    let url = `${proxy}?db=${encodeURIComponent(src.dbId)}`;
+    let url = `${proxy}/?db=${encodeURIComponent(src.dbId)}`;
     const m = src.map || {};
     if (m.timerProp !== undefined) url += `&timer=${encodeURIComponent(m.timerProp || '')}`;
     let data;
     try {
-      const r = await fetch(url, { headers: nkey ? { 'x-sync-key': nkey } : {}, cf: { cacheTtl: 0 } });
+      const r = await proxyFetch(url, { headers: nkey ? { 'x-sync-key': nkey } : {} });
       if (!r.ok) { _DBG.push('notion GET ' + r.status); continue; }
       data = await r.json();
-    } catch (e) { _DBG.push('notion fetch throw'); continue; }
+    } catch (e) { _DBG.push('notion fetch throw: ' + String(e && e.message ? e.message : e)); continue; }
     if (!data || data.ok === false || !Array.isArray(data.results)) continue;
     for (const row of data.results) {
       const pid = row.id; if (!pid) continue;
