@@ -190,6 +190,8 @@ async function reconcileNotionTimers(env, base, keyPath, now) {
   const tasksArr = await getJson(`${app}/tasks.json`);
   const taskArr = Array.isArray(tasksArr) ? tasksArr : [];
   const findTask = (pid) => taskArr.find((t) => t && t.notionPageId === pid) || null;
+  const subjArr = await getJson(`${app}/subjects.json`);
+  const subjById = (id) => (Array.isArray(subjArr) ? subjArr.find((s) => s && s.id === id) : null) || null;
 
   const shadow = (await getJson(`${nt}/shadow.json`)) || {};       // pageId → last-seen box value (persisted edge-trigger memory)
   const state = (await getJson(`${nt}/state.json`)) || {};         // pageId → {start,taskId,subjectIds,taskName} for a running session
@@ -246,6 +248,40 @@ async function reconcileNotionTimers(env, base, keyPath, now) {
     const s = state[pid];
     if (s && s.start && now - s.start > 18 * 3600 * 1000) { delete state[pid]; writes.push(fetch(`${nt}/state/${encodeURIComponent(pid)}.json`, { method: 'DELETE' })); }
   }
+
+  // --- Live-timer mirror: show a running Notion-button session in Focus Den immediately -----------
+  // A ▶ Start only records server-side `state` above; a session isn't imported until ⏹ Stop — so with no
+  // live feedback, Start reads as "nothing happened". Focus Den already renders /push/<key>/live as a
+  // running timer on every idle device (pollTimerState/renderMirror), so publish the running Notion
+  // session there (owner:'notion') to surface a live counting stopwatch the instant Start is seen, and
+  // clear it on Stop. Refreshed every cron so its `savedAt` never crosses the 120s staleness cutoff.
+  // A device running its OWN local timer always wins (fresher record + it ignores this on its own screen),
+  // and we skip publishing whenever a real device is broadcasting a fresh live record — so a genuine
+  // cross-device session is never stomped.
+  const liveRef = `${base}/push/${keyPath}/live.json`;
+  const running = Object.keys(state).filter((pid) => state[pid] && state[pid].start);
+  let liveRec = null; try { liveRec = await getJson(liveRef); } catch (e) {}
+  const realDeviceLive = liveRec && liveRec.owner !== 'notion' && liveRec.savedAt && (now - liveRec.savedAt < 90 * 1000)
+    && (liveRec.live !== undefined ? liveRec.live : liveRec.active);
+  if (running.length) {
+    if (!realDeviceLive) {
+      const pid = running.sort((a, b) => (state[b].start || 0) - (state[a].start || 0))[0]; // most recently started
+      const s = state[pid];
+      const sid = (Array.isArray(s.subjectIds) ? s.subjectIds : [])[0] || '';
+      const subj = sid ? subjById(sid) : null;
+      writes.push(fetch(liveRef, { method: 'PUT', body: JSON.stringify({
+        owner: 'notion', device: 'notion', active: true, live: true, paused: false,
+        mode: 'stopwatch', phase: 'focus', endStamp: null, phaseStart: null, remaining: 0,
+        roundCount: 0, oneShot: false, n: 0, swBase: 0, segStart: s.start || now,
+        taskName: s.taskName || '', subjectName: subj ? subj.name : '', subjectColor: subj ? subj.color : '',
+        habitName: '', schedule: [], savedAt: now
+      }) }));
+    }
+  } else if (liveRec && liveRec.owner === 'notion' && (liveRec.live !== undefined ? liveRec.live : liveRec.active)) {
+    // our Notion session ended → clear the shared record so idle devices drop the mirror on their next poll
+    writes.push(fetch(liveRef, { method: 'PUT', body: JSON.stringify({ owner: 'notion', device: 'notion', active: false, live: false, endedAt: now, savedAt: now }) }));
+  }
+
   if (Object.keys(shadowUpd).length) writes.push(fetch(`${nt}/shadow.json`, { method: 'PATCH', body: JSON.stringify(shadowUpd) }));
   await Promise.all(writes);
 }

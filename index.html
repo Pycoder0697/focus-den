@@ -127,6 +127,7 @@
   .timer-card.remote-ctl #timeAdjust{pointer-events:none;opacity:.45}
   .timer-card.remote-ctl .focus-pick{pointer-events:none}
   .timer-card.remote-ctl .focus-pick .fp-chev{display:none}
+  .timer-card.remote-ctl .rc-ro{pointer-events:none;opacity:.5}   /* a Notion-button session is controlled from Notion — its mirror controls are inert */
   .phase-label .rc-tag{color:var(--faint);font-weight:400;font-size:.84em;letter-spacing:.2px}
   .phase-label b{color:var(--amber);font-weight:600}
   .controls{display:flex;align-items:center;gap:14px}
@@ -2464,11 +2465,12 @@ function remoteCtl(){
 let _remoteUiOn=false;
 /* Paint the remote session onto THIS device's main timer (clock, phase, focus target, dots, Start label). */
 function renderRemoteClock(m){
-  const pomo=m.mode!=='stopwatch', paused=!!m.paused;
+  const pomo=m.mode!=='stopwatch', paused=!!m.paused, fromNotion=m.owner==='notion';
   $('clock').textContent=mirrorClockText(m);
   const words={focus:'Focus',short:'Short break',long:'Long break'};
   const ph=pomo?(words[m.phase]||'Focus'):'Stopwatch';
-  $('phaseLabel').innerHTML=`${esc(ph)} <span class="rc-tag">· ${paused?'paused':'live'} on another device</span>`;
+  const tag=fromNotion?'running from Notion':`${paused?'paused':'live'} on another device`;   // a Notion-button session is authored/controlled in Notion, not on another Focus Den device
+  $('phaseLabel').innerHTML=`${esc(ph)} <span class="rc-tag">· ${tag}</span>`;
   $('planFinish').textContent='';
   { const nm=$('fpName'), sub=$('fpSub'), btn=$('focusPick');                       // mirror the focus target
     if(nm&&sub&&btn){ const what=m.taskName||m.habitName||m.subjectName||'Focus';
@@ -2481,7 +2483,8 @@ function renderRemoteClock(m){
   $('timeAdjust').style.display='none'; $('skipBtn').style.display=pomo?'':'none';
   if(pomo){ const el=$('dots'); if(el){ el.innerHTML=''; const N=m.n||pomoN();
     for(let i=0;i<N;i++){ const d=document.createElement('i'); if((m.roundCount||0)>i)d.classList.add('on'); el.appendChild(d); } } }
-  const sb=$('startBtn'); if(sb) sb.textContent=paused?'Resume':'Pause';
+  const sb=$('startBtn'); if(sb){ sb.textContent=fromNotion?'Stop in Notion':(paused?'Resume':'Pause'); sb.classList.toggle('rc-ro',fromNotion); }  // controls for a Notion session live on the Notion buttons — mirror is read-only here
+  const rb=$('resetBtn'); if(rb) rb.classList.toggle('rc-ro',fromNotion);
   document.title=mirrorClockText(m)+' · Focus Den';
 }
 /* Enter/refresh/leave remote-control mode. Called on every poll + every mirror tick. */
@@ -3647,9 +3650,9 @@ document.querySelectorAll('#ambient button').forEach(b=>b.onclick=()=>{
   if(s==='rain')playRain();else if(s==='waves')playWaves();else if(s==='bonfire')playBonfire();else if(s==='crickets')playCrickets();else if(s==='tick')playTick();
 });
 
-$('startBtn').onclick=()=>{ if(remoteCtl())return sendMirrorCmd('toggle');          // pause/resume the session running on another device
+$('startBtn').onclick=()=>{ const rc=remoteCtl(); if(rc){ if(rc.owner==='notion')return; return sendMirrorCmd('toggle'); }   // Notion session ⇒ read-only mirror (control it from Notion); else pause/resume the other device
   if(active)pauseTimer(); else if(workedMs>0)resumeTimer(); else startTimer(); };
-$('resetBtn').onclick=()=>{ if(remoteCtl())return sendMirrorCmd('stop'); resetTimer(); };   // in remote mode, end + save the shared session
+$('resetBtn').onclick=()=>{ const rc=remoteCtl(); if(rc){ if(rc.owner==='notion')return; return sendMirrorCmd('stop'); } resetTimer(); };   // in remote mode, end + save the shared session (no-op for a Notion session)
 document.querySelectorAll('.modeswitch button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
 document.querySelectorAll('#phases button').forEach(b=>b.onclick=()=>setPhase(b.dataset.p));
 
