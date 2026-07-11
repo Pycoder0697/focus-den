@@ -2684,6 +2684,13 @@ async function notionFetch(url,opts,ms){ ms=ms||12000; const ctl=new AbortContro
 let _notionSyncing=false, _notionTimer=null;
 const _notionInflight=new Set();      // pageIds with a write in flight
 const _notionRecent=new Map();        // pageId → ts of last local push (a racing pull won't clobber it within the window)
+/* Notion start/stop buttons: a mapped checkbox is an edge-triggered command. `_notionTimerShadow`
+   holds the box value we last reconciled; a flip drives startTaskStopwatch/stop on the linked task.
+   `_notionTimerRunPage` = the pageId whose live stopwatch the app is mirroring onto its checkbox;
+   `_notionTimerRecent` swallows the pull echo of our own write-back so it isn't read as a user press. */
+const _notionTimerShadow=new Map();   // pageId → last-seen timer checkbox value
+const _notionTimerRecent=new Map();   // pageId → ts of our own last checkbox write
+let _notionTimerRunPage=null;         // pageId of the task whose running stopwatch the box currently reflects
 /* shadow-diff: the last name/done/due we know Notion has, per synced task. Every save() diffs the
    live tasks against this and pushes whatever changed — so ANY mutation site (date picker, drag-drop,
    calendar, timeline, matrix…) reflects back into Notion without each having to call notionPushTask. */
@@ -2714,6 +2721,42 @@ function notionFlushChanges(){ if(!notionOn()) return;
       // DON'T pre-baseline the shadow here — only a SUCCESSFUL push may, so a failed/aborted push is retried
       // on the next save() or poll instead of being lost. Skip if a push for this row is already in flight.
       if(!_notionInflight.has(t.notionPageId)) notionPushTask(t); } } }
+/* ===== Notion start/stop buttons =====================================================
+   A source can map a checkbox (schema.timerProp) that two Notion buttons check/uncheck. Focus Den
+   edge-triggers on the flip: box→checked starts a stopwatch focus on the linked task (carrying its
+   subject via the existing mapping); box→unchecked stops+logs it. The app also writes the box back so
+   it always mirrors the live session — so stopping in-app unchecks it, and the next Start is a real flip. */
+function notionTimerPropOf(t){ if(!t||!t.notionSourceId) return ''; const src=notionSources.find(s=>s.id===t.notionSourceId); return (src&&src.schema&&src.schema.timerProp)||''; }
+/* called per synced row every pull — act only on a genuine box flip made in Notion */
+function notionTimerReconcile(t,pid,nv){
+  if((_notionTimerRecent.get(pid)||0)>Date.now()-6000) return;  // our own recent write-back — ignore its pull echo (or a stale pre-write read)
+  const had=_notionTimerShadow.has(pid), prev=_notionTimerShadow.get(pid);
+  _notionTimerShadow.set(pid,nv);
+  if(!had || nv===prev) return;                                 // first sight (baseline only ⇒ no auto-start on import/boot) or no change
+  notionTimerTrigger(t,nv);
+}
+function notionTimerTrigger(t,on){
+  if(on){ if(active && mode==='stopwatch' && currentTask===t.id) return;  // already focusing this task
+    startTaskStopwatch(t); reflectTimer&&reflectTimer(); }
+  else if(currentTask===t.id){ if(active) freeze(); commit(true); afterStop(); reflectTimer&&reflectTimer(); }  // stop only the box's own task
+  notionTimerReflect();
+}
+/* Mirror the app's live stopwatch focus onto the linked Notion checkbox (called from saveTimer()),
+   so the box tracks reality whoever/whatever started or stopped the session. */
+function notionTimerReflect(){ if(!notionOn()) return;
+  let page=null, task=null;
+  if(active && mode==='stopwatch' && currentTask){ const t=tasks.find(x=>x.id===currentTask);
+    if(t && t.notionPageId && notionTimerPropOf(t)){ page=t.notionPageId; task=t; } }
+  if(page===_notionTimerRunPage) return;                        // no transition ⇒ nothing to write
+  const oldPage=_notionTimerRunPage; _notionTimerRunPage=page;
+  if(oldPage && oldPage!==page){ const ot=tasks.find(x=>x.notionPageId===oldPage); if(ot) notionPushTimer(ot,false); }
+  if(task) notionPushTimer(task,true);
+}
+async function notionPushTimer(t,on){ if(!t||!t.notionSourceId||!t.notionPageId||!notionOn()) return;
+  const prop=notionTimerPropOf(t); if(!prop) return; const pid=t.notionPageId;
+  _notionTimerShadow.set(pid,!!on); _notionTimerRecent.set(pid,Date.now());  // we set the box ⇒ its next pull isn't a user press
+  try{ await notionFetch(notionProxy(),{method:'POST',headers:notionHeaders(true),
+    body:JSON.stringify({page:pid,properties:{[prop]:{checkbox:!!on}}})}); }catch(e){} }
 /* Notion rich_text values cap each text object at 2000 chars — chunk a long description so it never truncates */
 function notionRichText(s){ s=String(s||''); if(!s) return []; const out=[]; for(let i=0;i<s.length;i+=2000) out.push({text:{content:s.slice(i,i+2000)}}); return out; }
 /* pull one source's rows from the proxy and reconcile them into its board list (no save() here — caller batches) */
@@ -2728,6 +2771,7 @@ async function notionSyncOne(src){
   if(m.descProp!==undefined) url+='&desc='+encodeURIComponent(m.descProp||'');
   if(m.durProp!==undefined)  url+='&dur='+encodeURIComponent(m.durProp||'');
   if(m.subjProp!==undefined) url+='&subj='+encodeURIComponent(m.subjProp||'');
+  if(m.timerProp!==undefined) url+='&timer='+encodeURIComponent(m.timerProp||'');
   try{ const r=await notionFetch(url,{cache:'no-store',headers:notionHeaders()});
        data=await r.json().catch(()=>null);
        if(!r.ok) return {error:(data&&data.error)||('HTTP '+r.status)}; }
@@ -2743,6 +2787,7 @@ async function notionSyncOne(src){
   const hasDate=!!(src.schema&&src.schema.dateProp);   // only sync dates when the DB actually has a Date property
   const hasDesc=!!(src.schema&&src.schema.descProp);   // only sync descriptions when a text property is mapped
   const hasSubj=!!(src.schema&&src.schema.subjProp);   // only sync subjects when a multi-select is mapped (Notion is authoritative for it)
+  const hasTimer=!!(src.schema&&src.schema.timerProp); // start/stop buttons: a mapped checkbox drives the timer when it flips
   const seen=new Set();
   rows.forEach(row=>{ const pid=row.id||row.pageId; if(!pid)return; seen.add(pid);
     const name=(row.title||'').trim()||'(untitled)'; const done=!!row.done;
@@ -2773,7 +2818,8 @@ async function notionSyncOne(src){
       // CRITICAL: do NOT baseline the shadow for a `fresh` (just-pushed) row. We deliberately skipped applying
       // Notion's value, so we DON'T know Notion matches local — leave the shadow to the push's own success/fail
       // handling. Baselining here would mask a FAILED push (shadow lies "Notion has X"), so the change never retries.
-      t.notionProps=rProps; t.notionUrl=row.url||t.notionUrl||''; } });
+      t.notionProps=rProps; t.notionUrl=row.url||t.notionUrl||''; }
+    if(hasTimer) notionTimerReconcile(t,pid,!!row.timer); });  // start/stop button flips act regardless of the 15s fresh guard above
   // a row removed/archived in Notion disappears from its board list here too — but never drop a pending create (no pageId yet)
   const n0=tasks.length;
   tasks=tasks.filter(t=>t.notionSourceId!==src.id || !t.notionPageId || seen.has(t.notionPageId));
@@ -2789,7 +2835,7 @@ async function notionSyncOne(src){
 function sanitizeNotionMap(src){
   const names=new Set((Array.isArray(src.fields)?src.fields:[]).map(f=>f.name)); if(!names.size) return false;
   src.map=src.map||{}; let ch=false;
-  ['dateProp','descProp','durProp','subjProp'].forEach(k=>{
+  ['dateProp','descProp','durProp','subjProp','timerProp'].forEach(k=>{
     if(src.map[k] && !names.has(src.map[k])){ src.map[k]=''; ch=true; }                    // '' = disabled (next GET sends an empty override so the worker stops re-applying it)
     if(src.schema && src.schema[k] && !names.has(src.schema[k])){ src.schema[k]=null; ch=true; } // and disable it for THIS cycle so the pull doesn't wipe local desc either
   });
@@ -3000,7 +3046,7 @@ function save(){persistSettings();store.set('fd_subjects',JSON.stringify(subject
    All anchors are absolute timestamps, so the snapshot is valid whenever it was taken. */
 function timerSnap(){ return { active, mode, phase, subjectId:(typeof $==='function'&&$('activeSubject')?$('activeSubject').value:''),
   currentTask, currentHabit, workedMs, segStart, segs, endStamp, phaseStart, remaining, roundCount, oneShot, customFocus, customSessions, _taskTimer, savedAt:Date.now() }; }
-function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); timerStateSync(); if(typeof syncKeepAwake==='function') syncKeepAwake(); }
+function saveTimer(){ try{ store.set('fd_timer', JSON.stringify(timerSnap())); }catch(e){} pushAlarmSync(); timerStateSync(); if(typeof notionTimerReflect==='function') notionTimerReflect(); if(typeof syncKeepAwake==='function') syncKeepAwake(); }
 
 /* ====================================================================
    UNIFIED TASK MODEL  — a single `tasks` array is the source of truth.
@@ -8212,14 +8258,16 @@ function renderNotionList(){ const wrap=$('notionList'); if(!wrap)return;
     const sub=s.lastErr?`<span style="color:var(--rose)">⚠ ${esc(s.lastErr)}</span>`
       :(s.lastSync?`${s.count||0} row${s.count===1?'':'s'} · synced ${new Date(s.lastSync).toLocaleTimeString()}`:'never synced');
     const fields=Array.isArray(s.fields)?s.fields:[];
-    const txtF=fields.filter(f=>f.type==='rich_text'), dateF=fields.filter(f=>f.type==='date'), numF=fields.filter(f=>f.type==='number'), msF=fields.filter(f=>f.type==='multi_select');
-    const curDesc=(s.schema&&s.schema.descProp)||'', curDate=(s.schema&&s.schema.dateProp)||'', curDur=(s.schema&&s.schema.durProp)||'', curSubj=(s.schema&&s.schema.subjProp)||'';
+    const txtF=fields.filter(f=>f.type==='rich_text'), dateF=fields.filter(f=>f.type==='date'), numF=fields.filter(f=>f.type==='number'), msF=fields.filter(f=>f.type==='multi_select'), cbF=fields.filter(f=>f.type==='checkbox');
+    const curDesc=(s.schema&&s.schema.descProp)||'', curDate=(s.schema&&s.schema.dateProp)||'', curDur=(s.schema&&s.schema.durProp)||'', curSubj=(s.schema&&s.schema.subjProp)||'', curTimer=(s.schema&&s.schema.timerProp)||'';
     const propOpts=(list,selName)=>['<option value="">— None —</option>'].concat(
       list.map(f=>`<option value="${esc(f.name)}" ${f.name===selName?'selected':''}>${esc(f.name)}</option>`)).join('');
     const durUI = numF.length ? `<span style="font-size:13.2px;color:var(--muted)">Time spent</span>
         <select data-ns="durprop" title="Which Notion number property gets the logged study time (Hours column ⇒ hours, else minutes)" style="flex:1;min-width:90px">${propOpts(numF,curDur)}</select>` : '';
     const subjUI = msF.length ? `<span style="font-size:13.2px;color:var(--muted)">Subject</span>
         <select data-ns="subjprop" title="Which Notion multi-select declares the subject(s) — options become subject tags, and new options create new subjects" style="flex:1;min-width:90px">${propOpts(msF,curSubj)}</select>` : '';
+    const timerUI = cbF.length ? `<span style="font-size:13.2px;color:var(--muted)">Start/Stop</span>
+        <select data-ns="timerprop" title="A checkbox two Notion buttons check/uncheck to start/stop a Focus Den session on the task" style="flex:1;min-width:90px">${propOpts(cbF,curTimer)}</select>` : '';
     const mapUI = fields.length ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:6px">
         <span style="font-size:13.2px;color:var(--muted);min-width:64px">Description</span>
         <select data-ns="descprop" title="Which Notion text property is the task description" style="flex:1;min-width:90px">${propOpts(txtF,curDesc)}</select>
@@ -8227,6 +8275,7 @@ function renderNotionList(){ const wrap=$('notionList'); if(!wrap)return;
         <select data-ns="dateprop" title="Which Notion date property is the due date" style="flex:1;min-width:90px">${propOpts(dateF,curDate)}</select>
         ${durUI}
         ${subjUI}
+        ${timerUI}
       </div>` : '';
     return `<div class="ns-row" data-id="${s.id}" style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:6px">
       <div style="display:flex;gap:6px;align-items:center">
@@ -8256,6 +8305,7 @@ function renderNotionList(){ const wrap=$('notionList'); if(!wrap)return;
     const dtSel=row.querySelector('[data-ns="dateprop"]'); if(dtSel) dtSel.onchange=()=>{ s.map=s.map||{}; s.map.dateProp=dtSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
     const duSel=row.querySelector('[data-ns="durprop"]'); if(duSel) duSel.onchange=()=>{ s.map=s.map||{}; s.map.durProp=duSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
     const sjSel=row.querySelector('[data-ns="subjprop"]'); if(sjSel) sjSel.onchange=()=>{ s.map=s.map||{}; s.map.subjProp=sjSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
+    const tmSel=row.querySelector('[data-ns="timerprop"]'); if(tmSel) tmSel.onchange=()=>{ s.map=s.map||{}; s.map.timerProp=tmSel.value; save(); setNotionStatus('Updating mapping…'); notionSyncAll({report:true}); };
     row.querySelector('[data-ns="sync"]').onclick=()=>{ s.boardId=bsel.value; s.listId=lsel.value; save(); notionSyncAll({report:true}); };
     row.querySelector('[data-ns="del"]').onclick=()=>askConfirm('Remove this database? Its synced cards leave the board (your hand-made tasks are untouched).',
       ()=>{ tasks=tasks.filter(t=>t.notionSourceId!==s.id); notionSources=notionSources.filter(x=>x.id!==s.id); save(); renderNotionList(); refreshTaskSurfaces&&refreshTaskSurfaces(); }); });

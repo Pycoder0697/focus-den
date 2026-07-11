@@ -7,10 +7,10 @@
  *   integration token must never ship inside the public index.html.
  *   This tiny Worker holds the token server-side and exposes two endpoints:
  *
- *     READ   GET  /?db=<databaseId>[&date=<prop>][&desc=<prop>][&dur=<prop>][&subj=<prop>]
- *            -> { ok:true, results:[ {id,title,done,due,dueEnd,dueTime,desc,subjects,props,url}, ... ],
+ *     READ   GET  /?db=<databaseId>[&date=<prop>][&desc=<prop>][&dur=<prop>][&subj=<prop>][&timer=<prop>]
+ *            -> { ok:true, results:[ {id,title,done,due,dueEnd,dueTime,desc,subjects,timer,props,url}, ... ],
  *                schema:{ titleProp, doneProp:{name,type,doneValue,undoneValue},
- *                         dateProp, descProp, durProp, subjProp, subjOptions:[names] },
+ *                         dateProp, descProp, durProp, subjProp, subjOptions:[names], timerProp },
  *                fields:[ {name,type}, ... ] }
  *              `props` = up to 4 extra display-only properties [{name,value}],
  *              TickTick-style -- title/done/date/description are excluded (mapped).
@@ -87,6 +87,11 @@
  *           created automatically (so you can declare -- and invent -- subjects
  *           straight from Notion). Name-matched only; overridable from the app's
  *           field-mapping config to any multi_select (or none).
+ *   timer : a checkbox named like a start/stop toggle (Timer, Running, Focus, Session, ...).
+ *           Put two Notion buttons on the row -- "Start" checks it, "Stop" unchecks it -- and
+ *           Focus Den starts/stops a stopwatch session on the linked task (with its subject) when
+ *           the box flips. Focus Den also writes the box back so it mirrors the live session.
+ *           Name-matched only (never the done checkbox); overridable from the app's field-mapping config.
  *   dur   : a Number property named like time/duration (Time spent, Duration,
  *           Hours, Minutes, ...) -- ONE-WAY: Focus Den writes the task's net
  *           logged study time here (sum of all its timer sessions). A column
@@ -100,6 +105,9 @@
 const NOTION_VERSION = '2022-06-28';
 const DONE_WORDS = ['done', 'complete', 'completed', 'closed', 'archived'];
 const DESC_WORDS = /^(description|desc|notes?|details?|summary|content|comments?|body|memo)$/i;
+// a checkbox that acts as a start/stop toggle: two Notion buttons check/uncheck it, and Focus Den
+// starts/stops a timer session on the linked task when it flips. Name-matched (never the done checkbox).
+const TIMER_WORDS = /^(timer|running|focus(?:\s*(?:timer|session))?|study\s*timer|stopwatch|session|clock|start\/?stop)$/i;
 // a Number property that holds logged study time (Focus Den writes the net session total here, one-way)
 const DUR_WORDS = /(time spent|time|duration|hours?|hrs?|mins?|minutes?|elapsed|logged)/i;
 // a multi_select property that declares which subject(s) a row belongs to -> Focus Den subject tags.
@@ -182,6 +190,7 @@ export default {
       if (params.has('desc')) schema.descProp = validProp(params.get('desc'), ['rich_text', 'title']);
       if (params.has('dur')) schema.durProp = validProp(params.get('dur'), ['number']);
       if (params.has('subj')) schema.subjProp = validProp(params.get('subj'), ['multi_select']);
+      if (params.has('timer')) schema.timerProp = validProp(params.get('timer'), ['checkbox']);
       // the subject multi-select's FULL option list (its catalog) — lets Focus Den detect an option
       // deleted in Notion and delete the matching app subject too (two-way subject-catalog sync).
       schema.subjOptions = (schema.subjProp && dbProps[schema.subjProp] && dbProps[schema.subjProp].multi_select)
@@ -218,8 +227,13 @@ function detectSchema(db) {
 
   for (const name in props) if (props[name].type === 'title') { titleProp = name; break; }
 
-  // prefer a checkbox; then status; then select
-  for (const name in props) if (props[name].type === 'checkbox') { doneProp = { name, type: 'checkbox' }; break; }
+  // a checkbox named like a timer/running toggle -> Notion buttons check/uncheck it to start/stop a
+  // Focus Den session on the linked task. Detected BEFORE done so it's never mistaken for the done checkbox.
+  let timerProp = null;
+  for (const name in props) if (props[name].type === 'checkbox' && TIMER_WORDS.test(name.trim())) { timerProp = name; break; }
+
+  // prefer a checkbox (but never the timer checkbox); then status; then select
+  for (const name in props) if (props[name].type === 'checkbox' && name !== timerProp) { doneProp = { name, type: 'checkbox' }; break; }
   if (!doneProp) for (const name in props) {
     const p = props[name];
     if (p.type !== 'status' || !p.status) continue;
@@ -266,7 +280,7 @@ function detectSchema(db) {
   let subjProp = null;
   for (const name in props) if (props[name].type === 'multi_select' && SUBJ_WORDS.test(name.trim())) { subjProp = name; break; }
 
-  return { titleProp, doneProp, dateProp, descProp, durProp, subjProp };
+  return { titleProp, doneProp, dateProp, descProp, durProp, subjProp, timerProp };
 }
 
 /* Turn a raw Notion page into the small shape Focus Den expects. */
@@ -299,8 +313,12 @@ function mapRow(page, schema) {
   if (schema.subjProp && props[schema.subjProp] && props[schema.subjProp].type === 'multi_select')
     subjects = (props[schema.subjProp].multi_select || []).map((o) => (o.name || '').trim()).filter(Boolean);
 
-  // up to 4 extra display-only properties (TickTick shows up to 4 data points) -- skip the integrated title/done/date/description/subject
-  const skip = new Set([schema.titleProp, schema.doneProp && schema.doneProp.name, schema.dateProp, schema.descProp, schema.durProp, schema.subjProp].filter(Boolean));
+  let timer = false;                        // the start/stop toggle checkbox -> Focus Den starts/stops a session when it flips
+  if (schema.timerProp && props[schema.timerProp] && props[schema.timerProp].type === 'checkbox')
+    timer = !!props[schema.timerProp].checkbox;
+
+  // up to 4 extra display-only properties (TickTick shows up to 4 data points) -- skip the integrated title/done/date/description/subject/timer
+  const skip = new Set([schema.titleProp, schema.doneProp && schema.doneProp.name, schema.dateProp, schema.descProp, schema.durProp, schema.subjProp, schema.timerProp].filter(Boolean));
   const extra = [];
   for (const name in props) {
     if (extra.length >= 4) break;
@@ -309,7 +327,7 @@ function mapRow(page, schema) {
     if (value) extra.push({ name, value });
   }
 
-  return { id: page.id, title: title.trim(), done, due, dueEnd, dueTime, desc, subjects, props: extra, url: page.url || '' };
+  return { id: page.id, title: title.trim(), done, due, dueEnd, dueTime, desc, subjects, timer, props: extra, url: page.url || '' };
 }
 
 /* A Notion date value is either date-only ("2026-06-17") or a datetime ("2026-06-17T09:30:00.000+05:30").
