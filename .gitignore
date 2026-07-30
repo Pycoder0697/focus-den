@@ -11,3 +11,4 @@
 **/.env
 **/.dev.vars
 **/vapid-private.json
+index.test.html

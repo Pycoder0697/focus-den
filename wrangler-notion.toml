@@ -1,8 +1,0 @@
-name = "focus-den-notion"
-main = "notion-proxy-worker.js"
-compatibility_date = "2024-09-01"
-workers_dev = true
-
-# Secrets are set on the worker (wrangler secret put …), never committed:
-#   NOTION_TOKEN   — the Notion internal integration secret
-#   SYNC_KEY       — optional shared key matched against the x-sync-key header

@@ -6,12 +6,5 @@ compatibility_date = "2024-09-01"
 [triggers]
 crons = ["* * * * *"]
 
-# Service binding to the Notion proxy worker. A Worker CANNOT reliably fetch another Worker on the
-# same account via its *.workers.dev URL (the subrequest short-circuits to a 404) — so the Notion
-# Start/Stop reconciler calls the proxy through this binding (env.NOTION.fetch) instead.
-[[services]]
-binding = "NOTION"
-service = "focus-den-notion"
-
 # All config is set as SECRETS (wrangler secret put …), not here, so nothing
 # private is committed: RTDB_URL, RTDB_KEY, VAPID_PUBLIC, VAPID_PRIVATE_JWK, VAPID_SUBJECT.

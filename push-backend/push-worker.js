@@ -11,7 +11,7 @@
  * alarm before this cron fires (no duplicate), and only a closed app relies on us.
  *
  * Self-contained: VAPID (RFC 8292) JWT + aes128gcm payload encryption (RFC 8291)
- * via WebCrypto — no npm deps, single file, mirrors notion-proxy-worker.js style.
+ * via WebCrypto — no npm deps, single file.
  *
  * Secrets (wrangler secret put …):
  *   RTDB_URL           https://…firebasedatabase.app   (no trailing path)
@@ -161,130 +161,9 @@ async function runCron(env) {
     })());
   }
   await Promise.all(jobs);
-  try { await reconcileNotionTimers(env, base, keyPath, now); } catch (e) { _DBG.push('notion: ' + String(e && e.stack ? e.stack : e)); }
   return processed;
 }
 
-/* ---- Notion Start/Stop buttons → server-owned study sessions -------------------------
- * SINGLE authority for the Notion timer checkbox. Every open client used to react to the same box
- * flip, so the always-open Notion embed AND the laptop each ran their own stopwatch → overlapping,
- * double-logged sessions (and each re-checked the box the other unchecked → "Stop not working").
- * Here ONE cron edge-triggers on the flip and owns the whole session, so it also works with the app
- * fully closed. State + the finished-session queue live under /push/<key>/ntimer ONLY — never the
- * app's /focusden state blob — so a bug here can't corrupt the study log; the app imports finished
- * sessions by id (union-only, never removes). */
-async function reconcileNotionTimers(env, base, keyPath, now) {
-  const app = `${base}/focusden/${keyPath}`;
-  const nt = `${base}/push/${keyPath}/ntimer`;
-  const getJson = async (url) => { try { const r = await fetch(url, { cf: { cacheTtl: 0 } }); if (!r.ok) return null; return await r.json(); } catch (e) { return null; } };
-
-  const settings = (await getJson(`${app}/settings.json`)) || {};
-  const proxy = String(settings.notionProxy || '').trim().replace(/\/+$/, '');
-  if (!/^https?:\/\//.test(proxy)) return;                         // no Notion proxy configured → nothing to do
-  const nkey = String(settings.notionKey || '').trim();
-  const sources = await getJson(`${app}/notionSources.json`);
-  if (!Array.isArray(sources)) return;
-  const timerSources = sources.filter((s) => s && s.enabled !== false && s.dbId && s.schema && s.schema.timerProp);
-  if (!timerSources.length) return;
-
-  const tasksArr = await getJson(`${app}/tasks.json`);
-  const taskArr = Array.isArray(tasksArr) ? tasksArr : [];
-  const findTask = (pid) => taskArr.find((t) => t && t.notionPageId === pid) || null;
-  const subjArr = await getJson(`${app}/subjects.json`);
-  const subjById = (id) => (Array.isArray(subjArr) ? subjArr.find((s) => s && s.id === id) : null) || null;
-
-  const shadow = (await getJson(`${nt}/shadow.json`)) || {};       // pageId → last-seen box value (persisted edge-trigger memory)
-  const state = (await getJson(`${nt}/state.json`)) || {};         // pageId → {start,taskId,subjectIds,taskName} for a running session
-  const shadowUpd = {};
-  const writes = [];
-  const uid = () => 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  // split a finished session across the task's subjects exactly like the app's commit(): one row per
-  // subject with share=1/N (single-subject rows carry no share ⇒ ×1), so totals never double-count.
-  const rowsFor = (s, start, end) => {
-    const subs = Array.isArray(s.subjectIds) ? s.subjectIds.filter(Boolean) : [];
-    const b = { start, end, taskId: s.taskId || '' };
-    if (!subs.length) return [{ id: uid(), subjectId: '', ...b }];
-    if (subs.length === 1) return [{ id: uid(), subjectId: subs[0], ...b }];
-    return subs.map((sid) => ({ id: uid(), subjectId: sid, share: 1 / subs.length, ...b }));
-  };
-
-  // A Worker can't fetch another same-account Worker via its workers.dev URL (404s), so go through the
-  // NOTION service binding when present; the host in the URL is ignored by the binding (only path+query matter).
-  const proxyFetch = (u, o) => (env.NOTION ? env.NOTION.fetch(u, o) : fetch(u, o));
-  for (const src of timerSources) {
-    let url = `${proxy}/?db=${encodeURIComponent(src.dbId)}`;
-    const m = src.map || {};
-    if (m.timerProp !== undefined) url += `&timer=${encodeURIComponent(m.timerProp || '')}`;
-    let data;
-    try {
-      const r = await proxyFetch(url, { headers: nkey ? { 'x-sync-key': nkey } : {} });
-      if (!r.ok) { _DBG.push('notion GET ' + r.status); continue; }
-      data = await r.json();
-    } catch (e) { _DBG.push('notion fetch throw: ' + String(e && e.message ? e.message : e)); continue; }
-    if (!data || data.ok === false || !Array.isArray(data.results)) continue;
-    for (const row of data.results) {
-      const pid = row.id; if (!pid) continue;
-      const checked = !!row.timer;
-      const prev = shadow[pid];
-      shadowUpd[pid] = checked;
-      if (prev === undefined) continue;                            // first sight → baseline only (never auto-start on deploy)
-      if (checked === prev) continue;                              // no flip
-      if (checked) {                                               // START: record when the session began
-        const t = findTask(pid);
-        state[pid] = { start: now, taskId: t ? t.id : '', subjectIds: (t && Array.isArray(t.subjectIds)) ? t.subjectIds : [], taskName: t ? t.name : '' };
-        writes.push(fetch(`${nt}/state/${encodeURIComponent(pid)}.json`, { method: 'PUT', body: JSON.stringify(state[pid]) }));
-      } else {                                                     // STOP: commit the finished session to the import queue
-        const s = state[pid];
-        if (s && s.start) {
-          for (const rr of rowsFor(s, s.start, now)) writes.push(fetch(`${nt}/log/${encodeURIComponent(rr.id)}.json`, { method: 'PUT', body: JSON.stringify(rr) }));
-          delete state[pid];
-          writes.push(fetch(`${nt}/state/${encodeURIComponent(pid)}.json`, { method: 'DELETE' }));
-        }
-      }
-    }
-  }
-  // safety: drop any session left running implausibly long (user forgot to press Stop) so it never logs a monster block
-  for (const pid of Object.keys(state)) {
-    const s = state[pid];
-    if (s && s.start && now - s.start > 18 * 3600 * 1000) { delete state[pid]; writes.push(fetch(`${nt}/state/${encodeURIComponent(pid)}.json`, { method: 'DELETE' })); }
-  }
-
-  // --- Live-timer mirror: show a running Notion-button session in Focus Den immediately -----------
-  // A ▶ Start only records server-side `state` above; a session isn't imported until ⏹ Stop — so with no
-  // live feedback, Start reads as "nothing happened". Focus Den already renders /push/<key>/live as a
-  // running timer on every idle device (pollTimerState/renderMirror), so publish the running Notion
-  // session there (owner:'notion') to surface a live counting stopwatch the instant Start is seen, and
-  // clear it on Stop. Refreshed every cron so its `savedAt` never crosses the 120s staleness cutoff.
-  // A device running its OWN local timer always wins (fresher record + it ignores this on its own screen),
-  // and we skip publishing whenever a real device is broadcasting a fresh live record — so a genuine
-  // cross-device session is never stomped.
-  const liveRef = `${base}/push/${keyPath}/live.json`;
-  const running = Object.keys(state).filter((pid) => state[pid] && state[pid].start);
-  let liveRec = null; try { liveRec = await getJson(liveRef); } catch (e) {}
-  const realDeviceLive = liveRec && liveRec.owner !== 'notion' && liveRec.savedAt && (now - liveRec.savedAt < 90 * 1000)
-    && (liveRec.live !== undefined ? liveRec.live : liveRec.active);
-  if (running.length) {
-    if (!realDeviceLive) {
-      const pid = running.sort((a, b) => (state[b].start || 0) - (state[a].start || 0))[0]; // most recently started
-      const s = state[pid];
-      const sid = (Array.isArray(s.subjectIds) ? s.subjectIds : [])[0] || '';
-      const subj = sid ? subjById(sid) : null;
-      writes.push(fetch(liveRef, { method: 'PUT', body: JSON.stringify({
-        owner: 'notion', device: 'notion', active: true, live: true, paused: false,
-        mode: 'stopwatch', phase: 'focus', endStamp: null, phaseStart: null, remaining: 0,
-        roundCount: 0, oneShot: false, n: 0, swBase: 0, segStart: s.start || now,
-        taskName: s.taskName || '', subjectName: subj ? subj.name : '', subjectColor: subj ? subj.color : '',
-        habitName: '', schedule: [], savedAt: now
-      }) }));
-    }
-  } else if (liveRec && liveRec.owner === 'notion' && (liveRec.live !== undefined ? liveRec.live : liveRec.active)) {
-    // our Notion session ended → clear the shared record so idle devices drop the mirror on their next poll
-    writes.push(fetch(liveRef, { method: 'PUT', body: JSON.stringify({ owner: 'notion', device: 'notion', active: false, live: false, endedAt: now, savedAt: now }) }));
-  }
-
-  if (Object.keys(shadowUpd).length) writes.push(fetch(`${nt}/shadow.json`, { method: 'PATCH', body: JSON.stringify(shadowUpd) }));
-  await Promise.all(writes);
-}
 
 /* ----------------------------- Web Push send ----------------------------- */
 
